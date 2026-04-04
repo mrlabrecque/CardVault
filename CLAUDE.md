@@ -52,7 +52,18 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Set price thresholds on specific cards
 - Automated email alerts when eBay listings appear below the set threshold
 
-### F. External Integrations
+### F. Admin — Set Management
+- Only accessible when `isAppAdmin` is `true`; guarded by `adminGuard` at the route level
+- **"Manage Sets" link** appears in the avatar dropdown (above Sign Out) for admin users only
+- Route: `/admin/sets` — `SetBuilder` component (`features/admin/set-builder/`)
+- Create new product releases (e.g. "2025 Panini Prizm Basketball") that act as global parents for user cards
+- Fields: `name`, `year`, `sport` (Basketball / Baseball / Football / Soccer), `release_type` (Hobby / Retail / FOTL), `ebay_search_template`
+- Auto-generates a `set_slug` (e.g. `2025-prizm-basketball-hobby`) used in clean URLs
+- Duplicate guard: checks (name, year, sport) before saving; shows inline error if a match exists
+- Real-time eBay template preview replaces `{year}`, `{brand}`, `{player_name}`, `{card_number}` tokens using "Victor Wembanyama #298" as dummy values
+- Success PrimeNG Toast on create; form resets and sets list reloads automatically
+
+### G. External Integrations
 - **eBay API**: Real-time market value sync from sold listings; automated listing creation
 - **Checklist Integration**: Sync with sports card checklist databases to standardize card naming and numbering during the "Add to Collection" workflow
 
@@ -130,13 +141,15 @@ card-vault/
 │   └── src/app/
 │       ├── core/
 │       │   ├── auth/login/    # Login component
-│       │   ├── guards/        # AuthGuard (CanActivate)
-│       │   └── services/      # auth, cards, ebay, checklist, alerts
+│       │   ├── guards/        # authGuard (CanActivate), adminGuard (isAppAdmin check)
+│       │   └── services/      # auth, cards, ebay, checklist, alerts, sets
 │       └── features/
 │           ├── dashboard/
 │           ├── collection/    # collection-list + item-detail
 │           ├── comps/         # comps-search (valuation/lookup)
-│           └── wishlist/
+│           ├── wishlist/
+│           └── admin/
+│               └── set-builder/  # Admin-only set management UI
 ├── backend/                   # Express API
 │   └── src/
 │       ├── db/supabase.ts     # Supabase client
@@ -185,12 +198,13 @@ card-vault/
 - **Flow**: Supabase Auth, PKCE, passwordless Magic Link only (no social providers).
 - **`AuthService`** (`core/services/auth.ts`) — wraps the Supabase client; exposes signals: `user`, `isAuthenticated`, `isAppAdmin`. Calls `fetchProfile()` on every sign-in which upserts a `profiles` row (safe for pre-existing users) and then separately syncs the email field.
 - **`authGuard`** (`core/guards/auth-guard.ts`) — async `CanActivateFn`; calls `getSession()` directly to avoid timing races on first load. All feature routes are guarded; `/login` is public.
-- **`isAppAdmin`** — boolean flag in the `profiles` table, default `false`. Must be flipped manually in the Supabase dashboard (no client-side update path for this field). Used to gate "add sets" and other admin-only UI that is not yet built.
+- **`isAppAdmin`** — boolean flag in the `profiles` table, default `false`. Must be flipped manually in the Supabase dashboard (no client-side update path for this field). Gates the "Manage Sets" link in the avatar dropdown and the `/admin/sets` route.
+- **`adminGuard`** (`core/guards/admin-guard.ts`) — async `CanActivateFn`; does a live Supabase query for `is_app_admin` (does not rely on signal timing). Redirects non-admins to `/dashboard`.
 - **Tab bar + header** are hidden on the login page — both gated with `@if (auth.isAuthenticated())` in `app.html`.
 
 ## App Shell
 
-- **Header** (`app.html` / `app.scss`) — sticky flex item (not `position: fixed`) at the top of `.app-shell`. Shows "Card Vault" eyebrow + current page title (derived from route URL via `toSignal` + `NavigationEnd`). Avatar button (user's email initial) opens a dropdown with email, optional "App Admin" badge, and Sign Out.
+- **Header** (`app.html` / `app.scss`) — sticky flex item (not `position: fixed`) at the top of `.app-shell`. Shows "Card Vault" eyebrow + current page title (derived from route URL via `toSignal` + `NavigationEnd`). Avatar button (user's email initial) opens a dropdown with email, optional "App Admin" badge, optional "Manage Sets" link (admin only), and Sign Out.
 - **Tab bar** — `position: fixed`, bottom, primary color, 72px tall. Tabs: Collection, Dashboard (center FAB), Comps, Wishlist.
 - **Content area** — `flex: 1; overflow-y: auto`. When authenticated, `padding-bottom: var(--tab-bar-height)` keeps content clear of the tab bar. Header is in normal flow so no `padding-top` offset is needed.
 
@@ -212,6 +226,7 @@ card-vault/
 - [x] `profiles` table — `id`, `email`, `is_app_admin`; trigger auto-creates on signup; frontend upserts on every sign-in; RLS locks down admin promotion
 - [x] Database — RLS on `cards`, `lookup_history`, `wishlist`; `master_card_definitions` read-only catalog migration
 - [x] Dashboard, Collection list, Comps search, Wishlist — UI stubs with sample data in place
+- [x] Admin Set Builder — `/admin/sets` route; `SetBuilder` component; `SetsService`; `adminGuard`; `sets` table with RLS; "Manage Sets" link in avatar dropdown
 
 ### Up Next
 - [ ] Dashboard — wire to real Supabase data (P/L, sport distribution, top cards)
@@ -220,7 +235,6 @@ card-vault/
 - [ ] Comps search — eBay sold listings integration; lookup history
 - [ ] Wishlist — price threshold editor; alert status
 - [ ] Backend API — Express routes, Supabase client, eBay service
-- [ ] Admin UI — "Add sets" feature gated behind `isAppAdmin`
 
 ### Supabase Migrations (apply in order)
 | File | Description |
@@ -230,3 +244,4 @@ card-vault/
 | `20260404000001_profiles.sql` | `profiles` table + trigger + select/insert RLS |
 | `20260404000002_profiles_insert_policy.sql` | Insert policy for self-service profile creation |
 | `20260404000003_profiles_add_email.sql` | `email` column + update policy + trigger update |
+| `20260404000004_sets.sql` | `sets` table + RLS (all auth users read; admin-only write) |
