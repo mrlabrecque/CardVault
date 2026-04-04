@@ -13,11 +13,44 @@
       pInputText
       type="text"
       placeholder="Search player, set, sport…"
-      class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]"
       [ngModel]="searchQuery()"
       (ngModelChange)="searchQuery.set($event)"
+      (keyup.enter)="commitSearch()"
     />
   </div>
+
+  <!-- Active filter chips -->
+  @if (textFilters().length > 0 || activeFilters().size > 0 || gradeFilters().size > 0) {
+    <div class="flex flex-wrap gap-2">
+      @for (chip of textFilters(); track chip) {
+        <button
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-700 text-white"
+          (click)="removeTextFilter(chip)">
+          {{ chip }}
+          <i class="pi pi-times text-[10px]"></i>
+        </button>
+      }
+      @for (f of filterConfig; track f.key) {
+        @if (isFilterActive(f.key)) {
+          <button
+            class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#800020] text-white"
+            (click)="removeFilter(f.key)">
+            {{ f.label }}
+            <i class="pi pi-times text-[10px]"></i>
+          </button>
+        }
+      }
+      @for (grade of gradeFilters(); track grade) {
+        <button
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#800020] text-white"
+          (click)="removeGradeFilter(grade)">
+          {{ grade }}
+          <i class="pi pi-times text-[10px]"></i>
+        </button>
+      }
+    </div>
+  }
 
   <!-- Count -->
   <p class="text-xs text-gray-400">{{ filtered().length }} cards</p>
@@ -37,9 +70,26 @@
         <div class="flex-1 min-w-0">
           <p class="text-sm font-bold text-gray-900 truncate">{{ card.player }}</p>
           <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }}</p>
-          <div class="flex items-center gap-2 mt-1.5">
-            <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
-            <p-tag [value]="card.variant" severity="secondary" styleClass="text-[10px]!" />
+          <div class="flex flex-wrap items-center gap-1.5 mt-1.5 cursor-pointer"
+               (click)="$event.preventDefault(); $event.stopPropagation()">
+            <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]! cursor-pointer!"
+              [ngClass]="{ 'opacity-40': isGradeFilterActive(card.grade) }"
+              (click)="toggleGradeFilter(card.grade)" />
+            @if (card.rookie) {
+              <p-tag value="RC" severity="info" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isFilterActive('rookie') }"
+                (click)="toggleFilter('rookie')" />
+            }
+            @if (card.autograph) {
+              <p-tag value="AUTO" severity="warn" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isFilterActive('autograph') }"
+                (click)="toggleFilter('autograph')" />
+            }
+            @if (card.memorabilia) {
+              <p-tag value="PATCH" severity="success" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isFilterActive('memorabilia') }"
+                (click)="toggleFilter('memorabilia')" />
+            }
           </div>
         </div>
 

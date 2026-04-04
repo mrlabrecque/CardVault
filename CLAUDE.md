@@ -76,7 +76,7 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 | Sport | string |
 | Set | string |
 | Year | integer |
-| Variant / Parallel | string |
+| Parallel | string |
 | Grade | string |
 | Price Paid | decimal |
 | Current Value | decimal |

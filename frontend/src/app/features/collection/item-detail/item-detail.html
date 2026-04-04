@@ -3,50 +3,66 @@
   <!-- Back + actions -->
   <div class="flex items-center justify-between">
     <p-button icon="pi pi-arrow-left" [text]="true" severity="secondary" (onClick)="goBack()" />
-    <div class="flex gap-2">
-      <p-button icon="pi pi-share-alt" label="List on eBay" size="small" [outlined]="true" />
-      <p-button icon="pi pi-pencil" size="small" />
-    </div>
-  </div>
-
-  <!-- Card Hero -->
-  <div class="rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 p-6 flex flex-col items-center gap-3 text-white">
-    <div class="text-5xl">🏈</div>
-    <h1 class="text-xl font-bold text-center">{{ card.player }}</h1>
-    <p class="text-sm text-blue-100 text-center">{{ card.year }} {{ card.set }} · {{ card.variant }}</p>
-    <p-tag [value]="card.grade" styleClass="bg-white/20! text-white! border-white/30! border!" />
-  </div>
-
-  <!-- Value Summary -->
-  <div class="grid grid-cols-2 gap-3">
-    <div class="bg-white rounded-2xl border border-gray-100 p-4">
-      <p class="text-[10px] text-gray-400 uppercase tracking-wide">Current Value</p>
-      <p class="text-xl font-bold text-gray-900 mt-1">${{ card.currentValue | number }}</p>
-    </div>
-    <div class="bg-white rounded-2xl border border-gray-100 p-4">
-      <p class="text-[10px] text-gray-400 uppercase tracking-wide">P / L</p>
-      <p class="text-xl font-bold mt-1"
-         [class]="card.currentValue >= card.pricePaid ? 'text-emerald-500' : 'text-red-500'">
-        +${{ card.currentValue - card.pricePaid | number }}
-      </p>
-    </div>
-  </div>
-
-  <!-- Details -->
-  <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
-    @for (row of [
-      ['Sport', card.sport],
-      ['Set', card.set],
-      ['Year', card.year],
-      ['Variant', card.variant],
-      ['Grade', card.grade],
-      ['Price Paid', '$' + card.pricePaid]
-    ]; track row[0]) {
-      <div class="flex items-center justify-between px-4 py-3">
-        <span class="text-xs text-gray-400">{{ row[0] }}</span>
-        <span class="text-sm font-semibold text-gray-800">{{ row[1] }}</span>
+    @if (card) {
+      <div class="flex gap-2">
+        <p-button icon="pi pi-share-alt" label="List on eBay" size="small" [outlined]="true" />
+        <p-button icon="pi pi-pencil" size="small" />
       </div>
     }
   </div>
+
+  @if (card) {
+    <!-- Card Hero -->
+    <div class="rounded-2xl bg-gradient-to-br from-[#800020] to-[#3d0010] p-6 flex flex-col items-center gap-3 text-white">
+      <div class="text-5xl">{{ sportIcon(card.sport) }}</div>
+      <h1 class="text-xl font-bold text-center">{{ card.player }}</h1>
+      <p class="text-sm text-white/70 text-center">{{ card.year }} {{ card.set }} · {{ card.parallel }}</p>
+      <app-card-tags
+        [grade]="card.grade"
+        [rookie]="card.rookie"
+        [autograph]="card.autograph"
+        [memorabilia]="card.memorabilia"
+        variant="ghost"
+      />
+    </div>
+
+    <!-- Value Summary -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-white rounded-2xl border border-gray-100 p-4">
+        <p class="text-[10px] text-gray-400 uppercase tracking-wide">Current Value</p>
+        <p class="text-xl font-bold text-gray-900 mt-1">${{ card.currentValue | number }}</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-4">
+        <p class="text-[10px] text-gray-400 uppercase tracking-wide">P / L</p>
+        <p class="text-xl font-bold mt-1"
+           [class]="pl() >= 0 ? 'text-emerald-500' : 'text-red-500'">
+          {{ pl() >= 0 ? '+' : '' }}${{ pl() | number }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Details -->
+    <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+      @for (row of [
+        ['Sport', card.sport],
+        ['Set', card.set],
+        ['Year', card.year],
+        ['Parallel', card.parallel],
+        ['Grade', card.grade],
+        ['Price Paid', '$' + card.pricePaid]
+      ]; track row[0]) {
+        <div class="flex items-center justify-between px-4 py-3">
+          <span class="text-xs text-gray-400">{{ row[0] }}</span>
+          <span class="text-sm font-semibold text-gray-800">{{ row[1] }}</span>
+        </div>
+      }
+    </div>
+
+  } @else {
+    <div class="flex flex-col items-center justify-center gap-3 py-20 text-gray-400">
+      <i class="pi pi-inbox text-4xl"></i>
+      <p class="text-sm">Card not found</p>
+    </div>
+  }
 
 </div>

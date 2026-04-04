@@ -1,0 +1,31 @@
+@if (variant === 'ghost') {
+  <div class="flex flex-wrap items-center justify-center gap-1.5">
+    @if (grade) {
+      <p-tag [value]="grade" styleClass="bg-white/20! text-white! border border-white/30!" />
+    }
+    @if (rookie) {
+      <p-tag value="RC" styleClass="bg-white/20! text-white! border border-white/30!" />
+    }
+    @if (autograph) {
+      <p-tag value="AUTO" styleClass="bg-white/20! text-white! border border-white/30!" />
+    }
+    @if (memorabilia) {
+      <p-tag value="PATCH" styleClass="bg-white/20! text-white! border border-white/30!" />
+    }
+  </div>
+} @else {
+  <div class="flex flex-wrap items-center gap-1.5">
+    @if (grade) {
+      <p-tag [value]="grade" severity="secondary" styleClass="text-[10px]!" />
+    }
+    @if (rookie) {
+      <p-tag value="RC" severity="info" styleClass="text-[10px]!" />
+    }
+    @if (autograph) {
+      <p-tag value="AUTO" severity="warn" styleClass="text-[10px]!" />
+    }
+    @if (memorabilia) {
+      <p-tag value="PATCH" severity="success" styleClass="text-[10px]!" />
+    }
+  </div>
+}

@@ -1,2 +1,20 @@
 @use "tailwindcss";
 @use "primeicons/primeicons.css";
+
+:root {
+  --color-primary: #800020;
+  --color-primary-dark: #5c0017;
+  --color-primary-light: #a0002a;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f8f9fa;
+  --color-border: #e0e0e0;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-tab-inactive: rgba(255, 255, 255, 0.55);
+  --tab-bar-height: 72px;
+}
+
+.p-tag {
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}

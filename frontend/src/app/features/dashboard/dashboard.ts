@@ -18,9 +18,9 @@ interface TopCard {
 })
 export class Dashboard {
   stats = [
-    { label: 'Total Value', value: '$12,450', delta: null, icon: 'pi-wallet', color: 'bg-blue-500' },
+    { label: 'Total Value', value: '$12,450', delta: null, icon: 'pi-wallet', color: 'bg-[#800020]' },
     { label: 'P / L', value: '+$2,130', delta: '+20.6%', icon: 'pi-chart-line', color: 'bg-emerald-500' },
-    { label: 'Cards', value: '147', delta: null, icon: 'pi-th-large', color: 'bg-violet-500' },
+    { label: 'Cards', value: '147', delta: null, icon: 'pi-th-large', color: 'bg-[#800020]/70' },
   ];
 
   topCards: TopCard[] = [
