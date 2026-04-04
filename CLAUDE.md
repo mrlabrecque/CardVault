@@ -180,6 +180,14 @@ card-vault/
 
 ---
 
+## Authentication Milestone
+
+- Implementing Supabase Auth with a PKCE flow.
+- Prioritizing Passwordless Magic Links to reduce friction for friends.
+- Locking down the `user_collection` via Row Level Security (RLS) to ensure data privacy.
+
+---
+
 ## Implementation Progress
 
 ### Done
@@ -188,13 +196,14 @@ card-vault/
 - [x] App shell with `<router-outlet>` and bottom tab bar (Collection, Dashboard FAB, Comps, Wishlist)
 - [x] Routes wired: `/dashboard`, `/collection`, `/collection/:id`, `/comps`, `/wishlist`
 - [x] Feature component stubs in place for all four main views
+- [x] Auth — Magic Link + Google OAuth login page, `AuthService` (signals + PKCE), `AuthGuard`, `/login` route, all feature routes guarded
+- [x] Database — RLS policies on `cards`, `lookup_history`, `wishlist`; `master_card_definitions` read-only catalog migration
 
 ### Up Next
+- [ ] **Configure Supabase credentials** — fill in `supabaseUrl` + `supabaseAnonKey` in `src/environments/environment.development.ts`; enable Google OAuth provider in the Supabase dashboard
 - [ ] Dashboard — P/L summary cards, sport/player distribution charts, highest-value card
 - [ ] Collection list — card grid/list, search, inline edit
 - [ ] Item detail — full card editor
 - [ ] Comps search — text + image search, results with eBay sold prices, lookup history
 - [ ] Wishlist — list view, price threshold editor
-- [ ] Auth — login page, AuthGuard, Supabase session
 - [ ] Backend API — Express routes, Supabase client, eBay service
-- [ ] Database — Supabase migrations, RLS policies

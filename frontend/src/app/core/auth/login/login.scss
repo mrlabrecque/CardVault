@@ -1,0 +1,251 @@
+/* ── Page background ── */
+.login-bg {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+/* ── Slab outer shell ──
+   The rainbow shimmer is layered directly onto the silver gradient via
+   multiple backgrounds — no child overlay needed, so the silver always shows. */
+.slab-shell {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+
+  padding: 9px;
+  border-radius: 14px;
+
+  /* Layer 1: Prizm rainbow shimmer | Layer 2: silver plastic base */
+  background:
+    linear-gradient(
+      105deg,
+      transparent              15%,
+      rgba(255, 60,  160, 0.3) 27%,
+      rgba(255, 210,  60, 0.3) 38%,
+      rgba( 60, 255, 140, 0.3) 50%,
+      rgba( 60, 150, 255, 0.3) 62%,
+      rgba(190,  60, 255, 0.3) 73%,
+      transparent              85%
+    ),
+    linear-gradient(160deg, #e0e0e0 0%, #f5f5f5 45%, #cecece 100%);
+
+  background-size: 250% 100%, 100% 100%;
+  animation: holo-shift 4s ease-in-out infinite;
+
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes holo-shift {
+  0%   { background-position: 0%   50%, 0% 0%; }
+  50%  { background-position: 100% 50%, 0% 0%; }
+  100% { background-position: 0%   50%, 0% 0%; }
+}
+
+/* ── PSA label strip (top of slab) ── */
+.psa-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(90deg, #1a3680 0%, #1e3fa0 100%);
+  padding: 10px 14px;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid #c9a84c;
+}
+
+.grade-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f5d06a 0%, #b8820a 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+
+  &__num {
+    font-size: 16px;
+    font-weight: 900;
+    color: #1a1200;
+    line-height: 1;
+  }
+
+  &__text {
+    font-size: 5px;
+    font-weight: 700;
+    color: #3a2800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+}
+
+.psa-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  &__title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  &__subtitle {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  &__cert {
+    font-size: 7px;
+    color: rgba(255, 255, 255, 0.35);
+    letter-spacing: 0.05em;
+    font-family: monospace;
+    margin-top: 3px;
+  }
+}
+
+.psa-logo {
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.15em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  flex-shrink: 0;
+}
+
+/* ── Card window (dark interior) ── */
+.card-window {
+  position: relative;
+  background: #18181b;
+  border-radius: 0 0 6px 6px;
+  padding: 28px 24px 24px;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Diagonal watermark */
+.watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.025);
+  transform: rotate(-30deg);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* ── CV logo icon ── */
+.cv-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 72px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #2a2a3a 0%, #1e1e2e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.cv-icon__shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.07) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: card-shimmer 2.6s ease-in-out infinite;
+}
+
+.cv-icon__text {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+  font-weight: 800;
+  color: #a1a1aa;
+  letter-spacing: 0.2em;
+}
+
+@keyframes card-shimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Form area ── */
+.form-area {
+  margin-top: 20px;
+  text-align: left;
+}
+
+/* ── Send Magic Link button ── */
+.magic-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #6366f1;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+
+  &:hover:not(:disabled) {
+    background: #4f46e5;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.email-input {
+  width: 100%;
+  background-color: #27272a !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #f4f4f5 !important;
+
+  &::placeholder {
+    color: #52525b;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+  }
+}

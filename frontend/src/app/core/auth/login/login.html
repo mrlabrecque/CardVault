@@ -1,1 +1,97 @@
-<p>login works!</p>
+<div class="login-bg">
+
+  <!-- PSA Slab -->
+  <div class="slab-shell">
+
+    <!-- PSA-style label strip (top of slab) -->
+    <div class="psa-label">
+      <div class="grade-badge">
+        <span class="grade-badge__num">10</span>
+        <span class="grade-badge__text">GEM MT</span>
+      </div>
+      <div class="psa-info">
+        <span class="psa-info__title">CARD VAULT</span>
+        <span class="psa-info__subtitle">COLLECTOR ACCESS PASS</span>
+        <span class="psa-info__cert">CERT# 2026-CVT-AUTH-001</span>
+      </div>
+      <div class="psa-logo">PSA</div>
+    </div>
+
+    <!-- Card window (dark interior of the slab) -->
+    <div class="card-window">
+
+      <!-- Watermark -->
+      <div class="watermark" aria-hidden="true">AUTHENTICATED</div>
+
+      <!-- CV logo icon -->
+      <div class="cv-icon">
+        <div class="cv-icon__shimmer" aria-hidden="true"></div>
+        <span class="cv-icon__text">CV</span>
+      </div>
+
+      <h1 class="text-xl font-bold text-white mt-3 tracking-wide">Card Vault</h1>
+      <p class="text-zinc-500 text-xs mt-1 tracking-widest uppercase">Collector Access</p>
+
+      <div class="form-area">
+
+        @if (state() !== 'sent') {
+          <form (ngSubmit)="sendMagicLink()" class="flex flex-col gap-3">
+            <div class="flex flex-col gap-1.5">
+              <label for="email" class="text-xs text-zinc-400 tracking-wide uppercase">Email address</label>
+              <input
+                pInputText
+                id="email"
+                type="email"
+                [(ngModel)]="email"
+                name="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+                required
+                class="email-input"
+              />
+            </div>
+
+            <button
+              type="submit"
+              class="magic-btn"
+              [disabled]="!email || state() === 'sending'"
+            >
+              <i [class]="state() === 'sending' ? 'pi pi-spin pi-spinner' : 'pi pi-envelope'"></i>
+              {{ state() === 'sending' ? 'Sending...' : 'Send Magic Link' }}
+            </button>
+          </form>
+        }
+
+        @if (state() === 'sent') {
+          <div class="text-center">
+            <div class="text-3xl text-emerald-400 mb-3">
+              <i class="pi pi-check-circle"></i>
+            </div>
+            <h2 class="text-white font-semibold text-base mb-2">Check your inbox</h2>
+            <p class="text-zinc-400 text-xs leading-relaxed">
+              Magic link sent to <strong class="text-white">{{ email }}</strong>.
+              No password needed.
+            </p>
+            <button
+              type="button"
+              class="mt-4 text-xs text-zinc-600 underline hover:text-zinc-400 transition-colors"
+              (click)="state.set('idle')"
+            >
+              Use a different email
+            </button>
+          </div>
+        }
+
+        @if (state() === 'error') {
+          <p class="flex items-center gap-2 text-red-400 text-xs justify-center mt-2">
+            <i class="pi pi-exclamation-triangle"></i>
+            {{ errorMessage() }}
+          </p>
+        }
+
+      </div>
+    </div>
+
+  </div>
+
+</div>

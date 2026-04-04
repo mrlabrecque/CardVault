@@ -1,8 +1,41 @@
 <div class="app-shell">
-  <main class="app-content">
+
+  @if (auth.isAuthenticated()) {
+  <header class="app-header">
+    <div>
+      <p class="app-header__eyebrow">Card Vault</p>
+      <h1 class="app-header__title">{{ pageTitle() }}</h1>
+    </div>
+
+    <div class="avatar-wrap">
+      <button class="avatar-btn" (click)="toggleMenu()" [attr.aria-expanded]="menuOpen()">
+        {{ initials() }}
+      </button>
+
+      @if (menuOpen()) {
+        <!-- Backdrop to close on outside click -->
+        <div class="menu-backdrop" (click)="menuOpen.set(false)"></div>
+
+        <div class="avatar-menu">
+          <p class="avatar-menu__email">{{ auth.user()?.email }}</p>
+          @if (auth.isAppAdmin()) {
+            <span class="avatar-menu__badge">App Admin</span>
+          }
+          <hr class="avatar-menu__divider" />
+          <button class="avatar-menu__signout" (click)="signOut()">
+            Sign out
+          </button>
+        </div>
+      }
+    </div>
+  </header>
+  }
+
+  <main [class]="'app-content' + (auth.isAuthenticated() ? ' app-content--authenticated' : '')">
     <router-outlet />
   </main>
 
+  @if (auth.isAuthenticated()) {
   <nav class="tab-bar">
     <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="tab-item">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -45,4 +78,5 @@
       <span>Wishlist</span>
     </a>
   </nav>
+  }
 </div>
