@@ -180,11 +180,24 @@ card-vault/
 
 ---
 
-## Authentication Milestone
+## Authentication
 
-- Implementing Supabase Auth with a PKCE flow.
-- Prioritizing Passwordless Magic Links to reduce friction for friends.
-- Locking down the `user_collection` via Row Level Security (RLS) to ensure data privacy.
+- **Flow**: Supabase Auth, PKCE, passwordless Magic Link only (no social providers).
+- **`AuthService`** (`core/services/auth.ts`) — wraps the Supabase client; exposes signals: `user`, `isAuthenticated`, `isAppAdmin`. Calls `fetchProfile()` on every sign-in which upserts a `profiles` row (safe for pre-existing users) and then separately syncs the email field.
+- **`authGuard`** (`core/guards/auth-guard.ts`) — async `CanActivateFn`; calls `getSession()` directly to avoid timing races on first load. All feature routes are guarded; `/login` is public.
+- **`isAppAdmin`** — boolean flag in the `profiles` table, default `false`. Must be flipped manually in the Supabase dashboard (no client-side update path for this field). Used to gate "add sets" and other admin-only UI that is not yet built.
+- **Tab bar + header** are hidden on the login page — both gated with `@if (auth.isAuthenticated())` in `app.html`.
+
+## App Shell
+
+- **Header** (`app.html` / `app.scss`) — sticky flex item (not `position: fixed`) at the top of `.app-shell`. Shows "Card Vault" eyebrow + current page title (derived from route URL via `toSignal` + `NavigationEnd`). Avatar button (user's email initial) opens a dropdown with email, optional "App Admin" badge, and Sign Out.
+- **Tab bar** — `position: fixed`, bottom, primary color, 72px tall. Tabs: Collection, Dashboard (center FAB), Comps, Wishlist.
+- **Content area** — `flex: 1; overflow-y: auto`. When authenticated, `padding-bottom: var(--tab-bar-height)` keeps content clear of the tab bar. Header is in normal flow so no `padding-top` offset is needed.
+
+## Styling Conventions (additions)
+
+- **Component SCSS files** — do NOT use `@apply`. Other component SCSS files in this project are empty; put all styles as Tailwind utility classes directly in the HTML template. Reserve component SCSS only for things Tailwind cannot express (keyframe animations, pseudo-element tricks, third-party overrides with `!important`).
+- **PrimeNG button dark-mode conflict** — `p-button` inherits dark-mode overrides from the Aura theme. For any button where appearance is critical (e.g. the login CTA), use a plain `<button>` with hand-written styles instead of `p-button`.
 
 ---
 
@@ -193,17 +206,27 @@ card-vault/
 ### Done
 - [x] Angular app scaffolded (Angular 21, SCSS, standalone components)
 - [x] Tailwind CSS v4 + PrimeNG 21 installed and configured (Aura theme, CSS layer order set)
-- [x] App shell with `<router-outlet>` and bottom tab bar (Collection, Dashboard FAB, Comps, Wishlist)
-- [x] Routes wired: `/dashboard`, `/collection`, `/collection/:id`, `/comps`, `/wishlist`
-- [x] Feature component stubs in place for all four main views
-- [x] Auth — Magic Link + Google OAuth login page, `AuthService` (signals + PKCE), `AuthGuard`, `/login` route, all feature routes guarded
-- [x] Database — RLS policies on `cards`, `lookup_history`, `wishlist`; `master_card_definitions` read-only catalog migration
+- [x] App shell — header (title + avatar/logout), bottom tab bar, routes, feature stubs
+- [x] Routes wired: `/login`, `/dashboard`, `/collection`, `/collection/:id`, `/comps`, `/wishlist`
+- [x] Auth — Magic Link login page (PSA slab design), `AuthService`, `AuthGuard`, all feature routes guarded
+- [x] `profiles` table — `id`, `email`, `is_app_admin`; trigger auto-creates on signup; frontend upserts on every sign-in; RLS locks down admin promotion
+- [x] Database — RLS on `cards`, `lookup_history`, `wishlist`; `master_card_definitions` read-only catalog migration
+- [x] Dashboard, Collection list, Comps search, Wishlist — UI stubs with sample data in place
 
 ### Up Next
-- [ ] **Configure Supabase credentials** — fill in `supabaseUrl` + `supabaseAnonKey` in `src/environments/environment.development.ts`; enable Google OAuth provider in the Supabase dashboard
-- [ ] Dashboard — P/L summary cards, sport/player distribution charts, highest-value card
-- [ ] Collection list — card grid/list, search, inline edit
-- [ ] Item detail — full card editor
-- [ ] Comps search — text + image search, results with eBay sold prices, lookup history
-- [ ] Wishlist — list view, price threshold editor
+- [ ] Dashboard — wire to real Supabase data (P/L, sport distribution, top cards)
+- [ ] Collection list — wire to real `cards` table; inline edit
+- [ ] Item detail — full card editor; "Post to eBay" button
+- [ ] Comps search — eBay sold listings integration; lookup history
+- [ ] Wishlist — price threshold editor; alert status
 - [ ] Backend API — Express routes, Supabase client, eBay service
+- [ ] Admin UI — "Add sets" feature gated behind `isAppAdmin`
+
+### Supabase Migrations (apply in order)
+| File | Description |
+|---|---|
+| `20240101000000_init.sql` | Core schema: `cards`, `lookup_history`, `wishlist` + RLS |
+| `20260404000000_rls_master_catalog.sql` | `master_card_definitions` public read-only table |
+| `20260404000001_profiles.sql` | `profiles` table + trigger + select/insert RLS |
+| `20260404000002_profiles_insert_policy.sql` | Insert policy for self-service profile creation |
+| `20260404000003_profiles_add_email.sql` | `email` column + update policy + trigger update |
