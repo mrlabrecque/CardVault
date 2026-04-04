@@ -1,1 +1,55 @@
-<p>dashboard works!</p>
+<div class="flex flex-col gap-6 px-4 pt-6 pb-4">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <p class="text-xs text-gray-400 uppercase tracking-widest">Card Vault</p>
+      <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+    </div>
+    <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+      ML
+    </div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="grid grid-cols-3 gap-3">
+    @for (stat of stats; track stat.label) {
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm" [class]="stat.color">
+          <i [class]="'pi ' + stat.icon + ' text-xs'"></i>
+        </div>
+        <p class="text-lg font-bold text-gray-900 leading-none">{{ stat.value }}</p>
+        <p class="text-[10px] text-gray-400 leading-none">{{ stat.label }}</p>
+        @if (stat.delta) {
+          <span class="text-[10px] font-semibold text-emerald-500">{{ stat.delta }}</span>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Sport Distribution Chart -->
+  <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+    <h2 class="text-sm font-semibold text-gray-700 mb-4">By Sport</h2>
+    <p-chart type="doughnut" [data]="sportChartData" [options]="sportChartOptions" height="220px" />
+  </div>
+
+  <!-- Top Cards -->
+  <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+    <h2 class="text-sm font-semibold text-gray-700 mb-3">Top Cards by Value</h2>
+    <div class="flex flex-col divide-y divide-gray-50">
+      @for (card of topCards; track card.player; let i = $index) {
+        <div class="flex items-center gap-3 py-3">
+          <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 text-xs flex items-center justify-center font-bold shrink-0">
+            {{ i + 1 }}
+          </span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
+            <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }} · {{ card.grade }}</p>
+          </div>
+          <span class="text-sm font-bold text-gray-900 shrink-0">${{ card.value | number }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+</div>

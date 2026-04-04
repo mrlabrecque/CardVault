@@ -1,1 +1,60 @@
-<p>collection-list works!</p>
+<div class="flex flex-col gap-4 px-4 pt-6 pb-4">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">Collection</h1>
+    <p-button icon="pi pi-plus" label="Add" size="small" rounded="true" />
+  </div>
+
+  <!-- Search -->
+  <div class="relative">
+    <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+    <input
+      pInputText
+      type="text"
+      placeholder="Search player, set, sport…"
+      class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      [ngModel]="searchQuery()"
+      (ngModelChange)="searchQuery.set($event)"
+    />
+  </div>
+
+  <!-- Count -->
+  <p class="text-xs text-gray-400">{{ filtered().length }} cards</p>
+
+  <!-- Card List -->
+  <div class="flex flex-col gap-3">
+    @for (card of filtered(); track card.id) {
+      <a [routerLink]="['/collection', card.id]"
+         class="flex items-center gap-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 no-underline">
+
+        <!-- Sport Icon -->
+        <div class="w-12 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">
+          {{ sportIcon(card.sport) }}
+        </div>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-bold text-gray-900 truncate">{{ card.player }}</p>
+          <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }}</p>
+          <div class="flex items-center gap-2 mt-1.5">
+            <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
+            <p-tag [value]="card.variant" severity="secondary" styleClass="text-[10px]!" />
+          </div>
+        </div>
+
+        <!-- Value + P/L -->
+        <div class="text-right shrink-0">
+          <p class="text-sm font-bold text-gray-900">${{ card.currentValue | number }}</p>
+          <p class="text-xs font-semibold mt-0.5"
+             [class]="pl(card) >= 0 ? 'text-emerald-500' : 'text-red-500'">
+            {{ plPercent(card) }}
+          </p>
+        </div>
+
+        <i class="pi pi-chevron-right text-gray-300 text-xs shrink-0"></i>
+      </a>
+    }
+  </div>
+
+</div>

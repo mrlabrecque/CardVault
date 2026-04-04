@@ -14,7 +14,8 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 
 | Layer | Technology |
 |---|---|
-| Frontend | Angular (mobile-first, modern responsive UI) |
+| Frontend | Angular 21 (mobile-first, modern responsive UI) |
+| UI Libraries | Tailwind CSS v4 (utility styling) + PrimeNG 21 (components) |
 | Backend | Node.js with Express.js |
 | Database & Auth | Supabase (PostgreSQL + Supabase Auth) |
 | Integrations | eBay Browse/Trading APIs, Checklist Data Providers |
@@ -165,3 +166,35 @@ card-vault/
 - **eBay integration** is used in two directions: read (fetching sold comps for valuation) and write (creating listings from the collection).
 - **Lookup history** is capped at 50 entries per user — implement a rolling window with deletion of the oldest entry on insert when the limit is reached.
 - **Price alerts** require a background job or webhook mechanism to poll eBay and trigger email notifications when thresholds are met.
+
+---
+
+## UI / Styling Conventions
+
+- **Tailwind CSS v4** — use utility classes for all layout, spacing, typography, and color. Config lives in `frontend/.postcssrc.json`.
+- **PrimeNG 21** — use for complex components: data tables (`<p-table>`), charts (`<p-chart>`), dialogs (`<p-dialog>`), buttons (`<p-button>`), etc. Theme: **Aura** (configured in `app.config.ts`).
+- **CSS layer order**: `tailwind-base → primeng → tailwind-utilities`. Tailwind utilities always win over PrimeNG component styles. Do not add component-scoped overrides that fight this order.
+- **Dark mode**: toggled via `.dark` class on the root element (not `prefers-color-scheme`).
+- **App shell**: max-width 480px, centered, with a fixed bottom tab bar (height `72px`). The dashboard is the default landing route (`/`). Tabs: Collection, Dashboard (center FAB), Comps, Wishlist.
+- **Global styles entry**: `frontend/src/styles.scss` — Tailwind and PrimeIcons are imported here. Do not import them anywhere else.
+
+---
+
+## Implementation Progress
+
+### Done
+- [x] Angular app scaffolded (Angular 21, SCSS, standalone components)
+- [x] Tailwind CSS v4 + PrimeNG 21 installed and configured (Aura theme, CSS layer order set)
+- [x] App shell with `<router-outlet>` and bottom tab bar (Collection, Dashboard FAB, Comps, Wishlist)
+- [x] Routes wired: `/dashboard`, `/collection`, `/collection/:id`, `/comps`, `/wishlist`
+- [x] Feature component stubs in place for all four main views
+
+### Up Next
+- [ ] Dashboard — P/L summary cards, sport/player distribution charts, highest-value card
+- [ ] Collection list — card grid/list, search, inline edit
+- [ ] Item detail — full card editor
+- [ ] Comps search — text + image search, results with eBay sold prices, lookup history
+- [ ] Wishlist — list view, price threshold editor
+- [ ] Auth — login page, AuthGuard, Supabase session
+- [ ] Backend API — Express routes, Supabase client, eBay service
+- [ ] Database — Supabase migrations, RLS policies

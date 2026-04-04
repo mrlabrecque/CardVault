@@ -11,13 +11,21 @@
   "private": true,
   "packageManager": "npm@11.11.0",
   "dependencies": {
+    "@angular/animations": "^21.2.7",
     "@angular/common": "^21.2.0",
     "@angular/compiler": "^21.2.0",
     "@angular/core": "^21.2.0",
     "@angular/forms": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
+    "@primeuix/themes": "^2.0.3",
+    "@tailwindcss/postcss": "^4.2.2",
+    "chart.js": "^4.5.1",
+    "postcss": "^8.5.8",
+    "primeicons": "^7.0.0",
+    "primeng": "^21.1.5",
     "rxjs": "~7.8.0",
+    "tailwindcss": "^4.2.2",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
