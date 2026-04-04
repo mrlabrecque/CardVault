@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { AuthService } from './auth';
 
 export interface Card {
   id: string;
@@ -15,19 +16,155 @@ export interface Card {
   memorabilia: boolean;
 }
 
+export interface MasterCard {
+  id: string;
+  player: string;
+  card_number: string | null;
+  parallel_type: string | null;
+  is_rookie: boolean;
+  is_auto: boolean;
+  is_patch: boolean;
+  is_ssp: boolean;
+  serial_max: number | null;
+  set_id: string | null;
+}
+
+export interface AddCardFormData {
+  setId: string;
+  masterCardId: string | null; // null = create new master card
+  // New master card fields (used when masterCardId is null)
+  player: string;
+  cardNumber: string;
+  parallelType: string;
+  isRookie: boolean;
+  isAuto: boolean;
+  isPatch: boolean;
+  isSSP: boolean;
+  serialMax: number | null;
+  // User instance fields
+  pricePaid: number | null;
+  serialNumber: string;
+  isGraded: boolean;
+  grader: string;
+  gradeValue: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CardsService {
-  cards = signal<Card[]>([
-    { id: '1', player: 'Patrick Mahomes',   sport: 'Football',   set: 'Panini Prizm',          year: 2017, parallel: 'Silver Prizm', grade: 'PSA 10',  pricePaid: 600, currentValue: 1200, rookie: true,  autograph: false, memorabilia: false },
-    { id: '2', player: 'Connor McDavid',    sport: 'Hockey',     set: 'Upper Deck Young Guns', year: 2015, parallel: 'Base',         grade: 'BGS 9.5', pricePaid: 750, currentValue: 980,  rookie: true,  autograph: false, memorabilia: false },
-    { id: '3', player: 'Luka Dončić',       sport: 'Basketball', set: 'Panini Prizm',          year: 2018, parallel: 'Silver',       grade: 'PSA 9',   pricePaid: 500, currentValue: 740,  rookie: true,  autograph: true,  memorabilia: false },
-    { id: '4', player: 'Ronald Acuña Jr.',  sport: 'Baseball',   set: 'Topps Chrome',          year: 2018, parallel: 'Refractor',    grade: 'PSA 10',  pricePaid: 300, currentValue: 560,  rookie: true,  autograph: false, memorabilia: false },
-    { id: '5', player: 'Josh Allen',        sport: 'Football',   set: 'Panini Optic',          year: 2018, parallel: 'Holo',         grade: 'PSA 9',   pricePaid: 280, currentValue: 410,  rookie: false, autograph: true,  memorabilia: true  },
-    { id: '6', player: 'Nathan MacKinnon',  sport: 'Hockey',     set: 'Upper Deck',            year: 2013, parallel: 'Base',         grade: 'PSA 10',  pricePaid: 200, currentValue: 320,  rookie: true,  autograph: false, memorabilia: false },
-    { id: '7', player: 'Victor Wembanyama', sport: 'Basketball', set: 'Panini Prizm',          year: 2023, parallel: 'Gold Prizm',   grade: 'PSA 10',  pricePaid: 800, currentValue: 950,  rookie: true,  autograph: true,  memorabilia: true  },
-  ]);
+  private auth = inject(AuthService);
+  private get supabase() { return this.auth.getClient(); }
+
+  cards = signal<Card[]>([]);
 
   getById(id: string): Card | undefined {
     return this.cards().find(c => c.id === id);
+  }
+
+  async loadUserCards() {
+    const { data, error } = await this.supabase
+      .from('user_cards')
+      .select(`
+        id,
+        price_paid,
+        serial_number,
+        current_value,
+        is_graded,
+        grader,
+        grade_value,
+        master_card_definitions (
+          player,
+          card_number,
+          parallel_type,
+          is_rookie,
+          is_auto,
+          is_patch,
+          sets (
+            name,
+            year,
+            sport
+          )
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return;
+
+    const cards: Card[] = (data as any[]).map(uc => {
+      const master = uc.master_card_definitions ?? {};
+      const set = master.sets ?? {};
+      const gradeLabel = uc.is_graded
+        ? `${uc.grader ?? ''} ${uc.grade_value ?? ''}`.trim()
+        : 'Raw';
+      return {
+        id: uc.id,
+        player: master.player ?? '',
+        sport: set.sport ?? '',
+        set: set.name ?? '',
+        year: set.year ?? 0,
+        parallel: master.parallel_type ?? 'Base',
+        grade: gradeLabel,
+        pricePaid: uc.price_paid ?? 0,
+        currentValue: uc.current_value ?? 0,
+        rookie: master.is_rookie ?? false,
+        autograph: master.is_auto ?? false,
+        memorabilia: master.is_patch ?? false,
+      };
+    });
+
+    this.cards.set(cards);
+  }
+
+  async searchMasterCards(setId: string, query: string): Promise<MasterCard[]> {
+    if (!query.trim()) return [];
+    const { data } = await this.supabase
+      .from('master_card_definitions')
+      .select('id, player, card_number, parallel_type, is_rookie, is_auto, is_patch, is_ssp, serial_max, set_id')
+      .eq('set_id', setId)
+      .or(`player.ilike.%${query}%,card_number.ilike.%${query}%`)
+      .limit(20);
+    return (data as MasterCard[]) ?? [];
+  }
+
+  async addCardWithLookup(formData: AddCardFormData): Promise<{ error: any }> {
+    const userId = this.auth.user()?.id;
+    if (!userId) return { error: new Error('Not authenticated') };
+
+    let masterCardId = formData.masterCardId;
+
+    if (!masterCardId) {
+      const { data: newMaster, error: masterError } = await this.supabase
+        .from('master_card_definitions')
+        .insert({
+          set_id: formData.setId,
+          player: formData.player,
+          card_number: formData.cardNumber || null,
+          parallel_type: formData.parallelType || 'Base',
+          is_rookie: formData.isRookie,
+          is_auto: formData.isAuto,
+          is_patch: formData.isPatch,
+          is_ssp: formData.isSSP,
+          serial_max: formData.serialMax,
+        })
+        .select('id')
+        .single();
+
+      if (masterError) return { error: masterError };
+      masterCardId = newMaster.id;
+    }
+
+    const { error } = await this.supabase
+      .from('user_cards')
+      .insert({
+        master_card_id: masterCardId,
+        user_id: userId,
+        price_paid: formData.pricePaid,
+        serial_number: formData.serialNumber || null,
+        is_graded: formData.isGraded,
+        grader: formData.isGraded ? formData.grader : null,
+        grade_value: formData.isGraded ? formData.gradeValue : null,
+      });
+
+    if (!error) await this.loadUserCards();
+    return { error };
   }
 }

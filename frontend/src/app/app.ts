@@ -1,8 +1,10 @@
-import { Component, signal, computed } from '@angular/core';
+import { Component, signal, computed, inject } from '@angular/core';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from './core/services/auth';
+import { UiService } from './core/services/ui';
+import { AddCardDialog } from './features/collection/add-card-dialog/add-card-dialog';
 
 const PAGE_TITLES: Record<string, string> = {
   dashboard:  'Dashboard',
@@ -14,12 +16,13 @@ const PAGE_TITLES: Record<string, string> = {
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, AddCardDialog],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
 export class App {
   menuOpen = signal(false);
+  readonly ui = inject(UiService);
 
   initials = computed(() => (this.auth.user()?.email ?? '').charAt(0).toUpperCase());
 

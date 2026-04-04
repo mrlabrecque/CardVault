@@ -43,4 +43,13 @@ export class SetsService {
   async createSet(payload: CreateSetPayload) {
     return this.db.insert(payload).select().single();
   }
+
+  async searchSets(query: string): Promise<SetRecord[]> {
+    const { data } = await this.db
+      .select('*')
+      .ilike('name', `%${query}%`)
+      .order('year', { ascending: false })
+      .limit(10);
+    return (data as SetRecord[]) ?? [];
+  }
 }

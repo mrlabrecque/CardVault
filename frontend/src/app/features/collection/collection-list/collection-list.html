@@ -46,8 +46,25 @@
     </div>
   }
 
-  <!-- Count -->
-  <p class="text-xs text-gray-400">{{ filtered().length }} cards</p>
+  <!-- Count + Add button -->
+  <div class="flex items-center justify-between">
+    <p class="text-xs text-gray-400">{{ filtered().length }} cards</p>
+    <button
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#800020] text-white text-xs font-semibold active:opacity-80"
+      (click)="openAddCard()">
+      <i class="pi pi-plus text-[11px]"></i>
+      Add Card
+    </button>
+  </div>
+
+  <!-- Empty state -->
+  @if (filtered().length === 0) {
+    <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
+      <div class="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">🃏</div>
+      <p class="text-sm font-semibold text-gray-400">No cards yet</p>
+      <p class="text-xs text-gray-300">Tap <strong class="text-gray-400">Add Card</strong> to build your collection.</p>
+    </div>
+  }
 
   <!-- Card List -->
   <div class="flex flex-col gap-3">
@@ -102,3 +119,4 @@
   </div>
 
 </div>
+

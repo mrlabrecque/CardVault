@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
 import { CardsService } from '../../../core/services/cards';
+import { UiService } from '../../../core/services/ui';
 
 export type CardFilter = 'rookie' | 'autograph' | 'memorabilia';
 
@@ -15,8 +16,9 @@ export type CardFilter = 'rookie' | 'autograph' | 'memorabilia';
   templateUrl: './collection-list.html',
   styleUrl: './collection-list.scss',
 })
-export class CollectionList {
+export class CollectionList implements OnInit {
   private cardsService = inject(CardsService);
+  private ui = inject(UiService);
 
   searchQuery = signal('');
   textFilters = signal<string[]>([]);
@@ -47,6 +49,14 @@ export class CollectionList {
       return true;
     });
   });
+
+  ngOnInit() {
+    this.cardsService.loadUserCards();
+  }
+
+  openAddCard() {
+    this.ui.addCardOpen.set(true);
+  }
 
   commitSearch() {
     const q = this.searchQuery().trim();
@@ -98,6 +108,7 @@ export class CollectionList {
   }
 
   plPercent(card: { pricePaid: number; currentValue: number }): string {
+    if (!card.pricePaid) return '—';
     const pct = ((card.currentValue - card.pricePaid) / card.pricePaid) * 100;
     return (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
   }
