@@ -22,6 +22,12 @@
             <span class="avatar-menu__badge">App Admin</span>
           }
           <hr class="avatar-menu__divider" />
+          @if (auth.isAppAdmin()) {
+            <a routerLink="/admin/sets" (click)="menuOpen.set(false)" class="avatar-menu__link">
+              Manage Sets
+            </a>
+            <hr class="avatar-menu__divider" />
+          }
           <button class="avatar-menu__signout" (click)="signOut()">
             Sign out
           </button>

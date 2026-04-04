@@ -131,6 +131,17 @@ body {
     margin: 2px 0 6px;
   }
 
+  &__link {
+    display: block;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #111827;
+    text-decoration: none;
+
+    &:hover { background: #f9fafb; }
+  }
+
   &__signout {
     width: 100%;
     text-align: left;

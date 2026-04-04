@@ -1,0 +1,155 @@
+<p-toast position="top-center" [life]="4000" />
+
+<div class="px-4 pt-5 pb-10">
+
+  <!-- Back link -->
+  <a routerLink="/dashboard" class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-700 transition-colors mb-5">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+    Dashboard
+  </a>
+
+  <!-- ── New Set Form ───────────────────────────────── -->
+  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+    <h2 class="text-base font-bold text-gray-900 mb-4">New Set</h2>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
+
+      <!-- Brand / Name -->
+      <div class="flex flex-col gap-1">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Brand / Name</label>
+        <input
+          formControlName="name"
+          type="text"
+          placeholder="e.g. Prizm, Topps Chrome"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+        />
+        @if (form.get('name')?.invalid && form.get('name')?.touched) {
+          <span class="text-[11px] text-red-500">Name is required</span>
+        }
+      </div>
+
+      <!-- Year + Sport -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Year</label>
+          <input
+            formControlName="year"
+            type="number"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          />
+          @if (form.get('year')?.errors?.['min'] && form.get('year')?.touched) {
+            <span class="text-[11px] text-red-500">Must be after 1900</span>
+          }
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Sport</label>
+          <select
+            formControlName="sport"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          >
+            @for (s of sports; track s) {
+              <option [value]="s">{{ sportIcon(s) }} {{ s }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <!-- Release Type -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Release Type</label>
+        <div class="flex gap-2">
+          @for (rt of releaseTypes; track rt) {
+            <button
+              type="button"
+              (click)="setReleaseType(rt)"
+              [class]="'flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ' +
+                (form.get('release_type')?.value === rt
+                  ? 'bg-[#800020] text-white border-[#800020]'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300')"
+            >
+              {{ rt }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- eBay Search Template -->
+      <div class="flex flex-col gap-1">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">eBay Search Template</label>
+        <input
+          formControlName="ebay_search_template"
+          type="text"
+          placeholder="{year} {brand} #{card_number} {player_name}"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+        />
+        <p class="text-[10px] text-gray-300 leading-relaxed">
+          Tokens: <span class="font-mono">&#123;year&#125;</span> &nbsp;<span class="font-mono">&#123;brand&#125;</span> &nbsp;<span class="font-mono">&#123;player_name&#125;</span> &nbsp;<span class="font-mono">&#123;card_number&#125;</span>
+        </p>
+      </div>
+
+      <!-- Template Preview -->
+      @if (templatePreview()) {
+        <div class="bg-blue-50 border border-blue-100 rounded-xl px-3.5 py-3">
+          <p class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">Search Preview</p>
+          <p class="text-sm font-mono text-blue-800 leading-snug">{{ templatePreview() }}</p>
+        </div>
+      }
+
+      <!-- Duplicate error -->
+      @if (duplicateError()) {
+        <div class="bg-red-50 border border-red-200 rounded-xl px-3.5 py-3 text-xs text-red-700">
+          A set with this name, year, and sport already exists.
+        </div>
+      }
+
+      <!-- Slug preview -->
+      <div class="flex items-center gap-1.5 text-[10px] text-gray-300">
+        <span>Slug:</span>
+        <span class="font-mono text-gray-400">{{ generateSlug() }}</span>
+      </div>
+
+      <!-- Submit -->
+      <button
+        type="submit"
+        [disabled]="saving()"
+        class="w-full bg-[#800020] text-white rounded-xl py-3 text-sm font-semibold tracking-wide disabled:opacity-40 active:opacity-80 transition-opacity mt-1"
+      >
+        {{ saving() ? 'Saving…' : 'Create Set' }}
+      </button>
+
+    </form>
+  </div>
+
+  <!-- ── Existing Sets ──────────────────────────────── -->
+  <div>
+    <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+      Existing Sets ({{ sets().length }})
+    </p>
+
+    @if (sets().length === 0) {
+      <p class="text-sm text-gray-300 text-center py-10">No sets yet. Create one above.</p>
+    }
+
+    @for (set of sets(); track set.id) {
+      <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-2">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-gray-900 truncate">
+              {{ set.year }} {{ set.name }}
+            </p>
+            <p class="text-xs text-gray-400 mt-0.5">
+              {{ sportIcon(set.sport) }} {{ set.sport }} &middot; {{ set.release_type }}
+            </p>
+          </div>
+          <span class="text-[10px] font-mono text-gray-300 shrink-0 pt-0.5">{{ set.set_slug }}</span>
+        </div>
+        @if (set.ebay_search_template) {
+          <p class="text-[10px] font-mono text-gray-300 mt-2 truncate">{{ set.ebay_search_template }}</p>
+        }
+      </div>
+    }
+  </div>
+
+</div>

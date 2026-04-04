@@ -9,6 +9,7 @@ const PAGE_TITLES: Record<string, string> = {
   collection: 'Collection',
   comps:      'Comp Search',
   wishlist:   'Wishlist',
+  admin:      'Manage Sets',
 };
 
 @Component({

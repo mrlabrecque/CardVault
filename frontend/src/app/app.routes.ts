@@ -5,7 +5,9 @@ import { CompsSearch } from './features/comps/comps-search/comps-search';
 import { Wishlist } from './features/wishlist/wishlist/wishlist';
 import { ItemDetail } from './features/collection/item-detail/item-detail';
 import { Login } from './core/auth/login/login';
+import { SetBuilder } from './features/admin/set-builder/set-builder';
 import { authGuard } from './core/guards/auth-guard';
+import { adminGuard } from './core/guards/admin-guard';
 
 export const routes: Routes = [
   { path: 'login', component: Login },
@@ -15,5 +17,6 @@ export const routes: Routes = [
   { path: 'collection/:id', component: ItemDetail,   canActivate: [authGuard] },
   { path: 'comps',         component: CompsSearch,   canActivate: [authGuard] },
   { path: 'wishlist',      component: Wishlist,      canActivate: [authGuard] },
+  { path: 'admin/sets',    component: SetBuilder,    canActivate: [adminGuard] },
   { path: '**', redirectTo: 'dashboard' },
 ];
