@@ -1,0 +1,12 @@
+{
+  "name": "card-vault",
+  "private": true,
+  "scripts": {
+    "start": "concurrently --names \"api,web\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix backend\" \"npm run start --prefix frontend\"",
+    "start:backend": "npm run dev --prefix backend",
+    "start:frontend": "npm run start --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
