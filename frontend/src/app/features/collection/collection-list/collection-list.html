@@ -79,7 +79,7 @@
         <!-- Stack Header Row -->
         <button
           class="w-full flex items-center gap-4 p-4 text-left active:bg-gray-50"
-          (click)="toggleStack(stack.key)">
+          (click)="toggleStack(stack)">
 
           <!-- Sport Icon -->
           <div class="w-12 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">
@@ -127,14 +127,22 @@
 
           <!-- Value + P/L + chevron -->
           <div class="text-right shrink-0 flex flex-col items-end gap-0.5">
-            <p class="text-sm font-bold text-gray-900">${{ stack.totalValue | number:'1.0-0' }}</p>
-            @if (stack.qty > 1) {
+            @if (isStackValuing(stack)) {
+              <span class="flex items-center gap-1 text-xs text-gray-400">
+                <i class="pi pi-spin pi-spinner text-[10px]"></i> Pricing…
+              </span>
+            } @else {
+              <p class="text-sm font-bold text-gray-900">${{ stack.totalValue | number:'1.0-0' }}</p>
+            }
+            @if (stack.qty > 1 && !isStackValuing(stack)) {
               <p class="text-[10px] text-gray-400">${{ stack.marketValuePerCard | number:'1.0-0' }}/card</p>
             }
-            <p class="text-xs font-semibold"
-               [class]="stackPl(stack) >= 0 ? 'text-emerald-500' : 'text-red-500'">
-              {{ stackPlPct(stack) }}
-            </p>
+            @if (!isStackValuing(stack)) {
+              <p class="text-xs font-semibold"
+                 [class]="stackPl(stack) >= 0 ? 'text-emerald-500' : 'text-red-500'">
+                {{ stackPlPct(stack) }}
+              </p>
+            }
             @if (stack.qty > 1) {
               <i class="pi mt-1 text-gray-300 text-xs"
                  [class]="isExpanded(stack.key) ? 'pi-chevron-up' : 'pi-chevron-down'"></i>

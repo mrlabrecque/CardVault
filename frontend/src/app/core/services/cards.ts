@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { AuthService } from './auth';
+import { environment } from '../../../environments/environment.development';
 
 export interface Card {
   id: string;
@@ -61,6 +62,7 @@ export class CardsService {
   private get supabase() { return this.auth.getClient(); }
 
   cards = signal<Card[]>([]);
+  readonly valuingCardIds = signal<Set<string>>(new Set());
 
   getById(id: string): Card | undefined {
     return this.cards().find(c => c.id === id);
@@ -141,9 +143,9 @@ export class CardsService {
     return (data as MasterCard[]) ?? [];
   }
 
-  async addCardWithLookup(formData: AddCardFormData): Promise<{ error: any }> {
+  async addCardWithLookup(formData: AddCardFormData): Promise<{ error: any; cardId: string | null }> {
     const userId = this.auth.user()?.id;
-    if (!userId) return { error: new Error('Not authenticated') };
+    if (!userId) return { error: new Error('Not authenticated'), cardId: null };
 
     let masterCardId = formData.masterCardId;
 
@@ -164,11 +166,11 @@ export class CardsService {
         .select('id')
         .single();
 
-      if (masterError) return { error: masterError };
+      if (masterError) return { error: masterError, cardId: null };
       masterCardId = newMaster.id;
     }
 
-    const { error } = await this.supabase
+    const { data, error } = await this.supabase
       .from('user_cards')
       .insert({
         master_card_id: masterCardId,
@@ -178,9 +180,34 @@ export class CardsService {
         is_graded: formData.isGraded,
         grader: formData.isGraded ? formData.grader : null,
         grade_value: formData.isGraded ? formData.gradeValue : null,
-      });
+      })
+      .select('id')
+      .single();
 
     if (!error) await this.loadUserCards();
-    return { error };
+    return { error, cardId: data?.id ?? null };
+  }
+
+  async fetchMarketValue(cardId: string): Promise<void> {
+    this.valuingCardIds.update(ids => { const n = new Set(ids); n.add(cardId); return n; });
+    try {
+      const session = await this.auth.getSession();
+      if (!session) return;
+
+      await fetch(`${environment.apiUrl}/api/comps/card-value`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cardId }),
+      });
+
+      await this.loadUserCards();
+    } catch (e) {
+      console.error('[CardsService] fetchMarketValue error:', e);
+    } finally {
+      this.valuingCardIds.update(ids => { const n = new Set(ids); n.delete(cardId); return n; });
+    }
   }
 }

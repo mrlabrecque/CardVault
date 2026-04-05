@@ -250,7 +250,7 @@ export class AddCardDialog {
     this.saving.set(true);
     this.saveError.set(null);
 
-    const { error } = await this.cardsService.addCardWithLookup({
+    const { error, cardId } = await this.cardsService.addCardWithLookup({
       setId: this.selectedSet()!.id,
       masterCardId: this.selectedMasterCard()?.id ?? null,
       player: this.newPlayer(),
@@ -277,6 +277,8 @@ export class AddCardDialog {
       if (this.parallelIsOther() && this.newParallelType().trim() && this.selectedSet()) {
         this.setsService.submitPendingParallel(this.selectedSet()!.id, this.newParallelType().trim());
       }
+      // Fire eBay comps lookup in the background — don't await
+      if (cardId) this.cardsService.fetchMarketValue(cardId);
       this.cardAdded.emit();
       this.close();
     }

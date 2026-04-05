@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
@@ -43,6 +43,7 @@ export interface CardStack {
 export class CollectionList implements OnInit {
   private cardsService = inject(CardsService);
   private ui = inject(UiService);
+  private router = inject(Router);
 
   searchQuery = signal('');
   textFilters = signal<string[]>([]);
@@ -172,10 +173,14 @@ export class CollectionList implements OnInit {
     return this.gradeFilters().has(grade);
   }
 
-  toggleStack(key: string) {
+  toggleStack(stack: CardStack) {
+    if (stack.qty === 1) {
+      this.router.navigate(['/collection', stack.cards[0].id]);
+      return;
+    }
     this.expandedKeys.update(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      next.has(stack.key) ? next.delete(stack.key) : next.add(stack.key);
       return next;
     });
   }
@@ -196,6 +201,13 @@ export class CollectionList implements OnInit {
 
   cardPl(card: Card): number {
     return card.currentValue - card.pricePaid;
+  }
+
+  readonly valuingCardIds = this.cardsService.valuingCardIds;
+
+  isStackValuing(stack: CardStack): boolean {
+    const ids = this.valuingCardIds();
+    return stack.cards.some(c => ids.has(c.id));
   }
 
   sportIcon(sport: string): string {
