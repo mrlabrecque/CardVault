@@ -1,44 +1,98 @@
 <div class="flex flex-col gap-6 px-4 pt-6 pb-4">
 
-  <!-- Stats Row -->
-  <div class="grid grid-cols-3 gap-3">
-    @for (stat of stats; track stat.label) {
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
-        <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm" [class]="stat.color">
-          <i [class]="'pi ' + stat.icon + ' text-xs'"></i>
-        </div>
-        <p class="text-lg font-bold text-gray-900 leading-none">{{ stat.value }}</p>
-        <p class="text-[10px] text-gray-400 leading-none">{{ stat.label }}</p>
-        @if (stat.delta) {
-          <span class="text-[10px] font-semibold text-emerald-500">{{ stat.delta }}</span>
+  @if (loading()) {
+    <div class="flex flex-col gap-3">
+      <div class="grid grid-cols-3 gap-3">
+        @for (i of [1,2,3]; track i) {
+          <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 h-24 animate-pulse bg-gray-50"></div>
         }
       </div>
-    }
-  </div>
-
-  <!-- Sport Distribution Chart -->
-  <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
-    <h2 class="text-sm font-semibold text-gray-700 mb-4">By Sport</h2>
-    <p-chart type="doughnut" [data]="sportChartData" [options]="sportChartOptions" height="220px" />
-  </div>
-
-  <!-- Top Cards -->
-  <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Top Cards by Value</h2>
-    <div class="flex flex-col divide-y divide-gray-50">
-      @for (card of topCards; track card.player; let i = $index) {
-        <div class="flex items-center gap-3 py-3">
-          <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 text-xs flex items-center justify-center font-bold shrink-0">
-            {{ i + 1 }}
-          </span>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
-            <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }} · {{ card.grade }}</p>
-          </div>
-          <span class="text-sm font-bold text-gray-900 shrink-0">${{ card.value | number }}</span>
-        </div>
-      }
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4 h-48 animate-pulse bg-gray-50"></div>
     </div>
-  </div>
+  } @else if (!loading() && cardCount() === 0) {
+    <div class="flex flex-col items-center justify-center py-20 gap-3 text-center">
+      <p class="text-4xl">🃏</p>
+      <p class="text-sm font-semibold text-gray-700">No cards yet</p>
+      <p class="text-xs text-gray-400">Add your first card using the + button below.</p>
+    </div>
+  } @else {
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-3 gap-3">
+      <!-- Total Value -->
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm bg-[#800020]">
+          <i class="pi pi-wallet text-xs"></i>
+        </div>
+        <p class="text-base font-bold text-gray-900 leading-none">
+          ${{ totalValue() | number:'1.0-0' }}
+        </p>
+        <p class="text-[10px] text-gray-400 leading-none">Total Value</p>
+      </div>
+
+      <!-- P / L -->
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm"
+             [class]="pl() >= 0 ? 'bg-emerald-500' : 'bg-red-400'">
+          <i class="pi pi-chart-line text-xs"></i>
+        </div>
+        <p class="text-base font-bold leading-none"
+           [class]="pl() >= 0 ? 'text-emerald-600' : 'text-red-500'">
+          {{ pl() >= 0 ? '+' : '' }}${{ pl() | number:'1.0-0' }}
+        </p>
+        <p class="text-[10px] text-gray-400 leading-none">P / L</p>
+        @if (plPct() !== null) {
+          <span class="text-[10px] font-semibold"
+                [class]="plPct()! >= 0 ? 'text-emerald-500' : 'text-red-400'">
+            {{ plPct()! >= 0 ? '+' : '' }}{{ plPct()! | number:'1.1-1' }}%
+          </span>
+        }
+      </div>
+
+      <!-- Cards -->
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm bg-[#800020]/70">
+          <i class="pi pi-th-large text-xs"></i>
+        </div>
+        <p class="text-base font-bold text-gray-900 leading-none">{{ cardCount() }}</p>
+        <p class="text-[10px] text-gray-400 leading-none">Cards</p>
+      </div>
+    </div>
+
+    <!-- Sport Distribution Chart -->
+    @if (sportChartData().labels.length > 0) {
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-4">By Sport</h2>
+        <p-chart type="doughnut" [data]="sportChartData()" [options]="sportChartOptions" height="220px" />
+      </div>
+    }
+
+    <!-- Top Cards by Value -->
+    @if (topCards().length > 0) {
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Top Cards by Value</h2>
+        <div class="flex flex-col divide-y divide-gray-50">
+          @for (card of topCards(); track card.id; let i = $index) {
+            <div class="flex items-center gap-3 py-3">
+              <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 text-xs flex items-center justify-center font-bold shrink-0">
+                {{ i + 1 }}
+              </span>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
+                <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }} · {{ card.grade }}</p>
+              </div>
+              <span class="text-sm font-bold text-gray-900 shrink-0">${{ card.currentValue | number:'1.0-0' }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-2">Top Cards by Value</h2>
+        <p class="text-xs text-gray-300 text-center py-4">No cards with a current value yet.</p>
+      </div>
+    }
+
+  }
 
 </div>

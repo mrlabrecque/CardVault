@@ -87,7 +87,10 @@ export class CardsService {
       `)
       .order('created_at', { ascending: false });
 
-    if (error || !data) return;
+    if (error || !data) {
+      console.error('[CardsService] loadUserCards error:', error);
+      return;
+    }
 
     const cards: Card[] = (data as any[]).map(uc => {
       const master = uc.master_card_definitions ?? {};

@@ -1,14 +1,15 @@
-import { Component } from '@angular/core';
+import { Component, inject, computed, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChartModule } from 'primeng/chart';
+import { CardsService } from '../../core/services/cards';
 
-interface TopCard {
-  player: string;
-  set: string;
-  year: number;
-  grade: string;
-  value: number;
-}
+const SPORT_COLORS: Record<string, string> = {
+  Basketball: '#10b981',
+  Football:   '#3b82f6',
+  Baseball:   '#f59e0b',
+  Soccer:     '#8b5cf6',
+  Hockey:     '#ef4444',
+};
 
 @Component({
   selector: 'app-dashboard',
@@ -16,31 +17,51 @@ interface TopCard {
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
-export class Dashboard {
-  stats = [
-    { label: 'Total Value', value: '$12,450', delta: null, icon: 'pi-wallet', color: 'bg-[#800020]' },
-    { label: 'P / L', value: '+$2,130', delta: '+20.6%', icon: 'pi-chart-line', color: 'bg-emerald-500' },
-    { label: 'Cards', value: '147', delta: null, icon: 'pi-th-large', color: 'bg-[#800020]/70' },
-  ];
+export class Dashboard implements OnInit {
+  private cardsService = inject(CardsService);
+  private cards = this.cardsService.cards;
 
-  topCards: TopCard[] = [
-    { player: 'Patrick Mahomes', set: 'Panini Prizm', year: 2017, grade: 'PSA 10', value: 1200 },
-    { player: 'Connor McDavid', set: 'Upper Deck Young Guns', year: 2015, grade: 'BGS 9.5', value: 980 },
-    { player: 'Luka Dončić', set: 'Panini Prizm Silver', year: 2018, grade: 'PSA 9', value: 740 },
-    { player: 'Ronald Acuña Jr.', set: 'Topps Chrome RC', year: 2018, grade: 'PSA 10', value: 560 },
-    { player: 'Josh Allen', set: 'Panini Optic', year: 2018, grade: 'PSA 9', value: 410 },
-  ];
+  loading = signal(true);
 
-  sportChartData = {
-    labels: ['Football', 'Hockey', 'Basketball', 'Baseball'],
-    datasets: [
-      {
-        data: [52, 28, 15, 5],
-        backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'],
+  totalValue = computed(() =>
+    this.cards().reduce((s, c) => s + (c.currentValue ?? 0), 0)
+  );
+
+  totalCost = computed(() =>
+    this.cards().reduce((s, c) => s + (c.pricePaid ?? 0), 0)
+  );
+
+  pl = computed(() => this.totalValue() - this.totalCost());
+
+  plPct = computed(() => {
+    const cost = this.totalCost();
+    return cost > 0 ? (this.pl() / cost) * 100 : null;
+  });
+
+  cardCount = computed(() => this.cards().length);
+
+  topCards = computed(() =>
+    [...this.cards()]
+      .filter(c => (c.currentValue ?? 0) > 0)
+      .sort((a, b) => (b.currentValue ?? 0) - (a.currentValue ?? 0))
+      .slice(0, 5)
+  );
+
+  sportChartData = computed(() => {
+    const counts: Record<string, number> = {};
+    for (const c of this.cards()) {
+      if (c.sport) counts[c.sport] = (counts[c.sport] ?? 0) + 1;
+    }
+    const labels = Object.keys(counts);
+    return {
+      labels,
+      datasets: [{
+        data: labels.map(s => counts[s]),
+        backgroundColor: labels.map(s => SPORT_COLORS[s] ?? '#94a3b8'),
         hoverOffset: 6,
-      },
-    ],
-  };
+      }],
+    };
+  });
 
   sportChartOptions = {
     cutout: '70%',
@@ -51,4 +72,9 @@ export class Dashboard {
       },
     },
   };
+
+  async ngOnInit() {
+    await this.cardsService.loadUserCards();
+    this.loading.set(false);
+  }
 }
