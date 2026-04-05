@@ -125,7 +125,7 @@
             </div>
           </div>
 
-          <!-- Value + P/L + chevron -->
+          <!-- Value + P/L + refresh + chevron -->
           <div class="text-right shrink-0 flex flex-col items-end gap-0.5">
             @if (isStackValuing(stack)) {
               <span class="flex items-center gap-1 text-xs text-gray-400">
@@ -142,9 +142,15 @@
                  [class]="stackPl(stack) >= 0 ? 'text-emerald-500' : 'text-red-500'">
                 {{ stackPlPct(stack) }}
               </p>
+              <button
+                class="mt-1 p-1 rounded-lg text-gray-300 hover:text-[#800020] hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                title="Refresh market value"
+                (click)="refetchStack(stack, $event)">
+                <i class="pi pi-refresh text-[11px]"></i>
+              </button>
             }
             @if (stack.qty > 1) {
-              <i class="pi mt-1 text-gray-300 text-xs"
+              <i class="pi text-gray-300 text-xs"
                  [class]="isExpanded(stack.key) ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
             }
           </div>

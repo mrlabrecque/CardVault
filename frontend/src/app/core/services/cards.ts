@@ -36,6 +36,21 @@ export interface MasterCard {
   set_id: string | null;
 }
 
+export interface SoldComp {
+  id: string;
+  user_card_id: string;
+  ebay_item_id: string | null;
+  title: string;
+  price: number;
+  currency: string;
+  /** 'auction' | 'fixed_price' | 'best_offer'
+   *  Note: best_offer price is the listing ask, NOT the accepted offer amount. */
+  sale_type: 'auction' | 'fixed_price' | 'best_offer';
+  sold_at: string | null;
+  url: string | null;
+  fetched_at: string;
+}
+
 export interface AddCardFormData {
   setId: string;
   masterCardId: string | null; // null = create new master card
@@ -186,6 +201,20 @@ export class CardsService {
 
     if (!error) await this.loadUserCards();
     return { error, cardId: data?.id ?? null };
+  }
+
+  async fetchCardComps(cardId: string): Promise<SoldComp[]> {
+    const session = await this.auth.getSession();
+    if (!session) return [];
+    try {
+      const res = await fetch(`${environment.apiUrl}/api/comps/card-comps/${cardId}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    } catch {
+      return [];
+    }
   }
 
   async fetchMarketValue(cardId: string): Promise<void> {

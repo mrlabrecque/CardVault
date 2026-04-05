@@ -88,6 +88,14 @@ function filterResults(items: any[], card: any): any[] {
   });
 }
 
+// Maps eBay buyingOptions array to our 3-value enum.
+// best_offer wins if present because price is the ask, not the final amount.
+function resolveSaleType(options: string[]): 'auction' | 'fixed_price' | 'best_offer' {
+  if (options.includes('BEST_OFFER')) return 'best_offer';
+  if (options.includes('AUCTION'))    return 'auction';
+  return 'fixed_price';
+}
+
 const router = Router();
 router.use(requireAuth);
 
@@ -186,9 +194,44 @@ router.post('/card-value', async (req: AuthRequest, res) => {
       `;
     }
 
+    // Persist the filtered sold comps linked to this card (replace previous batch)
+    await sql`DELETE FROM card_sold_comps WHERE user_card_id = ${cardId}`;
+
+    if (items.length > 0) {
+      const rows = items.map((item: any) => ({
+        user_card_id: cardId,
+        ebay_item_id: item.itemId ?? null,
+        title: item.title ?? '',
+        price: parseFloat(item?.price?.value ?? '0'),
+        currency: item?.price?.currency ?? 'USD',
+        sale_type: resolveSaleType(item.buyingOptions ?? []),
+        sold_at: item.itemEndDate ?? null,
+        url: item.itemWebUrl ?? null,
+      }));
+      await sql`INSERT INTO card_sold_comps ${sql(rows)}`;
+    }
+
     return res.json({ value: avgValue, soldCount: prices.length, query, items });
   } catch (e: any) {
     console.error('[comps/card-value]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/comps/card-comps/:cardId — fetch persisted sold comps for a card
+router.get('/card-comps/:cardId', async (req: AuthRequest, res) => {
+  const { cardId } = req.params;
+  try {
+    const comps = await sql`
+      SELECT csc.*
+      FROM card_sold_comps csc
+      JOIN user_cards uc ON uc.id = csc.user_card_id
+      WHERE csc.user_card_id = ${cardId}
+        AND uc.user_id = ${req.userId!}
+      ORDER BY csc.sold_at DESC NULLS LAST, csc.fetched_at DESC
+    `;
+    return res.json(comps);
+  } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }
 });

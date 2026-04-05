@@ -210,6 +210,13 @@ export class CollectionList implements OnInit {
     return stack.cards.some(c => ids.has(c.id));
   }
 
+  refetchStack(stack: CardStack, event: Event) {
+    event.stopPropagation();
+    for (const card of stack.cards) {
+      this.cardsService.fetchMarketValue(card.id);
+    }
+  }
+
   sportIcon(sport: string): string {
     const map: Record<string, string> = {
       Football: '🏈', Hockey: '🏒', Basketball: '🏀', Baseball: '⚾',

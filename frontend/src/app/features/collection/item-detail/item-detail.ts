@@ -1,8 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
-import { CardsService, Card } from '../../../core/services/cards';
+import { CardsService, Card, SoldComp } from '../../../core/services/cards';
 import { CardTags } from '../../../shared/card-tags/card-tags';
 
 @Component({
@@ -17,10 +17,17 @@ export class ItemDetail {
   private location = inject(Location);
 
   card: Card | undefined;
+  comps = signal<SoldComp[]>([]);
+  compsLoading = signal(false);
 
-  ngOnInit() {
+  async ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
     this.card = this.cardsService.getById(id);
+    if (id) {
+      this.compsLoading.set(true);
+      this.comps.set(await this.cardsService.fetchCardComps(id));
+      this.compsLoading.set(false);
+    }
   }
 
   goBack() { this.location.back(); }
@@ -34,5 +41,23 @@ export class ItemDetail {
       Football: '🏈', Hockey: '🏒', Basketball: '🏀', Baseball: '⚾',
     };
     return map[sport] ?? '🃏';
+  }
+
+  saleTypeLabel(comp: SoldComp): string {
+    const labels: Record<SoldComp['sale_type'], string> = {
+      auction:     'Auction',
+      fixed_price: 'Buy It Now',
+      best_offer:  'Best Offer',
+    };
+    return labels[comp.sale_type];
+  }
+
+  saleTypeClasses(comp: SoldComp): string {
+    const cls: Record<SoldComp['sale_type'], string> = {
+      auction:     'bg-blue-50 text-blue-700',
+      fixed_price: 'bg-green-50 text-green-700',
+      best_offer:  'bg-amber-50 text-amber-700',
+    };
+    return cls[comp.sale_type];
   }
 }
