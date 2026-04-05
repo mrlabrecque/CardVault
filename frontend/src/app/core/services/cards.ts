@@ -217,6 +217,17 @@ export class CardsService {
     }
   }
 
+  async deleteCard(cardId: string): Promise<{ error: any }> {
+    const { error } = await this.supabase
+      .from('user_cards')
+      .delete()
+      .eq('id', cardId);
+    if (!error) {
+      this.cards.update(cards => cards.filter(c => c.id !== cardId));
+    }
+    return { error };
+  }
+
   async fetchMarketValue(cardId: string): Promise<void> {
     this.valuingCardIds.update(ids => { const n = new Set(ids); n.add(cardId); return n; });
     try {

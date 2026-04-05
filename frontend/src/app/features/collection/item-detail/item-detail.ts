@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardsService, Card, SoldComp } from '../../../core/services/cards';
 import { CardTags } from '../../../shared/card-tags/card-tags';
@@ -14,11 +14,14 @@ import { CardTags } from '../../../shared/card-tags/card-tags';
 export class ItemDetail {
   private cardsService = inject(CardsService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
   private location = inject(Location);
 
   card: Card | undefined;
   comps = signal<SoldComp[]>([]);
   compsLoading = signal(false);
+  confirmingDelete = signal(false);
+  deleting = signal(false);
 
   async ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
@@ -31,6 +34,16 @@ export class ItemDetail {
   }
 
   goBack() { this.location.back(); }
+
+  async confirmDelete() {
+    if (!this.card) return;
+    this.deleting.set(true);
+    const { error } = await this.cardsService.deleteCard(this.card.id);
+    this.deleting.set(false);
+    if (!error) {
+      this.router.navigate(['/collection']);
+    }
+  }
 
   pl(): number {
     return this.card ? this.card.currentValue - this.card.pricePaid : 0;

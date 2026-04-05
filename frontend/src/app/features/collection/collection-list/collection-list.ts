@@ -204,6 +204,8 @@ export class CollectionList implements OnInit {
   }
 
   readonly valuingCardIds = this.cardsService.valuingCardIds;
+  pendingDeleteId = signal<string | null>(null);
+  deletingId = signal<string | null>(null);
 
   isStackValuing(stack: CardStack): boolean {
     const ids = this.valuingCardIds();
@@ -215,6 +217,24 @@ export class CollectionList implements OnInit {
     for (const card of stack.cards) {
       this.cardsService.fetchMarketValue(card.id);
     }
+  }
+
+  requestDelete(cardId: string, event: Event) {
+    event.stopPropagation();
+    this.pendingDeleteId.set(cardId);
+  }
+
+  cancelDelete(event: Event) {
+    event.stopPropagation();
+    this.pendingDeleteId.set(null);
+  }
+
+  async confirmDelete(cardId: string, event: Event) {
+    event.stopPropagation();
+    this.deletingId.set(cardId);
+    await this.cardsService.deleteCard(cardId);
+    this.deletingId.set(null);
+    this.pendingDeleteId.set(null);
   }
 
   sportIcon(sport: string): string {
