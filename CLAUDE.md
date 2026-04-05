@@ -72,6 +72,14 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Existing parallels listed with per-item delete (spinner while deleting)
 - `set_parallels` table: `set_id`, `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
 
+### F3. Admin — Pending Parallels Review
+- Route: `/admin/parallels/pending` — `PendingParallels` component (`features/admin/pending-parallels/`)
+- Accessible via **"Pending Parallels"** link in the avatar dropdown (admin only); shows amber count badge when queue is non-empty
+- Count loaded in `App` component via `effect()` on `isAppAdmin()` signal — refreshes automatically after login
+- When a user saves a card with an "Other…" parallel, `submit_pending_parallel()` RPC is called silently (fire-and-forget); increments `submission_count` on duplicates; resets dismissed items back to `pending` if re-submitted
+- Admin actions: **Promote** (expands inline form for `serial_max`, `is_auto`, `color_hex` → upserts to `set_parallels` and marks approved) | **Dismiss** (marks dismissed)
+- `pending_parallels` table: `set_id`, `name`, `submitted_by`, `submission_count`, `status` (`pending/approved/dismissed`); RLS: any auth user can insert/update count; admin-only read/delete
+
 ### G. External Integrations
 - **eBay API**: Real-time market value sync from sold listings; automated listing creation
 - **Checklist Integration**: Sync with sports card checklist databases to standardize card naming and numbering during the "Add to Collection" workflow
@@ -210,10 +218,11 @@ card-vault/
 - **`isAppAdmin`** — boolean flag in the `profiles` table, default `false`. Must be flipped manually in the Supabase dashboard (no client-side update path for this field). Gates the "Manage Sets" link in the avatar dropdown and the `/admin/sets` route.
 - **`adminGuard`** (`core/guards/admin-guard.ts`) — async `CanActivateFn`; does a live Supabase query for `is_app_admin` (does not rely on signal timing). Redirects non-admins to `/dashboard`.
 - **Tab bar + header** are hidden on the login page — both gated with `@if (auth.isAuthenticated())` in `app.html`.
+- **Pending parallel count** — `App` component (`app.ts`) uses an `effect()` on `isAppAdmin()` to fetch `getPendingCount()` from `SetsService` and stores it in `pendingParallelCount` signal. Used to show a count badge on the "Pending Parallels" avatar menu item.
 
 ## App Shell
 
-- **Header** (`app.html` / `app.scss`) — sticky flex item (not `position: fixed`) at the top of `.app-shell`. Shows "Card Vault" eyebrow + current page title (derived from route URL via `toSignal` + `NavigationEnd`). Avatar button (user's email initial) opens a dropdown with email, optional "App Admin" badge, optional "Manage Sets" link (admin only), and Sign Out.
+- **Header** (`app.html` / `app.scss`) — sticky flex item (not `position: fixed`) at the top of `.app-shell`. Shows "Card Vault" eyebrow + current page title (derived from route URL via `toSignal` + `NavigationEnd`). Avatar button (user's email initial) opens a dropdown with email, optional "App Admin" badge, admin-only links ("Manage Sets", "Pending Parallels" with amber count badge), and Sign Out.
 - **Tab bar** — `position: fixed`, bottom, primary color, 72px tall. Tabs: Collection, Dashboard (center FAB), Comps, Wishlist.
 - **Content area** — `flex: 1; overflow-y: auto`. When authenticated, `padding-bottom: var(--tab-bar-height)` keeps content clear of the tab bar. Header is in normal flow so no `padding-top` offset is needed.
 
@@ -239,6 +248,7 @@ card-vault/
 - [x] Admin Parallel Manager — `/admin/sets/:setId/parallels` route; `ParallelManager` component; bulk importer; `set_parallels` table with RLS
 - [x] Parallel input on New Set form — bulk textarea saves parallels in the same create flow
 - [x] Add Card dialog — parallel dropdown feeds from `set_parallels` for the selected set; auto-fills `serial_max`/`is_auto` from metadata; "Other…" escape hatch; falls back to static list if no parallels defined
+- [x] Pending Parallels review queue — `pending_parallels` table + `submit_pending_parallel()` RPC; "Other…" submissions silently queued on card save; `/admin/parallels/pending` route with `PendingParallels` component (promote with inline form, dismiss); "Pending Parallels" link with amber count badge in avatar dropdown
 
 ### Up Next
 - [ ] Dashboard — wire to real Supabase data (P/L, sport distribution, top cards)
@@ -259,3 +269,4 @@ card-vault/
 | `20260404000004_sets.sql` | `sets` table + RLS (all auth users read; admin-only write) |
 | `20260404000005_user_cards.sql` | `user_cards` table + extends `master_card_definitions` with card-level fields + RLS |
 | `20260404000006_set_parallels.sql` | `set_parallels` table + RLS (all auth users read; admin-only write) |
+| `20260404000007_pending_parallels.sql` | `pending_parallels` table + RLS + `submit_pending_parallel()` RPC |

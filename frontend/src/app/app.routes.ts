@@ -7,6 +7,7 @@ import { ItemDetail } from './features/collection/item-detail/item-detail';
 import { Login } from './core/auth/login/login';
 import { SetBuilder } from './features/admin/set-builder/set-builder';
 import { ParallelManager } from './features/admin/parallel-manager/parallel-manager';
+import { PendingParallels } from './features/admin/pending-parallels/pending-parallels';
 import { authGuard } from './core/guards/auth-guard';
 import { adminGuard } from './core/guards/admin-guard';
 
@@ -20,5 +21,6 @@ export const routes: Routes = [
   { path: 'wishlist',      component: Wishlist,      canActivate: [authGuard] },
   { path: 'admin/sets',    component: SetBuilder,    canActivate: [adminGuard] },
   { path: 'admin/sets/:setId/parallels', component: ParallelManager, canActivate: [adminGuard] },
+  { path: 'admin/parallels/pending', component: PendingParallels, canActivate: [adminGuard] },
   { path: '**', redirectTo: 'dashboard' },
 ];

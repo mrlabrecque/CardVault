@@ -26,6 +26,14 @@
             <a routerLink="/admin/sets" (click)="menuOpen.set(false)" class="avatar-menu__link">
               Manage Sets
             </a>
+            <a routerLink="/admin/parallels/pending" (click)="menuOpen.set(false)" class="avatar-menu__link flex items-center justify-between">
+              <span>Pending Parallels</span>
+              @if (pendingParallelCount() > 0) {
+                <span class="bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {{ pendingParallelCount() }}
+                </span>
+              }
+            </a>
             <hr class="avatar-menu__divider" />
           }
           <button class="avatar-menu__signout" (click)="signOut()">

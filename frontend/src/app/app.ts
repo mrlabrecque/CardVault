@@ -1,9 +1,10 @@
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, signal, computed, inject, effect } from '@angular/core';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from './core/services/auth';
 import { UiService } from './core/services/ui';
+import { SetsService } from './core/services/sets';
 import { AddCardDialog } from './features/collection/add-card-dialog/add-card-dialog';
 
 const PAGE_TITLES: Record<string, string> = {
@@ -22,7 +23,9 @@ const PAGE_TITLES: Record<string, string> = {
 })
 export class App {
   menuOpen = signal(false);
+  pendingParallelCount = signal(0);
   readonly ui = inject(UiService);
+  private setsService = inject(SetsService);
 
   initials = computed(() => (this.auth.user()?.email ?? '').charAt(0).toUpperCase());
 
@@ -37,6 +40,14 @@ export class App {
       ),
       { initialValue: this.titleFromUrl() }
     );
+
+    effect(() => {
+      if (this.auth.isAppAdmin()) {
+        this.setsService.getPendingCount().then(n => this.pendingParallelCount.set(n));
+      } else {
+        this.pendingParallelCount.set(0);
+      }
+    });
   }
 
   private titleFromUrl(): string {

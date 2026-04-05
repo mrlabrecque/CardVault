@@ -273,6 +273,10 @@ export class AddCardDialog {
     if (error) {
       this.saveError.set(error.message ?? 'Failed to add card. Please try again.');
     } else {
+      // Silently queue the custom parallel name for admin review
+      if (this.parallelIsOther() && this.newParallelType().trim() && this.selectedSet()) {
+        this.setsService.submitPendingParallel(this.selectedSet()!.id, this.newParallelType().trim());
+      }
       this.cardAdded.emit();
       this.close();
     }
