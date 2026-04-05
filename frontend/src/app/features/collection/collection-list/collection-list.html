@@ -48,7 +48,12 @@
 
   <!-- Count + Add button -->
   <div class="flex items-center justify-between">
-    <p class="text-xs text-gray-400">{{ filtered().length }} cards</p>
+    <p class="text-xs text-gray-400">
+      {{ totalCardCount() }} {{ totalCardCount() === 1 ? 'card' : 'cards' }}
+      @if (stacks().length !== totalCardCount()) {
+        · {{ stacks().length }} {{ stacks().length === 1 ? 'stack' : 'stacks' }}
+      }
+    </p>
     <button
       class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#800020] text-white text-xs font-semibold active:opacity-80"
       (click)="openAddCard()">
@@ -58,7 +63,7 @@
   </div>
 
   <!-- Empty state -->
-  @if (filtered().length === 0) {
+  @if (stacks().length === 0) {
     <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
       <div class="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">🃏</div>
       <p class="text-sm font-semibold text-gray-400">No cards yet</p>
@@ -66,57 +71,109 @@
     </div>
   }
 
-  <!-- Card List -->
+  <!-- Stack List -->
   <div class="flex flex-col gap-3">
-    @for (card of filtered(); track card.id) {
-      <a [routerLink]="['/collection', card.id]"
-         class="flex items-center gap-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 no-underline">
+    @for (stack of stacks(); track stack.key) {
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
 
-        <!-- Sport Icon -->
-        <div class="w-12 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">
-          {{ sportIcon(card.sport) }}
-        </div>
+        <!-- Stack Header Row -->
+        <button
+          class="w-full flex items-center gap-4 p-4 text-left active:bg-gray-50"
+          (click)="toggleStack(stack.key)">
 
-        <!-- Info -->
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-bold text-gray-900 truncate">{{ card.player }}</p>
-          <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }}</p>
-          <div class="flex flex-wrap items-center gap-1.5 mt-1.5 cursor-pointer"
-               (click)="$event.preventDefault(); $event.stopPropagation()">
-            <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]! cursor-pointer!"
-              [ngClass]="{ 'opacity-40': isGradeFilterActive(card.grade) }"
-              (click)="toggleGradeFilter(card.grade)" />
-            @if (card.rookie) {
-              <p-tag value="RC" severity="info" styleClass="text-[10px]! cursor-pointer!"
-                [ngClass]="{ 'opacity-40': isFilterActive('rookie') }"
-                (click)="toggleFilter('rookie')" />
+          <!-- Sport Icon -->
+          <div class="w-12 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">
+            {{ sportIcon(stack.sport) }}
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <p class="text-sm font-bold text-gray-900 truncate">
+                {{ stack.player }}
+                @if (stack.cardNumber) {
+                  <span class="font-normal text-gray-400">#{{ stack.cardNumber }}</span>
+                }
+              </p>
+              @if (stack.qty > 1) {
+                <span class="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#800020] text-white text-[10px] font-bold flex items-center justify-center">
+                  ×{{ stack.qty }}
+                </span>
+              }
+            </div>
+            <p class="text-xs text-gray-400 truncate">{{ stack.year }} {{ stack.set }} · {{ stack.parallel }}</p>
+            <div class="flex flex-wrap items-center gap-1.5 mt-1.5"
+                 (click)="$event.preventDefault(); $event.stopPropagation()">
+              <p-tag [value]="stack.grade" severity="secondary" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isGradeFilterActive(stack.grade) }"
+                (click)="toggleGradeFilter(stack.grade)" />
+              @if (stack.rookie) {
+                <p-tag value="RC" severity="info" styleClass="text-[10px]! cursor-pointer!"
+                  [ngClass]="{ 'opacity-40': isFilterActive('rookie') }"
+                  (click)="toggleFilter('rookie')" />
+              }
+              @if (stack.autograph) {
+                <p-tag value="AUTO" severity="warn" styleClass="text-[10px]! cursor-pointer!"
+                  [ngClass]="{ 'opacity-40': isFilterActive('autograph') }"
+                  (click)="toggleFilter('autograph')" />
+              }
+              @if (stack.memorabilia) {
+                <p-tag value="PATCH" severity="success" styleClass="text-[10px]! cursor-pointer!"
+                  [ngClass]="{ 'opacity-40': isFilterActive('memorabilia') }"
+                  (click)="toggleFilter('memorabilia')" />
+              }
+            </div>
+          </div>
+
+          <!-- Value + P/L + chevron -->
+          <div class="text-right shrink-0 flex flex-col items-end gap-0.5">
+            <p class="text-sm font-bold text-gray-900">${{ stack.totalValue | number:'1.0-0' }}</p>
+            @if (stack.qty > 1) {
+              <p class="text-[10px] text-gray-400">${{ stack.marketValuePerCard | number:'1.0-0' }}/card</p>
             }
-            @if (card.autograph) {
-              <p-tag value="AUTO" severity="warn" styleClass="text-[10px]! cursor-pointer!"
-                [ngClass]="{ 'opacity-40': isFilterActive('autograph') }"
-                (click)="toggleFilter('autograph')" />
-            }
-            @if (card.memorabilia) {
-              <p-tag value="PATCH" severity="success" styleClass="text-[10px]! cursor-pointer!"
-                [ngClass]="{ 'opacity-40': isFilterActive('memorabilia') }"
-                (click)="toggleFilter('memorabilia')" />
+            <p class="text-xs font-semibold"
+               [class]="stackPl(stack) >= 0 ? 'text-emerald-500' : 'text-red-500'">
+              {{ stackPlPct(stack) }}
+            </p>
+            @if (stack.qty > 1) {
+              <i class="pi mt-1 text-gray-300 text-xs"
+                 [class]="isExpanded(stack.key) ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
             }
           </div>
-        </div>
+        </button>
 
-        <!-- Value + P/L -->
-        <div class="text-right shrink-0">
-          <p class="text-sm font-bold text-gray-900">${{ card.currentValue | number }}</p>
-          <p class="text-xs font-semibold mt-0.5"
-             [class]="pl(card) >= 0 ? 'text-emerald-500' : 'text-red-500'">
-            {{ plPercent(card) }}
-          </p>
-        </div>
+        <!-- Individual Cards (expanded) -->
+        @if (isExpanded(stack.key)) {
+          <div class="border-t border-gray-50 divide-y divide-gray-50">
+            @for (card of stack.cards; track card.id; let i = $index) {
+              <a [routerLink]="['/collection', card.id]"
+                 class="flex items-center gap-3 px-4 py-3 no-underline hover:bg-gray-50 active:bg-gray-100">
+                <span class="w-5 h-5 rounded-full bg-gray-100 text-gray-400 text-[10px] flex items-center justify-center font-bold shrink-0">
+                  {{ i + 1 }}
+                </span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-semibold text-gray-700">
+                    Paid: ${{ card.pricePaid | number:'1.0-2' }}
+                  </p>
+                  @if (card.serialNumber) {
+                    <p class="text-[10px] text-gray-400">#{{ card.serialNumber }}</p>
+                  }
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-xs font-bold text-gray-900">${{ card.currentValue | number:'1.0-0' }}</p>
+                  <p class="text-[10px] font-semibold"
+                     [class]="cardPl(card) >= 0 ? 'text-emerald-500' : 'text-red-500'">
+                    {{ cardPl(card) >= 0 ? '+' : '' }}${{ cardPl(card) | number:'1.0-0' }}
+                  </p>
+                </div>
+                <i class="pi pi-chevron-right text-gray-300 text-xs shrink-0"></i>
+              </a>
+            }
+          </div>
+        }
 
-        <i class="pi pi-chevron-right text-gray-300 text-xs shrink-0"></i>
-      </a>
+      </div>
     }
   </div>
 
 </div>
-

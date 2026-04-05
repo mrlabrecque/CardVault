@@ -3,12 +3,18 @@ import { AuthService } from './auth';
 
 export interface Card {
   id: string;
+  masterCardId: string;
   player: string;
+  cardNumber: string | null;
   sport: string;
   set: string;
   year: number;
   parallel: string;
-  grade: string;
+  grade: string;       // display label: "PSA 10" | "BGS 9.5" | "Raw"
+  isGraded: boolean;
+  grader: string | null;
+  gradeValue: string | null;
+  serialNumber: string | null;
   pricePaid: number;
   currentValue: number;
   rookie: boolean;
@@ -65,6 +71,7 @@ export class CardsService {
       .from('user_cards')
       .select(`
         id,
+        master_card_id,
         price_paid,
         serial_number,
         current_value,
@@ -100,12 +107,18 @@ export class CardsService {
         : 'Raw';
       return {
         id: uc.id,
+        masterCardId: uc.master_card_id,
         player: master.player ?? '',
+        cardNumber: master.card_number ?? null,
         sport: set.sport ?? '',
         set: set.name ?? '',
         year: set.year ?? 0,
         parallel: master.parallel_type ?? 'Base',
         grade: gradeLabel,
+        isGraded: uc.is_graded ?? false,
+        grader: uc.grader ?? null,
+        gradeValue: uc.grade_value ?? null,
+        serialNumber: uc.serial_number ?? null,
         pricePaid: uc.price_paid ?? 0,
         currentValue: uc.current_value ?? 0,
         rookie: master.is_rookie ?? false,

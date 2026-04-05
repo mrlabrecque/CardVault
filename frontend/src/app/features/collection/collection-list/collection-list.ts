@@ -5,10 +5,34 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
-import { CardsService } from '../../../core/services/cards';
+import { Card, CardsService } from '../../../core/services/cards';
 import { UiService } from '../../../core/services/ui';
 
 export type CardFilter = 'rookie' | 'autograph' | 'memorabilia';
+
+export interface CardStack {
+  key: string;
+  masterCardId: string;
+  player: string;
+  cardNumber: string | null;
+  sport: string;
+  set: string;
+  year: number;
+  parallel: string;
+  grade: string;
+  isGraded: boolean;
+  gradeValue: string | null;
+  grader: string | null;
+  cards: Card[];
+  qty: number;
+  totalCost: number;
+  avgCost: number;
+  totalValue: number;
+  marketValuePerCard: number;
+  rookie: boolean;
+  autograph: boolean;
+  memorabilia: boolean;
+}
 
 @Component({
   selector: 'app-collection-list',
@@ -24,6 +48,7 @@ export class CollectionList implements OnInit {
   textFilters = signal<string[]>([]);
   activeFilters = signal<Set<CardFilter>>(new Set());
   gradeFilters = signal<Set<string>>(new Set());
+  expandedKeys = signal<Set<string>>(new Set());
 
   filterConfig: { key: CardFilter; label: string; severity: 'info' | 'warn' | 'success' }[] = [
     { key: 'rookie',      label: 'RC',    severity: 'info' },
@@ -49,6 +74,50 @@ export class CollectionList implements OnInit {
       return true;
     });
   });
+
+  stacks = computed(() => {
+    const map = new Map<string, CardStack>();
+    for (const card of this.filtered()) {
+      const key = `${card.masterCardId}|${card.isGraded}|${card.gradeValue ?? ''}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          masterCardId: card.masterCardId,
+          player: card.player,
+          cardNumber: card.cardNumber,
+          sport: card.sport,
+          set: card.set,
+          year: card.year,
+          parallel: card.parallel,
+          grade: card.grade,
+          isGraded: card.isGraded,
+          gradeValue: card.gradeValue,
+          grader: card.grader,
+          cards: [],
+          qty: 0,
+          totalCost: 0,
+          avgCost: 0,
+          totalValue: 0,
+          marketValuePerCard: 0,
+          rookie: card.rookie,
+          autograph: card.autograph,
+          memorabilia: card.memorabilia,
+        });
+      }
+      const stack = map.get(key)!;
+      stack.cards.push(card);
+      stack.qty++;
+      stack.totalCost += card.pricePaid;
+      stack.totalValue += card.currentValue;
+    }
+    for (const stack of map.values()) {
+      stack.avgCost = stack.qty > 0 ? stack.totalCost / stack.qty : 0;
+      stack.marketValuePerCard = stack.qty > 0 ? stack.totalValue / stack.qty : 0;
+    }
+    return Array.from(map.values());
+  });
+
+  totalCardCount = computed(() => this.filtered().length);
 
   ngOnInit() {
     this.cardsService.loadUserCards();
@@ -103,14 +172,30 @@ export class CollectionList implements OnInit {
     return this.gradeFilters().has(grade);
   }
 
-  pl(card: { pricePaid: number; currentValue: number }): number {
-    return card.currentValue - card.pricePaid;
+  toggleStack(key: string) {
+    this.expandedKeys.update(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
   }
 
-  plPercent(card: { pricePaid: number; currentValue: number }): string {
-    if (!card.pricePaid) return '—';
-    const pct = ((card.currentValue - card.pricePaid) / card.pricePaid) * 100;
+  isExpanded(key: string): boolean {
+    return this.expandedKeys().has(key);
+  }
+
+  stackPl(stack: CardStack): number {
+    return stack.totalValue - stack.totalCost;
+  }
+
+  stackPlPct(stack: CardStack): string {
+    if (!stack.totalCost) return '—';
+    const pct = ((stack.totalValue - stack.totalCost) / stack.totalCost) * 100;
     return (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
+  }
+
+  cardPl(card: Card): number {
+    return card.currentValue - card.pricePaid;
   }
 
   sportIcon(sport: string): string {
