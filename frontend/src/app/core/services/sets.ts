@@ -14,6 +14,19 @@ export interface SetRecord {
 
 export type CreateSetPayload = Omit<SetRecord, 'id' | 'created_at'>;
 
+export interface SetParallel {
+  id: string;
+  set_id: string;
+  name: string;
+  serial_max: number | null;
+  is_auto: boolean;
+  color_hex: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export type UpsertParallelPayload = Omit<SetParallel, 'id' | 'created_at'>;
+
 @Injectable({ providedIn: 'root' })
 export class SetsService {
   constructor(private auth: AuthService) {}
@@ -51,5 +64,29 @@ export class SetsService {
       .order('year', { ascending: false })
       .limit(10);
     return (data as SetRecord[]) ?? [];
+  }
+
+  // ── Parallels ─────────────────────────────────────────────────────────────
+
+  private get parallelsDb() {
+    return this.auth.getClient().from('set_parallels');
+  }
+
+  async getParallels(setId: string): Promise<SetParallel[]> {
+    const { data } = await this.parallelsDb
+      .select('*')
+      .eq('set_id', setId)
+      .order('sort_order')
+      .order('name');
+    return (data as SetParallel[]) ?? [];
+  }
+
+  async upsertParallels(parallels: UpsertParallelPayload[]) {
+    return this.parallelsDb
+      .upsert(parallels, { onConflict: 'set_id,name', ignoreDuplicates: false });
+  }
+
+  async deleteParallel(id: string) {
+    return this.parallelsDb.delete().eq('id', id);
   }
 }

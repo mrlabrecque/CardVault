@@ -2,11 +2,11 @@ import { Component, inject, signal, effect, Output, EventEmitter } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CardsService, MasterCard } from '../../../core/services/cards';
-import { SetsService, SetRecord } from '../../../core/services/sets';
+import { SetsService, SetRecord, SetParallel } from '../../../core/services/sets';
 import { UiService } from '../../../core/services/ui';
 
 const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
-const PARALLELS = ['Base', 'Silver Prizm', 'Gold Prizm', 'Red Prizm', 'Blue Prizm', 'Holo', 'Refractor', 'Gold Refractor', 'Xfractor', 'Rookie Patch Auto', 'Other'];
+const FALLBACK_PARALLELS = ['Base', 'Silver Prizm', 'Gold Prizm', 'Red Prizm', 'Blue Prizm', 'Holo', 'Refractor', 'Gold Refractor', 'Xfractor', 'Rookie Patch Auto'];
 
 @Component({
   selector: 'app-add-card-dialog',
@@ -22,7 +22,12 @@ export class AddCardDialog {
   @Output() cardAdded = new EventEmitter<void>();
 
   readonly graders = GRADERS;
-  readonly parallels = PARALLELS;
+  readonly fallbackParallels = FALLBACK_PARALLELS;
+
+  // Parallels loaded for the selected set
+  setParallels = signal<SetParallel[]>([]);
+  // true when user has picked "Other…" from the set-driven dropdown
+  parallelIsOther = signal(false);
 
   // Visibility driven by shared UiService so any part of the shell can open it
   readonly visible = this.ui.addCardOpen;
@@ -97,6 +102,8 @@ export class AddCardDialog {
     this.newIsPatch.set(false);
     this.newIsSSP.set(false);
     this.newSerialMax.set(null);
+    this.setParallels.set([]);
+    this.parallelIsOther.set(false);
     this.pricePaid.set(null);
     this.serialNumber.set('');
     this.isGraded.set(false);
@@ -120,16 +127,21 @@ export class AddCardDialog {
     this.showSetDropdown.set(results.length > 0);
   }
 
-  selectSet(set: SetRecord) {
+  async selectSet(set: SetRecord) {
     this.selectedSet.set(set);
     this.setQuery.set(`${set.year} ${set.name}`);
     this.showSetDropdown.set(false);
-    // Reset card selection when set changes
+    // Reset card + parallel selection when set changes
     this.cardQuery.set('');
     this.cardResults.set([]);
     this.selectedMasterCard.set(null);
     this.isNewCard.set(false);
     this.noCardResults.set(false);
+    this.newParallelType.set('Base');
+    this.parallelIsOther.set(false);
+    // Load this set's defined parallels
+    const parallels = await this.setsService.getParallels(set.id);
+    this.setParallels.set(parallels);
   }
 
   clearSet() {
@@ -138,6 +150,8 @@ export class AddCardDialog {
     this.cardQuery.set('');
     this.selectedMasterCard.set(null);
     this.isNewCard.set(false);
+    this.setParallels.set([]);
+    this.parallelIsOther.set(false);
   }
 
   // ── Card Search ────────────────────────────────────────
@@ -207,6 +221,26 @@ export class AddCardDialog {
     if (this.pricePaid() === null || this.pricePaid()! <= 0) return false;
     if (this.isGraded() && !this.gradeValue().trim()) return false;
     return true;
+  }
+
+  // ── Parallel Selection ─────────────────────────────────
+
+  onParallelChange(value: string) {
+    if (value === '__other__') {
+      this.parallelIsOther.set(true);
+      this.newParallelType.set('');
+      this.newSerialMax.set(null);
+      this.newIsAuto.set(false);
+      return;
+    }
+    this.parallelIsOther.set(false);
+    this.newParallelType.set(value);
+    // Auto-fill serial_max and is_auto from the set parallel metadata
+    const match = this.setParallels().find(p => p.name === value);
+    if (match) {
+      this.newSerialMax.set(match.serial_max);
+      this.newIsAuto.set(match.is_auto);
+    }
   }
 
   // ── Save ───────────────────────────────────────────────

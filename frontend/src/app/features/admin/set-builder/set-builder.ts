@@ -1,14 +1,15 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
-import { SetsService, SetRecord } from '../../../core/services/sets';
+import { SetsService, SetRecord, UpsertParallelPayload } from '../../../core/services/sets';
 
 @Component({
   selector: 'app-set-builder',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, Toast],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterLink, Toast],
   providers: [MessageService],
   templateUrl: './set-builder.html',
   styleUrl: './set-builder.scss',
@@ -25,6 +26,8 @@ export class SetBuilder implements OnInit {
   saving = signal(false);
   duplicateError = signal(false);
   templatePreview = signal('');
+
+  bulkParallels = '';
 
   form = this.fb.group({
     name: ['', Validators.required],
@@ -89,13 +92,20 @@ export class SetBuilder implements OnInit {
       set_slug: this.generateSlug(),
     };
 
-    const { error } = await this.setsService.createSet(payload);
+    const { data: newSet, error } = await this.setsService.createSet(payload);
     this.saving.set(false);
 
     if (error) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: error.message });
     } else {
-      this.messageService.add({ severity: 'success', summary: 'Set Created', detail: `"${name}" added successfully.` });
+      // Save parallels if any were entered
+      const parallels = this.parseParallels(newSet!.id);
+      if (parallels.length > 0) {
+        await this.setsService.upsertParallels(parallels);
+      }
+
+      const parallelNote = parallels.length > 0 ? ` with ${parallels.length} parallel(s).` : '.';
+      this.messageService.add({ severity: 'success', summary: 'Set Created', detail: `"${name}" added${parallelNote}` });
       this.form.reset({
         name: '',
         year: new Date().getFullYear(),
@@ -103,8 +113,29 @@ export class SetBuilder implements OnInit {
         release_type: 'Hobby',
         ebay_search_template: '{year} {brand} #{card_number} {player_name} PSA',
       });
+      this.bulkParallels = '';
       await this.loadSets();
     }
+  }
+
+  private parseParallels(setId: string): UpsertParallelPayload[] {
+    if (!this.bulkParallels.trim()) return [];
+    return this.bulkParallels
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .map((raw, i) => {
+        const parts = raw.split(':').map(p => p.trim());
+        const serial_max = parts[1] ? parseInt(parts[1], 10) : null;
+        return {
+          set_id: setId,
+          name: parts[0],
+          serial_max: serial_max !== null && !isNaN(serial_max) ? serial_max : null,
+          is_auto: parts[2]?.toLowerCase() === 'auto',
+          color_hex: null,
+          sort_order: i,
+        };
+      });
   }
 
   setReleaseType(rt: string) {

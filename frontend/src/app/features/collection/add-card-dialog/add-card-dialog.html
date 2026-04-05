@@ -217,13 +217,42 @@
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium text-gray-500">Parallel</label>
-              <select [ngModel]="newParallelType()" (ngModelChange)="newParallelType.set($event)"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
-                       focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
-                @for (p of parallels; track p) {
-                  <option [value]="p">{{ p }}</option>
-                }
-              </select>
+
+              @if (parallelIsOther()) {
+                <!-- Free-text fallback when "Other…" is chosen -->
+                <div class="flex gap-1.5">
+                  <input type="text" placeholder="Describe parallel…"
+                    [ngModel]="newParallelType()" (ngModelChange)="newParallelType.set($event)"
+                    class="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+                  <button type="button" (click)="onParallelChange('Base')"
+                    class="px-2.5 text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">
+                    <i class="pi pi-times text-xs"></i>
+                  </button>
+                </div>
+              } @else if (setParallels().length > 0) {
+                <!-- Set-specific dropdown -->
+                <select [ngModel]="newParallelType()" (ngModelChange)="onParallelChange($event)"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
+                  @for (p of setParallels(); track p.id) {
+                    <option [value]="p.name">
+                      {{ p.name }}{{ p.serial_max ? ' /' + p.serial_max : '' }}{{ p.is_auto ? ' · AUTO' : '' }}
+                    </option>
+                  }
+                  <option value="__other__">Other…</option>
+                </select>
+              } @else {
+                <!-- Fallback static list (no parallels defined for this set yet) -->
+                <select [ngModel]="newParallelType()" (ngModelChange)="onParallelChange($event)"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
+                  @for (p of fallbackParallels; track p) {
+                    <option [value]="p">{{ p }}</option>
+                  }
+                  <option value="__other__">Other…</option>
+                </select>
+              }
             </div>
           </div>
 

@@ -62,6 +62,15 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Duplicate guard: checks (name, year, sport) before saving; shows inline error if a match exists
 - Real-time eBay template preview replaces `{year}`, `{brand}`, `{player_name}`, `{card_number}` tokens using "Victor Wembanyama #298" as dummy values
 - Success PrimeNG Toast on create; form resets and sets list reloads automatically
+- **Parallels textarea** on the New Set form — comma-separated bulk input (`Silver, Mojo:25, Gold:10:auto`); parallels are upserted immediately after set creation
+
+### F2. Admin — Parallel Management
+- Route: `/admin/sets/:setId/parallels` — `ParallelManager` component (`features/admin/parallel-manager/`)
+- Accessible via "Manage Parallels" link on each set row in the Set Builder list
+- Bulk textarea importer: `Name`, `Name:Max` (numbered), `Name:Max:auto` (numbered auto)
+- "Preview Parallels" parses input into pills before committing; safe to re-run (upsert on `set_id, name`)
+- Existing parallels listed with per-item delete (spinner while deleting)
+- `set_parallels` table: `set_id`, `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
 
 ### G. External Integrations
 - **eBay API**: Real-time market value sync from sold listings; automated listing creation
@@ -227,6 +236,9 @@ card-vault/
 - [x] Database — RLS on `cards`, `lookup_history`, `wishlist`; `master_card_definitions` read-only catalog migration
 - [x] Dashboard, Collection list, Comps search, Wishlist — UI stubs with sample data in place
 - [x] Admin Set Builder — `/admin/sets` route; `SetBuilder` component; `SetsService`; `adminGuard`; `sets` table with RLS; "Manage Sets" link in avatar dropdown
+- [x] Admin Parallel Manager — `/admin/sets/:setId/parallels` route; `ParallelManager` component; bulk importer; `set_parallels` table with RLS
+- [x] Parallel input on New Set form — bulk textarea saves parallels in the same create flow
+- [x] Add Card dialog — parallel dropdown feeds from `set_parallels` for the selected set; auto-fills `serial_max`/`is_auto` from metadata; "Other…" escape hatch; falls back to static list if no parallels defined
 
 ### Up Next
 - [ ] Dashboard — wire to real Supabase data (P/L, sport distribution, top cards)
@@ -245,3 +257,5 @@ card-vault/
 | `20260404000002_profiles_insert_policy.sql` | Insert policy for self-service profile creation |
 | `20260404000003_profiles_add_email.sql` | `email` column + update policy + trigger update |
 | `20260404000004_sets.sql` | `sets` table + RLS (all auth users read; admin-only write) |
+| `20260404000005_user_cards.sql` | `user_cards` table + extends `master_card_definitions` with card-level fields + RLS |
+| `20260404000006_set_parallels.sql` | `set_parallels` table + RLS (all auth users read; admin-only write) |
