@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
@@ -44,6 +44,7 @@ export class CollectionList implements OnInit {
   private cardsService = inject(CardsService);
   private ui = inject(UiService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   searchQuery = signal('');
   textFilters = signal<string[]>([]);
@@ -122,6 +123,8 @@ export class CollectionList implements OnInit {
 
   ngOnInit() {
     this.cardsService.loadUserCards();
+    const q = this.route.snapshot.queryParamMap.get('q');
+    if (q) this.textFilters.set([q]);
   }
 
   openAddCard() {

@@ -20,7 +20,9 @@
     <!-- Stats Row -->
     <div class="grid grid-cols-3 gap-3">
       <!-- Total Value -->
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+      <button class="rounded-2xl bg-white shadow-sm border p-3 flex flex-col gap-2 text-left transition-all active:scale-95"
+              [class]="selectedStat() === 'value' ? 'border-[#800020] ring-2 ring-[#800020]/20' : 'border-gray-100'"
+              (click)="selectedStat.set('value')">
         <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm bg-[#800020]">
           <i class="pi pi-wallet text-xs"></i>
         </div>
@@ -28,10 +30,12 @@
           ${{ totalValue() | number:'1.0-0' }}
         </p>
         <p class="text-[10px] text-gray-400 leading-none">Total Value</p>
-      </div>
+      </button>
 
       <!-- P / L -->
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+      <button class="rounded-2xl bg-white shadow-sm border p-3 flex flex-col gap-2 text-left transition-all active:scale-95"
+              [class]="selectedStat() === 'pl' ? 'border-[#800020] ring-2 ring-[#800020]/20' : 'border-gray-100'"
+              (click)="selectedStat.set('pl')">
         <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm"
              [class]="pl() >= 0 ? 'bg-emerald-500' : 'bg-red-400'">
           <i class="pi pi-chart-line text-xs"></i>
@@ -47,51 +51,123 @@
             {{ plPct()! >= 0 ? '+' : '' }}{{ plPct()! | number:'1.1-1' }}%
           </span>
         }
-      </div>
+      </button>
 
       <!-- Cards -->
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-3 flex flex-col gap-2">
+      <button class="rounded-2xl bg-white shadow-sm border p-3 flex flex-col gap-2 text-left transition-all active:scale-95"
+              [class]="selectedStat() === 'cards' ? 'border-[#800020] ring-2 ring-[#800020]/20' : 'border-gray-100'"
+              (click)="selectedStat.set('cards')">
         <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm bg-[#800020]/70">
           <i class="pi pi-th-large text-xs"></i>
         </div>
         <p class="text-base font-bold text-gray-900 leading-none">{{ cardCount() }}</p>
         <p class="text-[10px] text-gray-400 leading-none">Cards</p>
-      </div>
+      </button>
     </div>
 
-    <!-- Sport Distribution Chart -->
-    @if (sportChartData().labels.length > 0) {
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
-        <h2 class="text-sm font-semibold text-gray-700 mb-4">By Sport</h2>
-        <p-chart type="doughnut" [data]="sportChartData()" [options]="sportChartOptions" height="220px" />
-      </div>
-    }
-
-    <!-- Top Cards by Value -->
-    @if (topCards().length > 0) {
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Top Cards by Value</h2>
-        <div class="flex flex-col divide-y divide-gray-50">
-          @for (card of topCards(); track card.id; let i = $index) {
-            <div class="flex items-center gap-3 py-3">
-              <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 text-xs flex items-center justify-center font-bold shrink-0">
-                {{ i + 1 }}
-              </span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
-                <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }} · {{ card.grade }}</p>
-              </div>
-              <span class="text-sm font-bold text-gray-900 shrink-0">${{ card.currentValue | number:'1.0-0' }}</span>
-            </div>
-          }
+    <!-- Chart Panel -->
+    <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-700">{{ chartTitle() }}</h2>
+        <!-- View toggle -->
+        <div class="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+          <button class="px-3 py-1.5 transition-colors"
+                  [class]="chartView() === 'breakdown' ? 'bg-[#800020] text-white' : 'text-gray-500 hover:bg-gray-50'"
+                  (click)="chartView.set('breakdown')">
+            <i class="pi pi-chart-pie text-[11px]"></i>
+          </button>
+          <button class="px-3 py-1.5 border-l border-gray-200 transition-colors"
+                  [class]="chartView() === 'timeline' ? 'bg-[#800020] text-white' : 'text-gray-500 hover:bg-gray-50'"
+                  (click)="chartView.set('timeline')">
+            <i class="pi pi-chart-line text-[11px]"></i>
+          </button>
         </div>
       </div>
-    } @else {
-      <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
-        <h2 class="text-sm font-semibold text-gray-700 mb-2">Top Cards by Value</h2>
-        <p class="text-xs text-gray-300 text-center py-4">No cards with a current value yet.</p>
+
+      @if (chartView() === 'breakdown') {
+        @if (breakdownData().labels.length > 0) {
+          <p-chart type="doughnut" [data]="breakdownData()" [options]="breakdownOptions" height="220px" />
+        } @else {
+          <p class="text-xs text-gray-300 text-center py-10">No data yet.</p>
+        }
+      } @else {
+        @if (timelineData().labels.length > 1) {
+          <p-chart type="line" [data]="timelineData()" [options]="timelineOptions()" height="220px" />
+        } @else if (timelineData().labels.length === 1) {
+          <p class="text-xs text-gray-400 text-center py-10">Add more cards to see movement over time.</p>
+        } @else {
+          <p class="text-xs text-gray-300 text-center py-10">No data yet.</p>
+        }
+      }
+    </div>
+
+    <!-- Bottom List Panel -->
+    <div class="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-700">
+          {{ bottomView() === 'top-cards' ? 'Top Cards by Value' : 'Top Players by Count' }}
+        </h2>
+        <div class="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+          <button class="px-3 py-1.5 transition-colors"
+                  [class]="bottomView() === 'top-cards' ? 'bg-[#800020] text-white' : 'text-gray-500 hover:bg-gray-50'"
+                  (click)="bottomView.set('top-cards')">
+            <i class="pi pi-dollar text-[11px]"></i>
+          </button>
+          <button class="px-3 py-1.5 border-l border-gray-200 transition-colors"
+                  [class]="bottomView() === 'top-players' ? 'bg-[#800020] text-white' : 'text-gray-500 hover:bg-gray-50'"
+                  (click)="bottomView.set('top-players')">
+            <i class="pi pi-user text-[11px]"></i>
+          </button>
+        </div>
       </div>
-    }
+
+      @if (bottomView() === 'top-cards') {
+        @if (topCards().length > 0) {
+          <div class="flex flex-col divide-y divide-gray-50">
+            @for (card of topCards(); track card.id; let i = $index) {
+              <a [routerLink]="['/collection', card.id]"
+                 class="flex items-center gap-3 py-3 no-underline hover:bg-gray-50 -mx-4 px-4 rounded-xl transition-colors">
+                <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 text-xs flex items-center justify-center font-bold shrink-0">
+                  {{ i + 1 }}
+                </span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
+                  <p class="text-xs text-gray-400 truncate">{{ card.year }} {{ card.set }} · {{ card.grade }}</p>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-sm font-bold text-gray-900">${{ card.currentValue | number:'1.0-0' }}</span>
+                  <i class="pi pi-chevron-right text-gray-300 text-xs"></i>
+                </div>
+              </a>
+            }
+          </div>
+        } @else {
+          <p class="text-xs text-gray-300 text-center py-4">No cards with a current value yet.</p>
+        }
+      } @else {
+        @if (topPlayers().length > 0) {
+          <div class="flex flex-col divide-y divide-gray-50">
+            @for (entry of topPlayers(); track entry.player; let i = $index) {
+              <a [routerLink]="['/collection']" [queryParams]="{ q: entry.player }"
+                 class="flex items-center gap-3 py-3 no-underline hover:bg-gray-50 -mx-4 px-4 rounded-xl transition-colors">
+                <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 text-xs flex items-center justify-center font-bold shrink-0">
+                  {{ i + 1 }}
+                </span>
+                <p class="flex-1 text-sm font-semibold text-gray-900 truncate">{{ entry.player }}</p>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-sm font-bold text-gray-900">
+                    {{ entry.count }} {{ entry.count === 1 ? 'card' : 'cards' }}
+                  </span>
+                  <i class="pi pi-chevron-right text-gray-300 text-xs"></i>
+                </div>
+              </a>
+            }
+          </div>
+        } @else {
+          <p class="text-xs text-gray-300 text-center py-4">No cards in your collection yet.</p>
+        }
+      }
+    </div>
 
   }
 

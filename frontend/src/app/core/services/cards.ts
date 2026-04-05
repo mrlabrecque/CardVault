@@ -21,6 +21,7 @@ export interface Card {
   rookie: boolean;
   autograph: boolean;
   memorabilia: boolean;
+  createdAt: string;
 }
 
 export interface MasterCard {
@@ -95,6 +96,7 @@ export class CardsService {
         is_graded,
         grader,
         grade_value,
+        created_at,
         master_card_definitions (
           player,
           card_number,
@@ -141,6 +143,7 @@ export class CardsService {
         rookie: master.is_rookie ?? false,
         autograph: master.is_auto ?? false,
         memorabilia: master.is_patch ?? false,
+        createdAt: uc.created_at ?? '',
       };
     });
 
