@@ -104,6 +104,23 @@
         </div>
       }
 
+      <!-- Checklists (inserts) -->
+      <div class="flex flex-col gap-1">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+          Insert Checklists <span class="font-normal normal-case">(optional — Base Set always created)</span>
+        </label>
+        <textarea
+          [(ngModel)]="bulkChecklists"
+          [ngModelOptions]="{standalone: true}"
+          rows="2"
+          placeholder="Fireworks:F-, Monopoly Money:M-, Downtown:D-"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50 resize-none"
+        ></textarea>
+        <p class="text-[10px] text-gray-300 leading-relaxed">
+          Format: <span class="font-mono">Name:Prefix</span> — e.g. <span class="font-mono">Fireworks:F-</span> means card #F-12 routes to Fireworks.
+        </p>
+      </div>
+
       <!-- Parallels -->
       <div class="flex flex-col gap-1">
         <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Parallels <span class="font-normal normal-case">(optional)</span></label>
@@ -163,15 +180,18 @@
         @if (set.ebay_search_template) {
           <p class="text-[10px] font-mono text-gray-300 mt-2 truncate">{{ set.ebay_search_template }}</p>
         }
-        <a
-          [routerLink]="['/admin/sets', set.id, 'parallels']"
-          class="inline-flex items-center gap-1 mt-2.5 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
-          </svg>
-          Manage Parallels
-        </a>
+        <div class="flex items-center gap-4 mt-2.5">
+          <a
+            [routerLink]="['/admin/sets', set.id, 'checklists']"
+            class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            Checklists &amp; Parallels
+          </a>
+        </div>
       </div>
     }
   </div>

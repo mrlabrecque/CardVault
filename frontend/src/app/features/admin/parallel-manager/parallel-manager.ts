@@ -4,7 +4,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
-import { SetsService, SetRecord, SetParallel } from '../../../core/services/sets';
+import { SetsService, SetRecord, SetParallel, ChecklistRecord } from '../../../core/services/sets';
 
 interface ParsedParallel {
   name: string;
@@ -30,6 +30,7 @@ export class ParallelManager implements OnInit {
   private messageService = inject(MessageService);
 
   set = signal<SetRecord | null>(null);
+  checklist = signal<ChecklistRecord | null>(null);
   parallels = signal<SetParallel[]>([]);
   saving = signal(false);
   deleting = signal<string | null>(null);
@@ -38,12 +39,14 @@ export class ParallelManager implements OnInit {
   parseError = signal('');
   parsed = signal<ParsedParallel[]>([]);
 
-  readonly setId = this.route.snapshot.paramMap.get('setId')!;
+  readonly setId       = this.route.snapshot.paramMap.get('setId')!;
+  readonly checklistId = this.route.snapshot.paramMap.get('checklistId')!;
 
   parallelCount = computed(() => this.parallels().length);
 
   ngOnInit() {
     this.loadSet();
+    this.loadChecklist();
     this.loadParallels();
   }
 
@@ -52,8 +55,13 @@ export class ParallelManager implements OnInit {
     this.set.set(sets.find(s => s.id === this.setId) ?? null);
   }
 
+  private async loadChecklist() {
+    const checklists = await this.setsService.getChecklists(this.setId);
+    this.checklist.set(checklists.find(c => c.id === this.checklistId) ?? null);
+  }
+
   private async loadParallels() {
-    const data = await this.setsService.getParallels(this.setId);
+    const data = await this.setsService.getParallels(this.checklistId);
     this.parallels.set(data);
   }
 
@@ -76,7 +84,6 @@ export class ParallelManager implements OnInit {
 
     const result: ParsedParallel[] = items.map((raw, i) => {
       // Format: "Name:serialMax" or "Name:serialMax:auto" or just "Name"
-      // e.g.  Silver, Mojo:25, Gold:10:auto, Black:1
       const parts = raw.split(':').map(p => p.trim());
       const name = parts[0];
       const serial_max = parts[1] ? parseInt(parts[1], 10) : null;
@@ -107,7 +114,7 @@ export class ParallelManager implements OnInit {
 
     this.saving.set(true);
     const payload = items.map((p, i) => ({
-      set_id: this.setId,
+      checklist_id: this.checklistId,
       name: p.name,
       serial_max: p.serial_max,
       is_auto: p.is_auto,

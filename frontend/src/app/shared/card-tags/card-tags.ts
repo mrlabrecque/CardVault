@@ -12,6 +12,7 @@ export class CardTags {
   @Input() rookie = false;
   @Input() autograph = false;
   @Input() memorabilia = false;
+  @Input() serial: string | null = null;
   /** 'default' uses colored tags; 'ghost' uses white/translucent for dark backgrounds */
   @Input() variant: 'default' | 'ghost' = 'default';
 }

@@ -10,12 +10,14 @@ export interface Card {
   sport: string;
   set: string;
   year: number;
-  parallel: string;
-  grade: string;       // display label: "PSA 10" | "BGS 9.5" | "Raw"
+  checklist: string | null;  // insert name (e.g. "Fireworks") — null for Base Set
+  parallel: string;          // display name: comes from set_parallels.name or 'Base'
+  grade: string;             // display label: "PSA 10" | "BGS 9.5" | "Raw"
   isGraded: boolean;
   grader: string | null;
   gradeValue: string | null;
   serialNumber: string | null;
+  serialMax: number | null;
   pricePaid: number;
   currentValue: number;
   rookie: boolean;
@@ -28,13 +30,12 @@ export interface MasterCard {
   id: string;
   player: string;
   card_number: string | null;
-  parallel_type: string | null;
+  checklist_id: string | null;
   is_rookie: boolean;
   is_auto: boolean;
   is_patch: boolean;
   is_ssp: boolean;
   serial_max: number | null;
-  set_id: string | null;
 }
 
 export interface SoldComp {
@@ -53,20 +54,49 @@ export interface SoldComp {
 }
 
 export interface AddCardFormData {
-  setId: string;
-  masterCardId: string | null; // null = create new master card
+  checklistId: string | null;  // null for sets that pre-date the checklists table
+  masterCardId: string | null;   // null = create new master card
   // New master card fields (used when masterCardId is null)
   player: string;
   cardNumber: string;
-  parallelType: string;
+  serialMax: number | null;
   isRookie: boolean;
   isAuto: boolean;
   isPatch: boolean;
   isSSP: boolean;
-  serialMax: number | null;
+  // Parallel (instance-level)
+  parallelId: string | null;       // FK to set_parallels; null = Base
+  pendingParallelName: string;     // non-empty when "Other..." is chosen
   // User instance fields
   pricePaid: number | null;
   serialNumber: string;
+  isGraded: boolean;
+  grader: string;
+  gradeValue: string;
+}
+
+/** Minimal shape needed to commit a scanned card batch. */
+export interface StagedCardPayload {
+  masterCardId: string;
+  parallelId: string | null;
+}
+
+/** Richer staged card for the manual bulk-add flow. */
+export interface BulkStagedCard {
+  tempId: string;
+  masterCardId: string | null;  // null = will be created on commit
+  player: string;
+  cardNumber: string | null;
+  checklistId: string | null;
+  checklistName: string | null;
+  parallelId: string | null;
+  parallelName: string;
+  pricePaid: number;
+  serialNumber: string;
+  serialMax: number | null;
+  isRookie: boolean;
+  isAuto: boolean;
+  isPatch: boolean;
   isGraded: boolean;
   grader: string;
   gradeValue: string;
@@ -90,6 +120,7 @@ export class CardsService {
       .select(`
         id,
         master_card_id,
+        parallel_id,
         price_paid,
         serial_number,
         current_value,
@@ -100,15 +131,23 @@ export class CardsService {
         master_card_definitions (
           player,
           card_number,
-          parallel_type,
+          serial_max,
           is_rookie,
           is_auto,
           is_patch,
-          sets (
+          checklists (
             name,
-            year,
-            sport
+            prefix,
+            sets (
+              name,
+              year,
+              sport
+            )
           )
+        ),
+        set_parallels!parallel_id (
+          name,
+          serial_max
         )
       `)
       .order('created_at', { ascending: false });
@@ -120,7 +159,9 @@ export class CardsService {
 
     const cards: Card[] = (data as any[]).map(uc => {
       const master = uc.master_card_definitions ?? {};
-      const set = master.sets ?? {};
+      const checklist = master.checklists ?? {};
+      const set = checklist.sets ?? {};
+      const parallelName = uc.set_parallels?.name ?? 'Base';
       const gradeLabel = uc.is_graded
         ? `${uc.grader ?? ''} ${uc.grade_value ?? ''}`.trim()
         : 'Raw';
@@ -132,12 +173,15 @@ export class CardsService {
         sport: set.sport ?? '',
         set: set.name ?? '',
         year: set.year ?? 0,
-        parallel: master.parallel_type ?? 'Base',
+        // Only expose checklist name for inserts (prefix !== null); base set is implied
+        checklist: checklist.prefix != null ? (checklist.name ?? null) : null,
+        parallel: parallelName,
         grade: gradeLabel,
         isGraded: uc.is_graded ?? false,
         grader: uc.grader ?? null,
         gradeValue: uc.grade_value ?? null,
         serialNumber: uc.serial_number ?? null,
+        serialMax: uc.set_parallels?.serial_max ?? master.serial_max ?? null,
         pricePaid: uc.price_paid ?? 0,
         currentValue: uc.current_value ?? 0,
         rookie: master.is_rookie ?? false,
@@ -150,14 +194,24 @@ export class CardsService {
     this.cards.set(cards);
   }
 
-  async searchMasterCards(setId: string, query: string): Promise<MasterCard[]> {
+  async searchMasterCards(checklistId: string | null, query: string): Promise<MasterCard[]> {
     if (!query.trim()) return [];
-    const { data } = await this.supabase
+    let q = this.supabase
       .from('master_card_definitions')
-      .select('id, player, card_number, parallel_type, is_rookie, is_auto, is_patch, is_ssp, serial_max, set_id')
-      .eq('set_id', setId)
+      .select('id, player, card_number, checklist_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
       .or(`player.ilike.%${query}%,card_number.ilike.%${query}%`)
       .limit(20);
+    if (checklistId) q = q.eq('checklist_id', checklistId);
+    const { data } = await q;
+    return (data as MasterCard[]) ?? [];
+  }
+
+  /** Load all master cards for a checklist into memory (used by scanner Fuse index). */
+  async getMasterCardsForChecklist(checklistId: string): Promise<MasterCard[]> {
+    const { data } = await this.supabase
+      .from('master_card_definitions')
+      .select('id, player, card_number, checklist_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
+      .eq('checklist_id', checklistId);
     return (data as MasterCard[]) ?? [];
   }
 
@@ -171,15 +225,14 @@ export class CardsService {
       const { data: newMaster, error: masterError } = await this.supabase
         .from('master_card_definitions')
         .insert({
-          set_id: formData.setId,
+          checklist_id: formData.checklistId || null,
           player: formData.player,
           card_number: formData.cardNumber || null,
-          parallel_type: formData.parallelType || 'Base',
+          serial_max: formData.serialMax || null,
           is_rookie: formData.isRookie,
           is_auto: formData.isAuto,
           is_patch: formData.isPatch,
           is_ssp: formData.isSSP,
-          serial_max: formData.serialMax,
         })
         .select('id')
         .single();
@@ -193,6 +246,7 @@ export class CardsService {
       .insert({
         master_card_id: masterCardId,
         user_id: userId,
+        parallel_id: formData.parallelId || null,
         price_paid: formData.pricePaid,
         serial_number: formData.serialNumber || null,
         is_graded: formData.isGraded,
@@ -204,6 +258,64 @@ export class CardsService {
 
     if (!error) await this.loadUserCards();
     return { error, cardId: data?.id ?? null };
+  }
+
+  /** Batch-commit staged cards from a scanner session. price_paid left null for later editing. */
+  async batchAddStagedCards(cards: StagedCardPayload[]): Promise<{ error: any; count: number }> {
+    const userId = this.auth.user()?.id;
+    if (!userId) return { error: new Error('Not authenticated'), count: 0 };
+
+    const rows = cards.map(c => ({
+      master_card_id: c.masterCardId,
+      user_id: userId,
+      parallel_id: c.parallelId,
+    }));
+
+    const { error } = await this.supabase.from('user_cards').insert(rows);
+    if (!error) await this.loadUserCards();
+    return { error, count: error ? 0 : rows.length };
+  }
+
+  /** Commit a manual bulk-add session. Creates missing master cards then batch-inserts user_cards. */
+  async commitBulkCards(cards: BulkStagedCard[]): Promise<{ error: any; count: number }> {
+    const userId = this.auth.user()?.id;
+    if (!userId) return { error: new Error('Not authenticated'), count: 0 };
+
+    // Resolve master card IDs for any new cards (no existing masterCardId)
+    const newCards = cards.filter(c => !c.masterCardId);
+    const tempIdToMasterCardId = new Map<string, string>();
+
+    if (newCards.length > 0) {
+      const { data: masters, error: masterError } = await this.supabase
+        .from('master_card_definitions')
+        .insert(newCards.map(c => ({
+          checklist_id: c.checklistId,
+          player: c.player,
+          card_number: c.cardNumber || null,
+          is_rookie: c.isRookie,
+          is_auto: c.isAuto,
+          is_patch: c.isPatch,
+          is_ssp: false,
+        })))
+        .select('id');
+      if (masterError) return { error: masterError, count: 0 };
+      newCards.forEach((c, i) => tempIdToMasterCardId.set(c.tempId, (masters as any[])[i].id));
+    }
+
+    const rows = cards.map(c => ({
+      master_card_id: c.masterCardId ?? tempIdToMasterCardId.get(c.tempId)!,
+      user_id: userId,
+      parallel_id: c.parallelId || null,
+      price_paid: c.pricePaid,
+      serial_number: c.serialNumber || null,
+      is_graded: c.isGraded,
+      grader: c.isGraded ? c.grader || null : null,
+      grade_value: c.isGraded ? c.gradeValue || null : null,
+    }));
+
+    const { error } = await this.supabase.from('user_cards').insert(rows);
+    if (!error) await this.loadUserCards();
+    return { error, count: error ? 0 : rows.length };
   }
 
   async fetchCardComps(cardId: string): Promise<SoldComp[]> {

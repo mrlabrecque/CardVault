@@ -65,6 +65,13 @@ export class ItemDetail {
     return labels[comp.sale_type];
   }
 
+  serialLabel(card: Card): string | null {
+    if (card.serialNumber && card.serialMax) return `${card.serialNumber}/${card.serialMax}`;
+    if (card.serialNumber) return card.serialNumber;
+    if (card.serialMax) return `/${card.serialMax}`;
+    return null;
+  }
+
   saleTypeClasses(comp: SoldComp): string {
     const cls: Record<SoldComp['sale_type'], string> = {
       auction:     'bg-blue-50 text-blue-700',

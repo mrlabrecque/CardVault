@@ -1,8 +1,8 @@
-import { Component, inject, signal, effect, Output, EventEmitter } from '@angular/core';
+import { Component, inject, signal, computed, effect, untracked, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CardsService, MasterCard } from '../../../core/services/cards';
-import { SetsService, SetRecord, SetParallel } from '../../../core/services/sets';
+import { SetsService, SetRecord, SetParallel, ChecklistRecord } from '../../../core/services/sets';
 import { UiService } from '../../../core/services/ui';
 
 const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
@@ -24,28 +24,21 @@ export class AddCardDialog {
   readonly graders = GRADERS;
   readonly fallbackParallels = FALLBACK_PARALLELS;
 
-  // Parallels loaded for the selected set
-  setParallels = signal<SetParallel[]>([]);
-  // true when user has picked "Other…" from the set-driven dropdown
-  parallelIsOther = signal(false);
-
-  // Visibility driven by shared UiService so any part of the shell can open it
   readonly visible = this.ui.addCardOpen;
   saving = signal(false);
-
-  constructor() {
-    // Reset form state whenever the dialog is opened
-    effect(() => { if (this.ui.addCardOpen()) this.reset(); });
-  }
   saveError = signal<string | null>(null);
 
-  // Step 1: Set search
+  // ── Step 1: Set ──────────────────────────────────────────
   setQuery = signal('');
   setResults = signal<SetRecord[]>([]);
   showSetDropdown = signal(false);
   selectedSet = signal<SetRecord | null>(null);
 
-  // Step 2: Card search
+  // ── Step 1.5: Checklist ──────────────────────────────────
+  checklists = signal<ChecklistRecord[]>([]);
+  selectedChecklist = signal<ChecklistRecord | null>(null);
+
+  // ── Step 2: Card search ──────────────────────────────────
   cardQuery = signal('');
   cardResults = signal<MasterCard[]>([]);
   showCardDropdown = signal(false);
@@ -53,17 +46,28 @@ export class AddCardDialog {
   isNewCard = signal(false);
   noCardResults = signal(false);
 
-  // Step 3: New card attributes
+  // ── Step 3: New card attributes ──────────────────────────
   newPlayer = signal('');
   newCardNumber = signal('');
-  newParallelType = signal('Base');
+  newSerialMax = signal<number | null>(null);
   newIsRookie = signal(false);
   newIsAuto = signal(false);
   newIsPatch = signal(false);
   newIsSSP = signal(false);
-  newSerialMax = signal<number | null>(null);
 
-  // Step 4: User instance details
+  // ── Parallel (instance-level, applies to all cards) ──────
+  setParallels = signal<SetParallel[]>([]);
+  selectedParallelId = signal<string | null>(null);
+  selectedParallelName = signal('Base');
+  parallelIsOther = signal(false);
+
+  readonly selectedParallelSerialMax = computed(() => {
+    const id = this.selectedParallelId();
+    if (!id) return null;
+    return this.setParallels().find(p => p.id === id)?.serial_max ?? null;
+  });
+
+  // ── Step 4: User instance ────────────────────────────────
   pricePaid = signal<number | null>(null);
   serialNumber = signal('');
   isGraded = signal(false);
@@ -73,14 +77,48 @@ export class AddCardDialog {
   private setSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private cardSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  open() {
-    this.reset();
-    this.ui.addCardOpen.set(true);
+  constructor() {
+    effect(() => {
+      if (this.ui.addCardOpen()) {
+        this.reset();
+        untracked(() => this.applyPrefill());
+      }
+    });
   }
 
-  close() {
-    this.ui.addCardOpen.set(false);
+  private applyPrefill() {
+    const prefill = this.ui.addCardPrefill();
+    if (!prefill) return;
+    this.ui.addCardPrefill.set(null);  // consume immediately
+
+    // Set all signals directly — no async fetch needed because the scanner
+    // already loaded this data and passed it in the prefill object.
+    if (prefill.set) {
+      this.selectedSet.set(prefill.set);
+      this.setQuery.set(`${prefill.set.year} ${prefill.set.name}`);
+    }
+    if (prefill.checklists?.length) {
+      this.checklists.set(prefill.checklists);
+    }
+    if (prefill.checklist) {
+      this.selectedChecklist.set(prefill.checklist);
+    }
+    if (prefill.parallels?.length) {
+      this.setParallels.set(prefill.parallels);
+    }
+    if (prefill.player) {
+      this.newPlayer.set(prefill.player);
+    }
+    if (prefill.cardNumber) {
+      this.newCardNumber.set(prefill.cardNumber);
+    }
+    if (prefill.player || prefill.cardNumber) {
+      this.isNewCard.set(true);
+    }
   }
+
+  open() { this.reset(); this.ui.addCardOpen.set(true); }
+  close() { this.ui.addCardOpen.set(false); }
 
   private reset() {
     this.saveError.set(null);
@@ -88,6 +126,8 @@ export class AddCardDialog {
     this.setResults.set([]);
     this.showSetDropdown.set(false);
     this.selectedSet.set(null);
+    this.checklists.set([]);
+    this.selectedChecklist.set(null);
     this.cardQuery.set('');
     this.cardResults.set([]);
     this.showCardDropdown.set(false);
@@ -96,13 +136,14 @@ export class AddCardDialog {
     this.noCardResults.set(false);
     this.newPlayer.set('');
     this.newCardNumber.set('');
-    this.newParallelType.set('Base');
+    this.newSerialMax.set(null);
     this.newIsRookie.set(false);
     this.newIsAuto.set(false);
     this.newIsPatch.set(false);
     this.newIsSSP.set(false);
-    this.newSerialMax.set(null);
     this.setParallels.set([]);
+    this.selectedParallelId.set(null);
+    this.selectedParallelName.set('Base');
     this.parallelIsOther.set(false);
     this.pricePaid.set(null);
     this.serialNumber.set('');
@@ -111,11 +152,13 @@ export class AddCardDialog {
     this.gradeValue.set('');
   }
 
-  // ── Set Search ─────────────────────────────────────────
+  // ── Set Search ───────────────────────────────────────────
 
   onSetQueryChange(value: string) {
     this.setQuery.set(value);
     this.selectedSet.set(null);
+    this.selectedChecklist.set(null);
+    this.checklists.set([]);
     if (this.setSearchTimer) clearTimeout(this.setSearchTimer);
     if (!value.trim()) { this.setResults.set([]); this.showSetDropdown.set(false); return; }
     this.setSearchTimer = setTimeout(() => this.doSetSearch(value), 250);
@@ -131,30 +174,41 @@ export class AddCardDialog {
     this.selectedSet.set(set);
     this.setQuery.set(`${set.year} ${set.name}`);
     this.showSetDropdown.set(false);
-    // Reset card + parallel selection when set changes
-    this.cardQuery.set('');
-    this.cardResults.set([]);
-    this.selectedMasterCard.set(null);
-    this.isNewCard.set(false);
-    this.noCardResults.set(false);
-    this.newParallelType.set('Base');
-    this.parallelIsOther.set(false);
-    // Load this set's defined parallels
-    const parallels = await this.setsService.getParallels(set.id);
+    this.resetCardSection();
+    this.setParallels.set([]);
+
+    const checklists = await this.setsService.getChecklists(set.id);
+    this.checklists.set(checklists);
+  }
+
+  async selectChecklist(checklist: ChecklistRecord) {
+    this.selectedChecklist.set(checklist);
+    this.resetCardSection();
+    const parallels = await this.setsService.getParallels(checklist.id);
     this.setParallels.set(parallels);
   }
 
   clearSet() {
     this.selectedSet.set(null);
     this.setQuery.set('');
+    this.checklists.set([]);
+    this.selectedChecklist.set(null);
+    this.setParallels.set([]);
+    this.resetCardSection();
+  }
+
+  private resetCardSection() {
     this.cardQuery.set('');
+    this.cardResults.set([]);
     this.selectedMasterCard.set(null);
     this.isNewCard.set(false);
-    this.setParallels.set([]);
+    this.noCardResults.set(false);
+    this.selectedParallelId.set(null);
+    this.selectedParallelName.set('Base');
     this.parallelIsOther.set(false);
   }
 
-  // ── Card Search ────────────────────────────────────────
+  // ── Card Search ──────────────────────────────────────────
 
   onCardQueryChange(value: string) {
     this.cardQuery.set(value);
@@ -167,9 +221,10 @@ export class AddCardDialog {
   }
 
   private async doCardSearch(query: string) {
-    const set = this.selectedSet();
-    if (!set) return;
-    const results = await this.cardsService.searchMasterCards(set.id, query);
+    const results = await this.cardsService.searchMasterCards(
+      this.selectedChecklist()?.id ?? null,
+      query
+    );
     this.cardResults.set(results);
     this.showCardDropdown.set(true);
     this.noCardResults.set(results.length === 0);
@@ -186,7 +241,6 @@ export class AddCardDialog {
     this.isNewCard.set(true);
     this.selectedMasterCard.set(null);
     this.showCardDropdown.set(false);
-    // Pre-fill player from the search query if it looks like a name
     const q = this.cardQuery().trim();
     if (q && !q.match(/^\d+$/)) this.newPlayer.set(q);
   }
@@ -202,12 +256,15 @@ export class AddCardDialog {
   cardLabel(card: MasterCard): string {
     const parts = [card.player];
     if (card.card_number) parts.push(`#${card.card_number}`);
-    if (card.parallel_type && card.parallel_type !== 'Base') parts.push(card.parallel_type);
     return parts.join(' · ');
   }
 
   get canShowCardSearch(): boolean {
-    return this.selectedSet() !== null;
+    if (!this.selectedSet()) return false;
+    // If this set has checklists, require one to be chosen.
+    // If none exist yet (legacy sets pre-dating the checklist migration), allow proceeding.
+    if (this.checklists().length > 0) return this.selectedChecklist() !== null;
+    return true;
   }
 
   get cardIsSelected(): boolean {
@@ -215,7 +272,7 @@ export class AddCardDialog {
   }
 
   get canSave(): boolean {
-    if (!this.selectedSet()) return false;
+    if (!this.selectedChecklist()) return false;
     if (!this.cardIsSelected) return false;
     if (this.isNewCard() && !this.newPlayer().trim()) return false;
     if (this.pricePaid() === null || this.pricePaid()! <= 0) return false;
@@ -223,27 +280,29 @@ export class AddCardDialog {
     return true;
   }
 
-  // ── Parallel Selection ─────────────────────────────────
+  // ── Parallel Selection ───────────────────────────────────
 
   onParallelChange(value: string) {
     if (value === '__other__') {
       this.parallelIsOther.set(true);
-      this.newParallelType.set('');
-      this.newSerialMax.set(null);
-      this.newIsAuto.set(false);
+      this.selectedParallelId.set(null);
+      this.selectedParallelName.set('');
       return;
     }
     this.parallelIsOther.set(false);
-    this.newParallelType.set(value);
-    // Auto-fill serial_max and is_auto from the set parallel metadata
-    const match = this.setParallels().find(p => p.name === value);
+    // value is either parallel UUID (from set_parallels) or fallback name string
+    const match = this.setParallels().find(p => p.id === value);
     if (match) {
-      this.newSerialMax.set(match.serial_max);
-      this.newIsAuto.set(match.is_auto);
+      this.selectedParallelId.set(match.id);
+      this.selectedParallelName.set(match.name);
+    } else {
+      // fallback list — no FK, just a display name
+      this.selectedParallelId.set(null);
+      this.selectedParallelName.set(value === 'Base' ? 'Base' : value);
     }
   }
 
-  // ── Save ───────────────────────────────────────────────
+  // ── Save ─────────────────────────────────────────────────
 
   async save() {
     if (!this.canSave || this.saving()) return;
@@ -251,16 +310,17 @@ export class AddCardDialog {
     this.saveError.set(null);
 
     const { error, cardId } = await this.cardsService.addCardWithLookup({
-      setId: this.selectedSet()!.id,
+      checklistId: this.selectedChecklist()?.id ?? null,
       masterCardId: this.selectedMasterCard()?.id ?? null,
       player: this.newPlayer(),
       cardNumber: this.newCardNumber(),
-      parallelType: this.newParallelType(),
+      serialMax: this.newSerialMax(),
+      parallelId: this.selectedParallelId(),
+      pendingParallelName: this.parallelIsOther() ? this.selectedParallelName().trim() : '',
       isRookie: this.newIsRookie(),
       isAuto: this.newIsAuto(),
       isPatch: this.newIsPatch(),
       isSSP: this.newIsSSP(),
-      serialMax: this.newSerialMax(),
       pricePaid: this.pricePaid(),
       serialNumber: this.serialNumber(),
       isGraded: this.isGraded(),
@@ -273,11 +333,9 @@ export class AddCardDialog {
     if (error) {
       this.saveError.set(error.message ?? 'Failed to add card. Please try again.');
     } else {
-      // Silently queue the custom parallel name for admin review
-      if (this.parallelIsOther() && this.newParallelType().trim() && this.selectedSet()) {
-        this.setsService.submitPendingParallel(this.selectedSet()!.id, this.newParallelType().trim());
+      if (this.parallelIsOther() && this.selectedParallelName().trim() && this.selectedSet()) {
+        this.setsService.submitPendingParallel(this.selectedSet()!.id, this.selectedParallelName().trim());
       }
-      // Fire eBay comps lookup in the background — don't await
       if (cardId) this.cardsService.fetchMarketValue(cardId);
       this.cardAdded.emit();
       this.close();

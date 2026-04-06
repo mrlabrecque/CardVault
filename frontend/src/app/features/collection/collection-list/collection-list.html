@@ -54,12 +54,19 @@
         · {{ stacks().length }} {{ stacks().length === 1 ? 'stack' : 'stacks' }}
       }
     </p>
-    <button
-      class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#800020] text-white text-xs font-semibold active:opacity-80"
-      (click)="openAddCard()">
-      <i class="pi pi-plus text-[11px]"></i>
-      Add Card
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#800020] text-white text-xs font-semibold active:opacity-80"
+        (click)="openAddCard()">
+        <i class="pi pi-plus text-[11px]"></i>
+        Add Card
+      </button>
+      <a routerLink="/bulk-add"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#800020] text-[#800020] text-xs font-semibold active:opacity-80">
+        <i class="pi pi-list text-[11px]"></i>
+        Bulk
+      </a>
+    </div>
   </div>
 
   <!-- Empty state -->
@@ -92,7 +99,7 @@
               <p class="text-sm font-bold text-gray-900 truncate">
                 {{ stack.player }}
                 @if (stack.cardNumber) {
-                  <span class="font-normal text-gray-400">#{{ stack.cardNumber }}</span>
+                  <span class="font-normal text-gray-400"> #{{ stack.cardNumber }}</span>
                 }
               </p>
               @if (stack.qty > 1) {
@@ -101,7 +108,9 @@
                 </span>
               }
             </div>
-            <p class="text-xs text-gray-400 truncate">{{ stack.year }} {{ stack.set }} · {{ stack.parallel }}</p>
+            <p class="text-xs text-gray-400 truncate">
+              {{ stack.year }} {{ stack.set }}@if (stack.checklist) { · {{ stack.checklist }}} · {{ stack.parallel }}
+            </p>
             <div class="flex flex-wrap items-center gap-1.5 mt-1.5"
                  (click)="$event.preventDefault(); $event.stopPropagation()">
               <p-tag [value]="stack.grade" severity="secondary" styleClass="text-[10px]! cursor-pointer!"
@@ -122,18 +131,34 @@
                   [ngClass]="{ 'opacity-40': isFilterActive('memorabilia') }"
                   (click)="toggleFilter('memorabilia')" />
               }
+              @if (stack.qty === 1 && stack.cards[0].serialNumber) {
+                <p-tag [value]="stack.cards[0].serialNumber + (stack.cards[0].serialMax ? '/' + stack.cards[0].serialMax : '')" severity="secondary" styleClass="text-[10px]!" />
+              } @else if (stack.qty === 1 && stack.cards[0].serialMax) {
+                <p-tag [value]="'/' + stack.cards[0].serialMax" severity="secondary" styleClass="text-[10px]!" />
+              }
             </div>
           </div>
 
-          <!-- Value + P/L + refresh + chevron -->
+          <!-- Value + P/L + chevron -->
           <div class="text-right shrink-0 flex flex-col items-end gap-0.5">
-            @if (isStackValuing(stack)) {
-              <span class="flex items-center gap-1 text-xs text-gray-400">
-                <i class="pi pi-spin pi-spinner text-[10px]"></i> Pricing…
-              </span>
-            } @else {
-              <p class="text-sm font-bold text-gray-900">${{ stack.totalValue | number:'1.0-0' }}</p>
-            }
+            <!-- Value row: refresh inline to the left -->
+            <div class="flex items-center gap-1">
+              @if (!isStackValuing(stack)) {
+                <button
+                  class="p-1 rounded-lg text-gray-300 hover:text-[#800020] hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  title="Refresh market value"
+                  (click)="refetchStack(stack, $event)">
+                  <i class="pi pi-refresh text-[11px]"></i>
+                </button>
+              }
+              @if (isStackValuing(stack)) {
+                <span class="flex items-center gap-1 text-xs text-gray-400">
+                  <i class="pi pi-spin pi-spinner text-[10px]"></i> Pricing…
+                </span>
+              } @else {
+                <p class="text-sm font-bold text-gray-900">${{ stack.totalValue | number:'1.0-0' }}</p>
+              }
+            </div>
             @if (stack.qty > 1 && !isStackValuing(stack)) {
               <p class="text-[10px] text-gray-400">${{ stack.marketValuePerCard | number:'1.0-0' }}/card</p>
             }
@@ -142,25 +167,17 @@
                  [class]="stackPl(stack) >= 0 ? 'text-emerald-500' : 'text-red-500'">
                 {{ stackPlPct(stack) }}
               </p>
-              <div class="flex items-center gap-0.5 mt-1">
+              @if (stack.qty === 1) {
                 <button
-                  class="p-1 rounded-lg text-gray-300 hover:text-[#800020] hover:bg-gray-50 active:bg-gray-100 transition-colors"
-                  title="Refresh market value"
-                  (click)="refetchStack(stack, $event)">
-                  <i class="pi pi-refresh text-[11px]"></i>
+                  class="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors mt-0.5"
+                  title="Delete card"
+                  (click)="requestDelete(stack.cards[0].id, $event)">
+                  <i class="pi pi-trash text-[11px]"></i>
                 </button>
-                @if (stack.qty === 1) {
-                  <button
-                    class="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors"
-                    title="Delete card"
-                    (click)="requestDelete(stack.cards[0].id, $event)">
-                    <i class="pi pi-trash text-[11px]"></i>
-                  </button>
-                }
-              </div>
+              }
             }
             @if (stack.qty > 1) {
-              <i class="pi text-gray-300 text-xs"
+              <i class="pi text-gray-300 text-xs mt-0.5"
                  [class]="isExpanded(stack.key) ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
             }
           </div>
@@ -214,7 +231,9 @@
                         Paid: ${{ card.pricePaid | number:'1.0-2' }}
                       </p>
                       @if (card.serialNumber) {
-                        <p class="text-[10px] text-gray-400">#{{ card.serialNumber }}</p>
+                        <p-tag [value]="card.serialNumber + (card.serialMax ? '/' + card.serialMax : '')" severity="secondary" styleClass="text-[10px]!" />
+                      } @else if (card.serialMax) {
+                        <p-tag [value]="'/' + card.serialMax" severity="secondary" styleClass="text-[10px]!" />
                       }
                     </div>
                     <div class="text-right shrink-0">

@@ -28,6 +28,7 @@ export class SetBuilder implements OnInit {
   templatePreview = signal('');
 
   bulkParallels = '';
+  bulkChecklists = '';
 
   form = this.fb.group({
     name: ['', Validators.required],
@@ -98,14 +99,30 @@ export class SetBuilder implements OnInit {
     if (error) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: error.message });
     } else {
-      // Save parallels if any were entered
-      const parallels = this.parseParallels(newSet!.id);
-      if (parallels.length > 0) {
-        await this.setsService.upsertParallels(parallels);
+      const setId = newSet!.id;
+
+      // Always create the Base Set checklist — capture its ID for parallels
+      const { data: baseChecklist } = await this.setsService.createChecklist(setId, 'Base Set', null);
+
+      // Create any additional insert checklists
+      const extraChecklists = this.parseChecklists(setId);
+      for (const cl of extraChecklists) {
+        await this.setsService.createChecklist(cl.setId, cl.name, cl.prefix);
       }
 
-      const parallelNote = parallels.length > 0 ? ` with ${parallels.length} parallel(s).` : '.';
-      this.messageService.add({ severity: 'success', summary: 'Set Created', detail: `"${name}" added${parallelNote}` });
+      // Save parallels (belong to the Base Set checklist)
+      let parallelCount = 0;
+      if (baseChecklist) {
+        const parallels = this.parseParallels(baseChecklist.id);
+        parallelCount = parallels.length;
+        if (parallels.length > 0) {
+          await this.setsService.upsertParallels(parallels);
+        }
+      }
+
+      const clNote = extraChecklists.length > 0 ? ` + ${extraChecklists.length + 1} checklists` : '';
+      const parallelNote = parallelCount > 0 ? `, ${parallelCount} parallels` : '';
+      this.messageService.add({ severity: 'success', summary: 'Set Created', detail: `"${name}" added${clNote}${parallelNote}.` });
       this.form.reset({
         name: '',
         year: new Date().getFullYear(),
@@ -114,11 +131,24 @@ export class SetBuilder implements OnInit {
         ebay_search_template: '{year} {brand} #{card_number} {player_name} PSA',
       });
       this.bulkParallels = '';
+      this.bulkChecklists = '';
       await this.loadSets();
     }
   }
 
-  private parseParallels(setId: string): UpsertParallelPayload[] {
+  private parseChecklists(setId: string): { setId: string; name: string; prefix: string | null }[] {
+    if (!this.bulkChecklists.trim()) return [];
+    return this.bulkChecklists
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .map(raw => {
+        const [name, prefix] = raw.split(':').map(p => p.trim());
+        return { setId, name, prefix: prefix || null };
+      });
+  }
+
+  private parseParallels(checklistId: string): UpsertParallelPayload[] {
     if (!this.bulkParallels.trim()) return [];
     return this.bulkParallels
       .split(',')
@@ -128,7 +158,7 @@ export class SetBuilder implements OnInit {
         const parts = raw.split(':').map(p => p.trim());
         const serial_max = parts[1] ? parseInt(parts[1], 10) : null;
         return {
-          set_id: setId,
+          checklist_id: checklistId,
           name: parts[0],
           serial_max: serial_max !== null && !isNaN(serial_max) ? serial_max : null,
           is_auto: parts[2]?.toLowerCase() === 'auto',

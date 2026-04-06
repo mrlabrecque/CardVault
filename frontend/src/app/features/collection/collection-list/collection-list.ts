@@ -18,6 +18,7 @@ export interface CardStack {
   sport: string;
   set: string;
   year: number;
+  checklist: string | null;
   parallel: string;
   grade: string;
   isGraded: boolean;
@@ -90,6 +91,7 @@ export class CollectionList implements OnInit {
           sport: card.sport,
           set: card.set,
           year: card.year,
+          checklist: card.checklist,
           parallel: card.parallel,
           grade: card.grade,
           isGraded: card.isGraded,

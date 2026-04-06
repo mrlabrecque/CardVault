@@ -1,6 +1,14 @@
 import { Injectable } from '@angular/core';
 import { AuthService } from './auth';
 
+export interface ChecklistRecord {
+  id: string;
+  set_id: string;
+  name: string;       // e.g. "Base Set", "Fireworks", "Monopoly Money"
+  prefix: string | null; // e.g. "F-", "M-"; null = base set
+  created_at: string;
+}
+
 export interface SetRecord {
   id: string;
   name: string;
@@ -16,7 +24,7 @@ export type CreateSetPayload = Omit<SetRecord, 'id' | 'created_at'>;
 
 export interface SetParallel {
   id: string;
-  set_id: string;
+  checklist_id: string;
   name: string;
   serial_max: number | null;
   is_auto: boolean;
@@ -78,16 +86,39 @@ export class SetsService {
     return (data as SetRecord[]) ?? [];
   }
 
+  // ── Checklists ────────────────────────────────────────────────────────────
+
+  async getChecklists(setId: string): Promise<ChecklistRecord[]> {
+    const { data } = await this.auth.getClient()
+      .from('checklists')
+      .select('*')
+      .eq('set_id', setId)
+      .order('name');
+    return (data as ChecklistRecord[]) ?? [];
+  }
+
+  async createChecklist(setId: string, name: string, prefix: string | null) {
+    return this.auth.getClient()
+      .from('checklists')
+      .insert({ set_id: setId, name, prefix })
+      .select()
+      .single();
+  }
+
+  async deleteChecklist(id: string) {
+    return this.auth.getClient().from('checklists').delete().eq('id', id);
+  }
+
   // ── Parallels ─────────────────────────────────────────────────────────────
 
   private get parallelsDb() {
     return this.auth.getClient().from('set_parallels');
   }
 
-  async getParallels(setId: string): Promise<SetParallel[]> {
+  async getParallels(checklistId: string): Promise<SetParallel[]> {
     const { data } = await this.parallelsDb
       .select('*')
-      .eq('set_id', setId)
+      .eq('checklist_id', checklistId)
       .order('sort_order')
       .order('name');
     return (data as SetParallel[]) ?? [];
@@ -95,7 +126,7 @@ export class SetsService {
 
   async upsertParallels(parallels: UpsertParallelPayload[]) {
     return this.parallelsDb
-      .upsert(parallels, { onConflict: 'set_id,name', ignoreDuplicates: false });
+      .upsert(parallels, { onConflict: 'checklist_id,name', ignoreDuplicates: false });
   }
 
   async deleteParallel(id: string) {
@@ -138,16 +169,21 @@ export class SetsService {
     pending: PendingParallel,
     extras: { serial_max: number | null; is_auto: boolean; color_hex: string | null }
   ) {
+    // Parallels belong to checklists — default to the base checklist (null prefix) of the set
+    const checklists = await this.getChecklists(pending.set_id);
+    const baseChecklist = checklists.find(c => c.prefix === null) ?? checklists[0];
+    if (!baseChecklist) return { error: { message: 'No checklist found for this set' } };
+
     const { error } = await this.parallelsDb.upsert(
       {
-        set_id: pending.set_id,
+        checklist_id: baseChecklist.id,
         name: pending.name,
         serial_max: extras.serial_max,
         is_auto: extras.is_auto,
         color_hex: extras.color_hex,
         sort_order: 999,
       },
-      { onConflict: 'set_id,name', ignoreDuplicates: false }
+      { onConflict: 'checklist_id,name', ignoreDuplicates: false }
     );
     if (error) return { error };
     return this.pendingDb.update({ status: 'approved' }).eq('id', pending.id);

@@ -1,0 +1,353 @@
+<div class="flex flex-col h-full bg-gray-50">
+
+  <!-- ── SESSION BANNER (set selected) ─────────────────────── -->
+  @if (sessionSet(); as set) {
+    <div class="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-100">
+      <span class="text-base">{{ sportIcon(set.sport) }}</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-xs font-semibold text-gray-900 truncate">{{ set.year }} {{ set.name }}</p>
+        @if (activeChecklist(); as cl) {
+          <p class="text-[10px] text-gray-400">{{ cl.name }}</p>
+        }
+      </div>
+      <button (click)="clearSession()"
+        class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100">
+        Change
+      </button>
+    </div>
+  }
+
+  <!-- ── MAIN CONTENT AREA ──────────────────────────────────── -->
+  <div class="flex-1 overflow-y-auto flex flex-col">
+
+    <!-- ════════════════════════════════════════════════════════
+         STATE: no-session — Set picker
+         ════════════════════════════════════════════════════════ -->
+    @if (scanState() === 'no-session') {
+      <div class="flex flex-col items-center justify-center flex-1 px-6 py-12 gap-6">
+        <div class="w-16 h-16 rounded-2xl bg-[#800020]/10 flex items-center justify-center">
+          <svg class="w-8 h-8 text-[#800020]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+          </svg>
+        </div>
+        <div class="text-center">
+          <h2 class="text-lg font-bold text-gray-900">Start Scanning Session</h2>
+          <p class="text-sm text-gray-400 mt-1">Select the set you're ripping to begin</p>
+        </div>
+
+        <!-- Set search -->
+        <div class="w-full relative">
+          <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+          <input
+            type="text"
+            placeholder="Search sets… (e.g. 2026 Prizm)"
+            [ngModel]="setQuery()"
+            (ngModelChange)="onSetQueryChange($event)"
+            class="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-white
+                   placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          />
+          @if (showSetDropdown() && setResults().length > 0) {
+            <div class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg
+                        overflow-hidden z-10 max-h-56 overflow-y-auto">
+              @for (set of setResults(); track set.id) {
+                <button
+                  class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                  (click)="selectSessionSet(set)">
+                  <span class="text-xl">{{ sportIcon(set.sport) }}</span>
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-gray-900 truncate">{{ set.year }} {{ set.name }}</p>
+                    <p class="text-[11px] text-gray-400">{{ set.sport }} · {{ set.release_type }}</p>
+                  </div>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- ════════════════════════════════════════════════════════
+         STATE: ready / processing / matched / no-match
+         (all share the camera view)
+         ════════════════════════════════════════════════════════ -->
+    @if (['ready', 'processing', 'matched', 'no-match'].includes(scanState())) {
+      <div class="flex flex-col flex-1 gap-0">
+
+        <!-- Camera view -->
+        <div class="relative bg-black flex-shrink-0" style="height: 52dvh;">
+          <video #videoEl autoplay playsinline muted
+            class="w-full h-full object-cover"></video>
+
+          <!-- Processing overlay -->
+          @if (scanState() === 'processing') {
+            <div class="absolute inset-0 bg-black/60 flex items-center justify-center">
+              <div class="flex flex-col items-center gap-3 text-white">
+                <i class="pi pi-spin pi-spinner text-3xl"></i>
+                <span class="text-sm font-medium">Scanning…</span>
+              </div>
+            </div>
+          }
+
+          <!-- Camera error -->
+          @if (cameraError()) {
+            <div class="absolute inset-0 bg-gray-900 flex items-center justify-center px-6">
+              <p class="text-sm text-red-400 text-center">{{ cameraError() }}</p>
+            </div>
+          }
+
+          <!-- Viewfinder guide corners -->
+          @if (scanState() === 'ready') {
+            <div class="absolute inset-6 pointer-events-none">
+              <div class="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white/70 rounded-tl"></div>
+              <div class="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white/70 rounded-tr"></div>
+              <div class="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white/70 rounded-bl"></div>
+              <div class="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white/70 rounded-br"></div>
+            </div>
+            <p class="absolute bottom-3 left-0 right-0 text-center text-white/60 text-[11px]">
+              Point at card back · Tap Capture
+            </p>
+          }
+        </div>
+
+        <!-- Result / action area -->
+        <div class="flex-1 flex flex-col px-4 py-3 gap-3 overflow-y-auto">
+
+          <!-- OCR error -->
+          @if (ocrError()) {
+            <div class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-600">
+              <i class="pi pi-exclamation-circle shrink-0"></i>
+              {{ ocrError() }}
+            </div>
+          }
+
+          <!-- ── MATCHED ─── -->
+          @if (scanState() === 'matched' && selectedMatch(); as card) {
+            <!-- Card match display -->
+            <div class="bg-white border border-[#800020]/20 rounded-2xl px-4 py-3">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <p class="text-base font-bold text-gray-900">{{ card.player }}</p>
+                  <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                    @if (parsedCard()?.cardNumber) {
+                      <span class="text-xs text-gray-500">#{{ parsedCard()?.cardNumber }}</span>
+                    }
+                    @if (activeChecklist()?.name) {
+                      <span class="text-[10px] font-semibold text-[#800020] bg-[#800020]/8 px-1.5 py-0.5 rounded-full">
+                        {{ activeChecklist()?.name }}
+                      </span>
+                    }
+                    @if (card.is_rookie) {
+                      <span class="text-[10px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">RC</span>
+                    }
+                    @if (card.is_auto) {
+                      <span class="text-[10px] font-bold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full">AUTO</span>
+                    }
+                  </div>
+                </div>
+                <!-- Alternative matches -->
+                @if (matchedCards().length > 1) {
+                  <div class="flex flex-col gap-1 min-w-0">
+                    @for (alt of matchedCards().slice(1, 3); track alt.id) {
+                      <button (click)="selectedMatch.set(alt)"
+                        class="text-[10px] text-gray-400 hover:text-[#800020] truncate text-right max-w-[100px]">
+                        {{ alt.player }}
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+
+            <!-- Parallel quick-picker -->
+            <div class="flex flex-col gap-2">
+              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Select Parallel</p>
+              <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                <!-- Base -->
+                <button (click)="stageAsBase()"
+                  class="flex-shrink-0 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium
+                         text-gray-700 hover:border-[#800020]/40 active:scale-95 transition-transform">
+                  Base
+                </button>
+                @for (p of sessionParallels(); track p.id) {
+                  <button (click)="stageCard(p)"
+                    class="flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-sm font-medium
+                           active:scale-95 transition-transform"
+                    [style.borderColor]="p.color_hex ?? '#e5e7eb'"
+                    [style.backgroundColor]="p.color_hex ? p.color_hex + '18' : 'white'">
+                    <span class="text-gray-800">{{ p.name }}</span>
+                    @if (p.serial_max) {
+                      <span class="text-[10px] text-gray-400">/{{ p.serial_max }}</span>
+                    }
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- ── NO MATCH ─── -->
+          @if (scanState() === 'no-match') {
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-2">
+              <p class="text-sm font-semibold text-amber-800">No card matched</p>
+              <p class="text-xs text-amber-700">
+                OCR text: "{{ parsedCard()?.playerCandidates?.slice(0, 2)?.join(', ') || 'none found' }}"
+              </p>
+              <div class="flex gap-2 mt-1">
+                <button (click)="dismiss()"
+                  class="flex-1 py-2 text-sm font-medium bg-white border border-amber-200 rounded-xl text-amber-700">
+                  Skip
+                </button>
+                <button (click)="openManualEntry()"
+                  class="flex-1 py-2 text-sm font-medium bg-[#800020] rounded-xl text-white">
+                  Enter Manually
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- ── READY / no result yet — Capture + Manual entry ─── -->
+          @if (scanState() === 'ready') {
+            <div class="flex flex-col items-center gap-3 pt-2">
+              <!-- Capture shutter -->
+              <button (click)="capture()"
+                class="w-16 h-16 rounded-full bg-[#800020] flex items-center justify-center shadow-lg
+                       active:scale-95 transition-transform">
+                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                </svg>
+              </button>
+              <!-- Manual entry fallback -->
+              <button (click)="openManualEntry()"
+                class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#800020] px-3 py-1.5
+                       rounded-lg hover:bg-[#800020]/5 transition-colors">
+                <i class="pi pi-pencil text-[10px]"></i>
+                Enter manually
+              </button>
+            </div>
+          }
+
+        </div>
+      </div>
+    }
+
+    <!-- ════════════════════════════════════════════════════════
+         STATE: discovery — Unknown set detected
+         ════════════════════════════════════════════════════════ -->
+    @if (scanState() === 'discovery') {
+      <div class="flex flex-col flex-1 px-5 py-6 gap-4">
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <p class="text-sm font-bold text-amber-900">New set detected</p>
+          <p class="text-xs text-amber-700 mt-1">
+            OCR found {{ discoveryYear() }} {{ discoveryBrand() }} — not in your catalog.
+            Submit for admin review or skip to continue with the current session set.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-3 bg-white rounded-2xl p-4 border border-gray-100">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium text-gray-500">Set Name</label>
+            <input type="text" [ngModel]="discoveryBrand()" (ngModelChange)="discoveryBrand.set($event)"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">Sport</label>
+              <select [ngModel]="discoverySport()" (ngModelChange)="discoverySport.set($event)"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                       focus:outline-none focus:ring-2 focus:ring-[#800020]/20">
+                @for (s of sports; track s) { <option [value]="s">{{ s }}</option> }
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">Release Type</label>
+              <select [ngModel]="discoveryReleaseType()" (ngModelChange)="discoveryReleaseType.set($event)"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                       focus:outline-none focus:ring-2 focus:ring-[#800020]/20">
+                @for (r of releaseTypes; track r) { <option [value]="r">{{ r }}</option> }
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button (click)="dismissDiscovery()"
+            class="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 bg-white">
+            Skip
+          </button>
+          <button (click)="submitDiscovery()" [disabled]="submittingDiscovery()"
+            class="flex-1 py-3 rounded-xl bg-[#800020] text-white text-sm font-bold disabled:opacity-50">
+            @if (submittingDiscovery()) {
+              <span class="flex items-center justify-center gap-2">
+                <i class="pi pi-spin pi-spinner"></i> Submitting…
+              </span>
+            } @else {
+              Submit for Review
+            }
+          </button>
+        </div>
+      </div>
+    }
+
+  </div>
+
+  <!-- ── STAGING LIST + COMMIT ─────────────────────────────── -->
+  @if (stagedCount() > 0) {
+    <div class="flex-shrink-0 border-t border-gray-200 bg-white max-h-[35dvh] flex flex-col">
+
+      <div class="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          Staging · {{ stagedCount() }} card{{ stagedCount() === 1 ? '' : 's' }}
+        </p>
+      </div>
+
+      <!-- Staged cards list -->
+      <div class="flex-1 overflow-y-auto divide-y divide-gray-50">
+        @for (staged of stagingList(); track staged.tempId) {
+          <div class="flex items-center gap-3 px-4 py-2.5">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-gray-900 truncate">{{ staged.masterCard.player }}</p>
+              <p class="text-[11px] text-gray-400">
+                @if (staged.masterCard.card_number) { #{{ staged.masterCard.card_number }} · }
+                {{ staged.parallelName }}
+              </p>
+            </div>
+            <button (click)="removeStagedCard(staged.tempId)"
+              class="text-gray-300 hover:text-red-400 p-1">
+              <i class="pi pi-times text-xs"></i>
+            </button>
+          </div>
+        }
+      </div>
+
+      <!-- Commit footer -->
+      <div class="flex-shrink-0 px-4 py-3 border-t border-gray-100">
+        @if (commitError()) {
+          <p class="text-xs text-red-500 mb-2">{{ commitError() }}</p>
+        }
+        @if (commitSuccess()) {
+          <p class="text-xs text-emerald-600 mb-2 font-medium">
+            ✓ Cards saved to your collection!
+          </p>
+        }
+        <button (click)="commitAll()" [disabled]="committing()"
+          class="w-full py-3 rounded-xl bg-[#800020] text-white text-sm font-bold
+                 disabled:opacity-60 active:opacity-90">
+          @if (committing()) {
+            <span class="flex items-center justify-center gap-2">
+              <i class="pi pi-spin pi-spinner"></i> Saving…
+            </span>
+          } @else {
+            Commit {{ stagedCount() }} Card{{ stagedCount() === 1 ? '' : 's' }} to Vault
+          }
+        </button>
+      </div>
+    </div>
+  }
+
+</div>

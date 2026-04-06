@@ -12,6 +12,8 @@ const PAGE_TITLES: Record<string, string> = {
   collection: 'Collection',
   comps:      'Comp Search',
   wishlist:   'Wishlist',
+  scanner:    'Scan Cards',
+  'bulk-add': 'Bulk Add',
   admin:      'Manage Sets',
 };
 

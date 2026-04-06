@@ -1,0 +1,457 @@
+<div class="flex flex-col min-h-screen bg-gray-50">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <div class="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
+    <button (click)="goBack()"
+      class="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <div class="flex-1 min-w-0">
+      @if (sessionSet()) {
+        <p class="text-sm font-bold text-gray-900 truncate">
+          {{ sessionSet()!.year }} {{ sessionSet()!.name }}
+        </p>
+        @if (activeChecklist()) {
+          <p class="text-xs text-gray-400 truncate">{{ activeChecklist()!.name }}</p>
+        }
+      } @else {
+        <p class="text-sm font-bold text-gray-900">Bulk Add</p>
+      }
+    </div>
+    @if (sessionSet()) {
+      <button (click)="endSession()"
+        class="text-xs text-gray-400 hover:text-gray-700 transition-colors px-2 py-1 rounded-lg hover:bg-gray-100">
+        Change Set
+      </button>
+    }
+  </div>
+
+  <div class="px-4 pt-5 pb-32 flex flex-col gap-5">
+
+    <!-- ── No session: Set picker ──────────────────────────── -->
+    @if (!sessionSet()) {
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h2 class="text-sm font-bold text-gray-900 mb-1">Choose a Set</h2>
+        <p class="text-xs text-gray-400 mb-4">Search for the set you're adding cards from.</p>
+        <div class="relative">
+          <input type="text" [ngModel]="setQuery()" (ngModelChange)="onSetQueryChange($event)"
+            placeholder="Search sets…"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+          @if (showSetDropdown() && setResults().length > 0) {
+            <div class="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl border border-gray-100 shadow-lg z-20 overflow-hidden">
+              @for (set of setResults(); track set.id) {
+                <button (click)="selectSessionSet(set)"
+                  class="w-full text-left px-4 py-3 border-b border-gray-50 last:border-b-0
+                         hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                  <p class="text-sm font-semibold text-gray-900">{{ set.year }} {{ set.name }}</p>
+                  <p class="text-xs text-gray-400">{{ sportIcon(set.sport) }} {{ set.sport }} · {{ set.release_type }}</p>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- ── Checklist picker (shown after set is chosen, before form) ── -->
+    @if (sessionSet() && !activeChecklist() && sessionChecklists().length > 0) {
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h2 class="text-sm font-bold text-gray-900 mb-1">Which checklist?</h2>
+        <p class="text-xs text-gray-400 mb-4">You can switch checklists at any time while adding cards.</p>
+        <div class="flex flex-col gap-2">
+          @for (cl of sessionChecklists(); track cl.id) {
+            <button (click)="selectChecklist(cl)"
+              class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-gray-100
+                     bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors text-left">
+              <div class="w-8 h-8 rounded-full bg-[#800020]/10 flex items-center justify-center shrink-0">
+                @if (cl.prefix) {
+                  <span class="text-[10px] font-bold font-mono text-[#800020]">{{ cl.prefix }}</span>
+                } @else {
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-[#800020]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
+                  </svg>
+                }
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900">{{ cl.name }}</p>
+                @if (cl.prefix) {
+                  <p class="text-xs text-gray-400 font-mono">prefix: {{ cl.prefix }}</p>
+                } @else {
+                  <p class="text-xs text-gray-400">Base set — no prefix</p>
+                }
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- ── Active session ──────────────────────────────────── -->
+    @if (sessionSet() && activeChecklist()) {
+
+      <!-- Checklist tabs (switch mid-session) -->
+      @if (sessionChecklists().length > 1) {
+        <div class="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none">
+          @for (cl of sessionChecklists(); track cl.id) {
+            <button (click)="selectChecklist(cl)"
+              [class]="'shrink-0 px-4 py-2 rounded-full text-xs font-semibold border transition-colors ' +
+                (activeChecklist()?.id === cl.id
+                  ? 'bg-[#800020] text-white border-[#800020]'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300')">
+              {{ cl.name }}
+            </button>
+          }
+        </div>
+      }
+
+      <!-- Card entry form -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex flex-col gap-5">
+
+        <!-- ── Card search ───────────────────────────────── -->
+        <div class="flex flex-col gap-2">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+            Card <span class="text-red-400">*</span>
+          </label>
+
+          @if (cardIsSelected) {
+            @if (selectedMasterCard(); as card) {
+              <div class="flex items-center gap-2 bg-[#800020]/8 border border-[#800020]/20 rounded-xl px-3 py-2.5">
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
+                  <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    @if (card.card_number) {
+                      <span class="text-[11px] text-gray-500">#{{ card.card_number }}</span>
+                    }
+                    @if (card.is_rookie) {
+                      <span class="text-[10px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">RC</span>
+                    }
+                    @if (card.is_auto) {
+                      <span class="text-[10px] font-bold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full">AUTO</span>
+                    }
+                    @if (card.is_patch) {
+                      <span class="text-[10px] font-bold bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">PATCH</span>
+                    }
+                    @if (card.serial_max) {
+                      <span class="text-[11px] text-gray-400">/{{ card.serial_max }}</span>
+                    }
+                  </div>
+                </div>
+                <button class="text-gray-400 hover:text-gray-600 ml-1" (click)="clearCardSelection()">
+                  <i class="pi pi-times text-xs"></i>
+                </button>
+              </div>
+            }
+            @if (isNewCard()) {
+              <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+                <i class="pi pi-plus-circle text-gray-400"></i>
+                <span class="text-sm text-gray-600 flex-1">New card definition</span>
+                <button class="text-gray-400 hover:text-gray-600" (click)="clearCardSelection()">
+                  <i class="pi pi-times text-xs"></i>
+                </button>
+              </div>
+            }
+          } @else {
+            <div class="relative">
+              <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+              <input type="text" placeholder="Search player name or card #…"
+                [ngModel]="playerQuery()" (ngModelChange)="onPlayerQueryChange($event)"
+                class="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900
+                       placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+              @if (showPlayerDropdown()) {
+                <div class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg
+                            overflow-hidden z-10 max-h-56 overflow-y-auto">
+                  @for (card of playerResults(); track card.id) {
+                    <button class="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                      (click)="selectMasterCard(card)">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-gray-900 truncate">{{ card.player }}</p>
+                        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          @if (card.card_number) {
+                            <span class="text-[11px] text-gray-500">#{{ card.card_number }}</span>
+                          }
+                          @if (card.is_rookie) {
+                            <span class="text-[10px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">RC</span>
+                          }
+                          @if (card.is_auto) {
+                            <span class="text-[10px] font-bold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full">AUTO</span>
+                          }
+                          @if (card.is_patch) {
+                            <span class="text-[10px] font-bold bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">PATCH</span>
+                          }
+                          @if (card.serial_max) {
+                            <span class="text-[11px] text-gray-400">/{{ card.serial_max }}</span>
+                          }
+                        </div>
+                      </div>
+                      <i class="pi pi-check text-[#800020] text-xs mt-1 shrink-0"></i>
+                    </button>
+                  }
+                  <button class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 text-[#800020]"
+                    (click)="startNewCard()">
+                    <i class="pi pi-plus text-sm"></i>
+                    <span class="text-sm font-medium">Add new card to catalog</span>
+                  </button>
+                </div>
+              }
+            </div>
+            @if (noPlayerResults()) {
+              <div class="mt-2 flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
+                <span class="text-sm text-gray-500">No cards found in this checklist.</span>
+                <button class="text-sm font-semibold text-[#800020]" (click)="startNewCard()">
+                  Add new +
+                </button>
+              </div>
+            }
+          }
+        </div>
+
+        <!-- ── New card definition ────────────────────────── -->
+        @if (isNewCard()) {
+          <div class="flex flex-col gap-4 bg-gray-50 rounded-2xl p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider -mb-1">Card Definition</p>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">Player Name <span class="text-red-400">*</span></label>
+              <input type="text" placeholder="e.g. Victor Wembanyama"
+                [ngModel]="newPlayer()" (ngModelChange)="newPlayer.set($event)"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                       focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-gray-500">Card #</label>
+                <input type="text" placeholder="e.g. 298"
+                  [ngModel]="newCardNumber()" (ngModelChange)="newCardNumber.set($event)"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-gray-500">Serial Number</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">/</span>
+                  <input type="number" placeholder="e.g. 99" min="1"
+                    [ngModel]="newSerialMax()" (ngModelChange)="newSerialMax.set($event ? +$event : null)"
+                    class="w-full pl-6 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white
+                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              @for (toggle of [
+                { label: 'Rookie Card', signal: newIsRookie },
+                { label: 'Autograph',   signal: newIsAuto   },
+                { label: 'Patch / Mem', signal: newIsPatch  },
+                { label: 'Short Print', signal: newIsSSP    }
+              ]; track toggle.label) {
+                <button
+                  class="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors"
+                  [class]="toggle.signal() ? 'bg-[#800020] border-[#800020] text-white' : 'bg-white border-gray-200 text-gray-600'"
+                  (click)="toggle.signal.set(!toggle.signal())">
+                  <i class="text-xs" [class]="toggle.signal() ? 'pi pi-check-circle' : 'pi pi-circle'"></i>
+                  {{ toggle.label }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- ── Your Copy ──────────────────────────────────── -->
+        @if (cardIsSelected) {
+          <div class="flex flex-col gap-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Your Copy</p>
+
+            <!-- Parallel -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">Parallel</label>
+              @if (parallelIsOther()) {
+                <div class="flex gap-1.5">
+                  <input type="text" placeholder="Describe parallel…"
+                    [ngModel]="selectedParallelName()" (ngModelChange)="selectedParallelName.set($event)"
+                    class="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+                  <button type="button" (click)="onParallelChange('base')"
+                    class="px-2.5 text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">
+                    <i class="pi pi-times text-xs"></i>
+                  </button>
+                </div>
+              } @else if (activeParallels().length > 0) {
+                <select [ngModel]="selectedParallelId() ?? 'base'" (ngModelChange)="onParallelChange($event)"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
+                  <option value="base">Base</option>
+                  @for (p of activeParallels(); track p.id) {
+                    <option [value]="p.id">
+                      {{ p.name }}{{ p.serial_max ? ' /' + p.serial_max : '' }}{{ p.is_auto ? ' · AUTO' : '' }}
+                    </option>
+                  }
+                  <option value="__other__">Other…</option>
+                </select>
+              } @else {
+                <select [ngModel]="selectedParallelName()" (ngModelChange)="onParallelChange($event)"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
+                  @for (p of fallbackParallels; track p) {
+                    <option [value]="p">{{ p }}</option>
+                  }
+                  <option value="__other__">Other…</option>
+                </select>
+              }
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-gray-500">Price Paid <span class="text-red-400">*</span></label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" placeholder="0.00" min="0" step="0.01"
+                    [ngModel]="pricePaid()" (ngModelChange)="pricePaid.set($event ? +$event : null)"
+                    class="w-full pl-6 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white
+                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+                </div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-gray-500">Serial #</label>
+                <input type="text" placeholder="e.g. 45/99"
+                  [ngModel]="serialNumber()" (ngModelChange)="serialNumber.set($event)"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+              </div>
+            </div>
+
+            <button
+              class="flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-sm font-medium"
+              [class]="isGraded() ? 'bg-[#800020]/8 border-[#800020]/30 text-[#800020]' : 'bg-white border-gray-200 text-gray-600'"
+              (click)="isGraded.set(!isGraded())">
+              <i class="text-sm" [class]="isGraded() ? 'pi pi-check-square' : 'pi pi-stop'"></i>
+              Graded Card
+            </button>
+
+            @if (isGraded()) {
+              <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium text-gray-500">Grader</label>
+                  <select [ngModel]="grader()" (ngModelChange)="grader.set($event)"
+                    class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
+                    @for (g of graders; track g) {
+                      <option [value]="g">{{ g }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium text-gray-500">Grade <span class="text-red-400">*</span></label>
+                  <input type="text" placeholder="e.g. 10, 9.5"
+                    [ngModel]="gradeValue()" (ngModelChange)="gradeValue.set($event)"
+                    class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Stage button -->
+        <button (click)="stageCard()" [disabled]="!canStage"
+          class="w-full py-3 rounded-xl text-sm font-bold transition-all"
+          [class]="canStage ? 'bg-[#800020] text-white active:opacity-90' : 'bg-gray-100 text-gray-300 cursor-not-allowed'">
+          Add to Batch
+        </button>
+      </div>
+
+      <!-- ── Staging list ─────────────────────────────────── -->
+      @if (stagedCount() > 0) {
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+              Batch ({{ stagedCount() }})
+            </p>
+            @if (commitSuccess()) {
+              <span class="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Saved!
+              </span>
+            }
+          </div>
+
+          @for (card of stagingList(); track card.tempId) {
+            <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-2 flex items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <p class="text-sm font-semibold text-gray-900 truncate">
+                    {{ card.player }}
+                    @if (card.cardNumber) {
+                      <span class="font-normal text-gray-400"> #{{ card.cardNumber }}</span>
+                    }
+                    @if (card.serialNumber) {
+                      <span class="font-normal text-gray-400"> {{ card.serialNumber }}{{ card.serialMax ? '/' + card.serialMax : '' }}</span>
+                    }
+                  </p>
+                  @if (card.isRookie) {
+                    <span class="text-[10px] font-bold text-blue-500">RC</span>
+                  }
+                  @if (card.isAuto) {
+                    <span class="text-[10px] font-bold text-amber-500">AUTO</span>
+                  }
+                  @if (card.isPatch) {
+                    <span class="text-[10px] font-bold text-emerald-600">PATCH</span>
+                  }
+                </div>
+                <p class="text-xs text-gray-400 truncate">
+                  @if (card.checklistName) { {{ card.checklistName }} · }{{ card.parallelName }}
+                  · ${{ card.pricePaid | number:'1.0-2' }}
+                  @if (card.isGraded) { · {{ card.grader }} {{ card.gradeValue }}}
+                </p>
+              </div>
+              <button (click)="removeStaged(card.tempId)"
+                class="w-7 h-7 flex items-center justify-center rounded-full text-gray-300
+                       hover:text-red-400 hover:bg-red-50 transition-colors shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          }
+
+          @if (commitError()) {
+            <p class="text-xs text-red-500 mt-2">{{ commitError() }}</p>
+          }
+        </div>
+      }
+
+    }
+
+  </div>
+
+  <!-- ── Sticky commit bar ────────────────────────────────── -->
+  @if (stagedCount() > 0) {
+    <div class="fixed bottom-[72px] left-1/2 -translate-x-1/2 w-full max-w-[480px] px-4 pb-3 z-20">
+      <button (click)="commitAll()" [disabled]="committing()"
+        class="w-full py-4 rounded-2xl bg-[#800020] text-white text-sm font-bold shadow-lg
+               disabled:opacity-60 active:opacity-80 transition-opacity">
+        @if (committing()) {
+          <span class="flex items-center justify-center gap-2">
+            <svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+            Saving…
+          </span>
+        } @else {
+          Save {{ stagedCount() }} {{ stagedCount() === 1 ? 'Card' : 'Cards' }} to Collection
+        }
+      </button>
+    </div>
+  }
+
+</div>
