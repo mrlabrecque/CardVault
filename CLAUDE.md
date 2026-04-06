@@ -68,9 +68,10 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Route: `/admin/sets/:setId/parallels` — `ParallelManager` component (`features/admin/parallel-manager/`)
 - Accessible via "Manage Parallels" link on each set row in the Set Builder list
 - Bulk textarea importer: `Name`, `Name:Max` (numbered), `Name:Max:auto` (numbered auto)
-- "Preview Parallels" parses input into pills before committing; safe to re-run (upsert on `set_id, name`)
+- "Preview Parallels" parses input into pills before committing; safe to re-run (upsert on `checklist_id, name`)
 - Existing parallels listed with per-item delete (spinner while deleting)
-- `set_parallels` table: `set_id`, `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
+- `set_parallels` table: `checklist_id` (FK → checklists, **not** set_id), `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
+- Parallels are scoped to a checklist, not the set — inserts (e.g. Fireworks) have independent parallels from the base set
 
 ### F3. Admin — Pending Parallels Review
 - Route: `/admin/parallels/pending` — `PendingParallels` component (`features/admin/pending-parallels/`)
@@ -79,6 +80,19 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - When a user saves a card with an "Other…" parallel, `submit_pending_parallel()` RPC is called silently (fire-and-forget); increments `submission_count` on duplicates; resets dismissed items back to `pending` if re-submitted
 - Admin actions: **Promote** (expands inline form for `serial_max`, `is_auto`, `color_hex` → upserts to `set_parallels` and marks approved) | **Dismiss** (marks dismissed)
 - `pending_parallels` table: `set_id`, `name`, `submitted_by`, `submission_count`, `status` (`pending/approved/dismissed`); RLS: any auth user can insert/update count; admin-only read/delete
+
+### H. Add Card Flow (Singular & Bulk)
+
+Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the Bulk Add page (`features/collection/bulk-add/`) share the same flow and field conventions:
+
+**Step order**: Set → Checklist → Card → Your Copy
+
+- **Checklist is always shown** after a set is selected, even if the set has only one checklist. Never auto-select — the user must explicitly choose. `canShowCardSearch` gates the card search until a checklist is selected.
+- **Card search** queries `master_card_definitions` filtered by the selected `checklist_id`.
+- **"Your Copy" section** contains (in order): Parallel, Price Paid, Serial #, Graded toggle + grade fields. Parallel lives here — not in a separate section — because `parallel_id` is stored on `user_cards`, not `master_card_definitions`.
+- **Card Definition section** (new card only): Player Name, Card #, Serial Number (`serial_max` — the print run, e.g. `/99`), and attribute toggles (RC, AUTO, PATCH, SSP). The field label is "Serial Number" not "Print Run".
+- **Bulk Add header**: When a set is active, the sticky header shows the set name + checklist as title/subtitle — not the static "Bulk Add" label (which is already in the page title bar).
+- **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
 - **eBay API**: Real-time market value sync from sold listings; automated listing creation
@@ -231,6 +245,29 @@ card-vault/
 - **Component SCSS files** — do NOT use `@apply`. Other component SCSS files in this project are empty; put all styles as Tailwind utility classes directly in the HTML template. Reserve component SCSS only for things Tailwind cannot express (keyframe animations, pseudo-element tricks, third-party overrides with `!important`).
 - **PrimeNG button dark-mode conflict** — `p-button` inherits dark-mode overrides from the Aura theme. For any button where appearance is critical (e.g. the login CTA), use a plain `<button>` with hand-written styles instead of `p-button`.
 
+## Serial Number Tag System
+
+Serial numbers (e.g. "34/99") are displayed as color-coded pill badges throughout the app. The intensity of the badge reflects the rarity of the print run. Both `collection-list` and `bulk-add` implement `serialTagClass(serialMax)` and `serialLabel(serialNumber, serialMax)` helpers.
+
+| Print run (`serialMax`) | Style |
+|---|---|
+| 1 (1/1) | Gold gradient (`from-amber-400 to-yellow-300`) + amber ring |
+| 2–5 | Deep purple (`bg-purple-600`) + ring |
+| 6–10 | Rose red (`bg-rose-600`) |
+| 11–25 | Orange (`bg-orange-500`) |
+| 26–50 | Blue (`bg-blue-500`) |
+| 51–99 | Sky (`bg-sky-400`) |
+| 100–199 | Slate (`bg-slate-400`) |
+| 200+ / unknown | Light gray (`bg-gray-100 text-gray-500`) |
+
+Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when only the print run is known; just `serialNumber` when only the copy stamp is known.
+
+## Collection List UI Conventions
+
+- **Stack header right column** (value area): refresh button (`pi-refresh`) sits **inline to the left of the price value**, not below it. Layout: `[↻] $123` / `$X/card` (multi-stack only) / `+P/L%` / `∨` chevron (multi-stack only).
+- **Delete action** is NOT on the stack header row. For single-card stacks, delete is accessed via the Item Detail page. For multi-card stacks, delete is available on each expanded individual card row.
+- **Serial number tag** appears in the p-tags row (alongside Grade, RC, AUTO, PATCH), not in the title line.
+
 ---
 
 ## Implementation Progress
@@ -249,10 +286,13 @@ card-vault/
 - [x] Parallel input on New Set form — bulk textarea saves parallels in the same create flow
 - [x] Add Card dialog — parallel dropdown feeds from `set_parallels` for the selected set; auto-fills `serial_max`/`is_auto` from metadata; "Other…" escape hatch; falls back to static list if no parallels defined
 - [x] Pending Parallels review queue — `pending_parallels` table + `submit_pending_parallel()` RPC; "Other…" submissions silently queued on card save; `/admin/parallels/pending` route with `PendingParallels` component (promote with inline form, dismiss); "Pending Parallels" link with amber count badge in avatar dropdown
+- [x] Add Card dialog & Bulk Add — aligned flow (Set → Checklist always required → Card → Your Copy); parallel moved into "Your Copy"; Serial Number field in card definition; checklist never auto-selected
+- [x] Bulk Add page (`features/collection/bulk-add/`) — full manual bulk entry with staging list, commit, serial number tag display
+- [x] `set_parallels` migrated from `set_id` to `checklist_id` scope
+- [x] Collection list — wired to real `user_cards` data; serial number color-coded tags; refresh button inline with price; delete removed from stack header
 
 ### Up Next
 - [ ] Dashboard — wire to real Supabase data (P/L, sport distribution, top cards)
-- [ ] Collection list — wire to real `cards` table; inline edit
 - [ ] Item detail — full card editor; "Post to eBay" button
 - [ ] Comps search — eBay sold listings integration; lookup history
 - [ ] Wishlist — price threshold editor; alert status
@@ -270,3 +310,8 @@ card-vault/
 | `20260404000005_user_cards.sql` | `user_cards` table + extends `master_card_definitions` with card-level fields + RLS |
 | `20260404000006_set_parallels.sql` | `set_parallels` table + RLS (all auth users read; admin-only write) |
 | `20260404000007_pending_parallels.sql` | `pending_parallels` table + RLS + `submit_pending_parallel()` RPC |
+| `20260405000001_checklists.sql` | `checklists` table — each set has one or more checklists (base + inserts) |
+| `20260405000002_master_cards_refactor.sql` | `master_card_definitions` gains `checklist_id` FK; removes direct `set_id` |
+| `20260405000003_user_cards_parallel_id.sql` | `user_cards` gains `parallel_id` FK → `set_parallels` |
+| `20260405000004_pending_sets.sql` | Pending sets queue |
+| `20260405000005_parallels_by_checklist.sql` | Migrates `set_parallels.set_id` → `checklist_id`; unique constraint now on `(checklist_id, name)` |
