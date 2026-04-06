@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -26,6 +26,15 @@ export class BulkAdd {
   sessionChecklists = signal<ChecklistRecord[]>([]);
   activeChecklist   = signal<ChecklistRecord | null>(null);
   activeParallels   = signal<SetParallel[]>([]);
+
+  // ── Box calculator ────────────────────────────────────────
+  boxPrice      = signal<number | null>(null);
+  boxQty        = signal<number | null>(null);
+  pricePerCard  = computed(() => {
+    const bp = this.boxPrice();
+    const bq = this.boxQty();
+    return (bp && bq && bq > 0) ? Math.round((bp / bq) * 100) / 100 : null;
+  });
 
   setQuery        = signal('');
   setResults      = signal<SetRecord[]>([]);
@@ -62,6 +71,13 @@ export class BulkAdd {
   gradeValue   = signal('');
 
   private playerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    effect(() => {
+      const ppc = this.pricePerCard();
+      if (ppc !== null) this.pricePaid.set(ppc);
+    });
+  }
 
   // ── Staging ───────────────────────────────────────────────
   stagingList   = signal<BulkStagedCard[]>([]);
@@ -104,6 +120,8 @@ export class BulkAdd {
     this.showSetDropdown.set(false);
     this.activeChecklist.set(null);
     this.activeParallels.set([]);
+    this.boxPrice.set(null);
+    this.boxQty.set(null);
 
     const checklists = await this.setsService.getChecklists(set.id);
     this.sessionChecklists.set(checklists);
@@ -122,6 +140,8 @@ export class BulkAdd {
     this.activeChecklist.set(null);
     this.activeParallels.set([]);
     this.stagingList.set([]);
+    this.boxPrice.set(null);
+    this.boxQty.set(null);
     this.resetForm();
   }
 
@@ -238,7 +258,7 @@ export class BulkAdd {
     this.newIsAuto.set(false);
     this.newIsPatch.set(false);
     this.newIsSSP.set(false);
-    this.pricePaid.set(null);
+    this.pricePaid.set(this.pricePerCard());
     this.serialNumber.set('');
     this.gradeValue.set('');
   }

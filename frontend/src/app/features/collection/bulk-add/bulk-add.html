@@ -111,6 +111,38 @@
         </div>
       }
 
+      <!-- Box Price Calculator -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Box Calculator</p>
+        <div class="flex items-end gap-3">
+          <div class="flex flex-col gap-1 flex-1">
+            <label class="text-xs font-medium text-gray-500">Box Price</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input type="number" placeholder="0.00" min="0" step="0.01"
+                [ngModel]="boxPrice()" (ngModelChange)="boxPrice.set($event ? +$event : null)"
+                class="w-full pl-6 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white
+                       focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+            </div>
+          </div>
+          <div class="flex flex-col gap-1 flex-1">
+            <label class="text-xs font-medium text-gray-500">Total Cards</label>
+            <input type="number" placeholder="e.g. 36" min="1" step="1"
+              [ngModel]="boxQty()" (ngModelChange)="boxQty.set($event ? +$event : null)"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                     focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+          </div>
+          <div class="flex flex-col items-center justify-end pb-0.5 shrink-0 min-w-[72px]">
+            @if (pricePerCard()) {
+              <span class="text-[10px] text-gray-400 mb-0.5">per card</span>
+              <span class="text-sm font-bold text-[#800020]">${{ pricePerCard()! | number:'1.2-2' }}</span>
+            } @else {
+              <span class="text-xs text-gray-200">—</span>
+            }
+          </div>
+        </div>
+      </div>
+
       <!-- Card entry form -->
       <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex flex-col gap-5">
 
@@ -309,13 +341,21 @@
 
             <div class="grid grid-cols-2 gap-3">
               <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-gray-500">Price Paid <span class="text-red-400">*</span></label>
+                <label class="text-xs font-medium text-gray-500">
+                  Price Paid <span class="text-red-400">*</span>
+                  @if (pricePerCard()) {
+                    <span class="text-[10px] text-[#800020] font-normal ml-1">from box</span>
+                  }
+                </label>
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
                   <input type="number" placeholder="0.00" min="0" step="0.01"
                     [ngModel]="pricePaid()" (ngModelChange)="pricePaid.set($event ? +$event : null)"
-                    class="w-full pl-6 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white
-                           focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+                    [readOnly]="!!pricePerCard()"
+                    [class]="'w-full pl-6 pr-3 py-2.5 border rounded-xl text-sm focus:outline-none ' +
+                      (pricePerCard()
+                        ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-default'
+                        : 'bg-white border-gray-200 focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50')" />
                 </div>
               </div>
               <div class="flex flex-col gap-1">
