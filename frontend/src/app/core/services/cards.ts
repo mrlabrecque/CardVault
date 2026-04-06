@@ -292,6 +292,7 @@ export class CardsService {
           checklist_id: c.checklistId,
           player: c.player,
           card_number: c.cardNumber || null,
+          serial_max: c.serialMax || null,
           is_rookie: c.isRookie,
           is_auto: c.isAuto,
           is_patch: c.isPatch,

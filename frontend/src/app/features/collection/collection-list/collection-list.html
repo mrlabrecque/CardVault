@@ -131,10 +131,11 @@
                   [ngClass]="{ 'opacity-40': isFilterActive('memorabilia') }"
                   (click)="toggleFilter('memorabilia')" />
               }
-              @if (stack.qty === 1 && stack.cards[0].serialNumber) {
-                <p-tag [value]="stack.cards[0].serialNumber + (stack.cards[0].serialMax ? '/' + stack.cards[0].serialMax : '')" severity="secondary" styleClass="text-[10px]!" />
-              } @else if (stack.qty === 1 && stack.cards[0].serialMax) {
-                <p-tag [value]="'/' + stack.cards[0].serialMax" severity="secondary" styleClass="text-[10px]!" />
+              @if (stack.qty === 1 && (stack.cards[0].serialNumber || stack.cards[0].serialMax)) {
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      [class]="serialTagClass(stack.cards[0].serialMax)">
+                  {{ serialLabel(stack.cards[0].serialNumber, stack.cards[0].serialMax) }}
+                </span>
               }
             </div>
           </div>
@@ -167,14 +168,6 @@
                  [class]="stackPl(stack) >= 0 ? 'text-emerald-500' : 'text-red-500'">
                 {{ stackPlPct(stack) }}
               </p>
-              @if (stack.qty === 1) {
-                <button
-                  class="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors mt-0.5"
-                  title="Delete card"
-                  (click)="requestDelete(stack.cards[0].id, $event)">
-                  <i class="pi pi-trash text-[11px]"></i>
-                </button>
-              }
             }
             @if (stack.qty > 1) {
               <i class="pi text-gray-300 text-xs mt-0.5"
@@ -183,22 +176,6 @@
           </div>
         </button>
 
-        <!-- Delete confirmation (single-card stacks) -->
-        @if (stack.qty === 1 && pendingDeleteId() === stack.cards[0].id) {
-          <div class="border-t border-red-100 flex items-center justify-between gap-3 px-4 py-3 bg-red-50">
-            <p class="text-xs text-red-700 font-medium">Remove from collection?</p>
-            <div class="flex gap-2 shrink-0">
-              <button class="text-xs text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 bg-white"
-                      (click)="cancelDelete($event)">Cancel</button>
-              <button class="text-xs text-white px-3 py-1.5 rounded-lg bg-red-600 font-semibold flex items-center gap-1"
-                      [disabled]="deletingId() === stack.cards[0].id"
-                      (click)="confirmDelete(stack.cards[0].id, $event)">
-                @if (deletingId() === stack.cards[0].id) { <i class="pi pi-spin pi-spinner text-[10px]"></i> }
-                Delete
-              </button>
-            </div>
-          </div>
-        }
 
         <!-- Individual Cards (expanded) -->
         @if (isExpanded(stack.key)) {
@@ -230,10 +207,11 @@
                       <p class="text-xs font-semibold text-gray-700">
                         Paid: ${{ card.pricePaid | number:'1.0-2' }}
                       </p>
-                      @if (card.serialNumber) {
-                        <p-tag [value]="card.serialNumber + (card.serialMax ? '/' + card.serialMax : '')" severity="secondary" styleClass="text-[10px]!" />
-                      } @else if (card.serialMax) {
-                        <p-tag [value]="'/' + card.serialMax" severity="secondary" styleClass="text-[10px]!" />
+                      @if (card.serialNumber || card.serialMax) {
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                              [class]="serialTagClass(card.serialMax)">
+                          {{ serialLabel(card.serialNumber, card.serialMax) }}
+                        </span>
                       }
                     </div>
                     <div class="text-right shrink-0">

@@ -393,10 +393,13 @@
                     @if (card.cardNumber) {
                       <span class="font-normal text-gray-400"> #{{ card.cardNumber }}</span>
                     }
-                    @if (card.serialNumber) {
-                      <span class="font-normal text-gray-400"> {{ card.serialNumber }}{{ card.serialMax ? '/' + card.serialMax : '' }}</span>
-                    }
                   </p>
+                  @if (card.serialNumber || card.serialMax) {
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                          [class]="serialTagClass(card.serialMax)">
+                      {{ serialLabel(card.serialNumber, card.serialMax) }}
+                    </span>
+                  }
                   @if (card.isRookie) {
                     <span class="text-[10px] font-bold text-blue-500">RC</span>
                   }
