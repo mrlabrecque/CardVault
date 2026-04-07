@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import cardsRouter from './routes/cards';
 import compsRouter from './routes/comps';
 import wishlistRouter from './routes/wishlist';
@@ -21,6 +22,13 @@ app.use('/api/wishlist', wishlistRouter);
 app.use('/api/ebay', ebayRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// Serve Angular app in production
+const frontendDist = path.join(__dirname, '../../frontend/dist/frontend/browser');
+app.use(express.static(frontendDist));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
+});
 
 startAlertJob();
 
