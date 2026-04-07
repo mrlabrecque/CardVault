@@ -6,7 +6,7 @@
   },
   "scripts": {
     "start": "node backend/dist/index.js",
-    "heroku-postbuild": "npm install --prefix backend && npm run build --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "heroku-postbuild": "npm install --include=dev --prefix backend && npm run build --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
     "dev": "concurrently --names \"api,web\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix backend\" \"npm run start --prefix frontend\"",
     "start:backend": "npm run dev --prefix backend",
     "start:frontend": "npm run start --prefix frontend"
