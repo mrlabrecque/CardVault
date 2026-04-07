@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import Fuse from 'fuse.js';
 import { AuthService } from './auth';
 import { MasterCard } from './cards';
-import { ChecklistRecord } from './sets';
+import { SetRecord as ChecklistRecord } from './releases';
 
 export interface ParsedCard {
   rawText: string;

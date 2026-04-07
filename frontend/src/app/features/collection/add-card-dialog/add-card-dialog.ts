@@ -2,7 +2,7 @@ import { Component, inject, signal, computed, effect, untracked, Output, EventEm
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CardsService, MasterCard } from '../../../core/services/cards';
-import { SetsService, SetRecord, SetParallel, ChecklistRecord } from '../../../core/services/sets';
+import { ReleasesService, ReleaseRecord, SetParallel, SetRecord } from '../../../core/services/releases';
 import { UiService } from '../../../core/services/ui';
 
 const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
@@ -16,7 +16,7 @@ const FALLBACK_PARALLELS = ['Base', 'Silver Prizm', 'Gold Prizm', 'Red Prizm', '
 })
 export class AddCardDialog {
   private cardsService = inject(CardsService);
-  private setsService = inject(SetsService);
+  private releasesService = inject(ReleasesService);
   private ui = inject(UiService);
 
   @Output() cardAdded = new EventEmitter<void>();
@@ -28,15 +28,15 @@ export class AddCardDialog {
   saving = signal(false);
   saveError = signal<string | null>(null);
 
-  // ── Step 1: Set ──────────────────────────────────────────
+  // ── Step 1: Release ──────────────────────────────────────
   setQuery = signal('');
-  setResults = signal<SetRecord[]>([]);
+  setResults = signal<ReleaseRecord[]>([]);
   showSetDropdown = signal(false);
-  selectedSet = signal<SetRecord | null>(null);
+  selectedSet = signal<ReleaseRecord | null>(null);
 
-  // ── Step 1.5: Checklist ──────────────────────────────────
-  checklists = signal<ChecklistRecord[]>([]);
-  selectedChecklist = signal<ChecklistRecord | null>(null);
+  // ── Step 1.5: Set (subset within the release) ─────────────
+  checklists = signal<SetRecord[]>([]);
+  selectedChecklist = signal<SetRecord | null>(null);
 
   // ── Step 2: Card search ──────────────────────────────────
   cardQuery = signal('');
@@ -165,26 +165,26 @@ export class AddCardDialog {
   }
 
   private async doSetSearch(query: string) {
-    const results = await this.setsService.searchSets(query);
+    const results = await this.releasesService.searchReleases(query);
     this.setResults.set(results);
     this.showSetDropdown.set(results.length > 0);
   }
 
-  async selectSet(set: SetRecord) {
-    this.selectedSet.set(set);
-    this.setQuery.set(`${set.year} ${set.name}`);
+  async selectSet(release: ReleaseRecord) {
+    this.selectedSet.set(release);
+    this.setQuery.set(`${release.year} ${release.name}`);
     this.showSetDropdown.set(false);
     this.resetCardSection();
     this.setParallels.set([]);
 
-    const checklists = await this.setsService.getChecklists(set.id);
-    this.checklists.set(checklists);
+    const sets = await this.releasesService.getSets(release.id);
+    this.checklists.set(sets);
   }
 
-  async selectChecklist(checklist: ChecklistRecord) {
-    this.selectedChecklist.set(checklist);
+  async selectChecklist(set: SetRecord) {
+    this.selectedChecklist.set(set);
     this.resetCardSection();
-    const parallels = await this.setsService.getParallels(checklist.id);
+    const parallels = await this.releasesService.getParallels(set.id);
     this.setParallels.set(parallels);
   }
 
@@ -334,7 +334,7 @@ export class AddCardDialog {
       this.saveError.set(error.message ?? 'Failed to add card. Please try again.');
     } else {
       if (this.parallelIsOther() && this.selectedParallelName().trim() && this.selectedSet()) {
-        this.setsService.submitPendingParallel(this.selectedSet()!.id, this.selectedParallelName().trim());
+        this.releasesService.submitPendingParallel(this.selectedSet()!.id, this.selectedParallelName().trim());
       }
       if (cardId) this.cardsService.fetchMarketValue(cardId);
       this.cardAdded.emit();

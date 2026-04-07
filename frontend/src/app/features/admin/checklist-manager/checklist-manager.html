@@ -1,23 +1,23 @@
 <div class="px-4 pt-5 pb-10">
 
   <!-- Back -->
-  <a routerLink="/admin/sets"
+  <a routerLink="/admin/releases"
     class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-700 transition-colors mb-5">
     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="15 18 9 12 15 6"/>
     </svg>
-    Manage Sets
+    Manage Releases
   </a>
 
-  @if (set(); as s) {
-    <h2 class="text-base font-bold text-gray-900 mb-1">{{ s.year }} {{ s.name }}</h2>
-    <p class="text-xs text-gray-400 mb-5">{{ s.sport }} · {{ s.release_type }}</p>
+  @if (release(); as r) {
+    <h2 class="text-base font-bold text-gray-900 mb-1">{{ r.year }} {{ r.name }}</h2>
+    <p class="text-xs text-gray-400 mb-5">{{ r.sport }} · {{ r.release_type }}</p>
   }
 
-  <!-- ── Add Checklist ─────────────────────────────────── -->
+  <!-- ── Add Set ───────────────────────────────────────── -->
   <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
-    <h3 class="text-sm font-bold text-gray-900 mb-4">Add Checklist</h3>
+    <h3 class="text-sm font-bold text-gray-900 mb-4">Add Set</h3>
 
     <div class="flex flex-col gap-3">
       <div class="flex flex-col gap-1">
@@ -37,7 +37,7 @@
           class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono
                  focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
         <p class="text-[10px] text-gray-300">
-          Cards like <span class="font-mono">F-12</span> will be routed to this checklist by the scanner.
+          Cards like <span class="font-mono">F-12</span> will be routed to this set by the scanner.
         </p>
       </div>
 
@@ -48,35 +48,35 @@
       <button (click)="add()" [disabled]="!newName.trim() || saving()"
         class="w-full py-3 rounded-xl bg-[#800020] text-white text-sm font-semibold
                disabled:opacity-40 active:opacity-80 transition-opacity">
-        {{ saving() ? 'Saving…' : 'Add Checklist' }}
+        {{ saving() ? 'Saving…' : 'Add Set' }}
       </button>
     </div>
   </div>
 
-  <!-- ── Existing Checklists ───────────────────────────── -->
+  <!-- ── Existing Sets ──────────────────────────────────── -->
   <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-    Checklists ({{ checklists().length }})
+    Sets ({{ sets().length }})
   </p>
 
-  @if (checklists().length === 0) {
-    <p class="text-sm text-gray-300 text-center py-8">No checklists yet. Add one above.</p>
+  @if (sets().length === 0) {
+    <p class="text-sm text-gray-300 text-center py-8">No sets yet. Add one above.</p>
   }
 
-  @for (cl of checklists(); track cl.id) {
+  @for (s of sets(); track s.id) {
     <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-2">
       <div class="flex items-center gap-3">
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-semibold text-gray-900">{{ cl.name }}</p>
-          @if (cl.prefix) {
-            <p class="text-[11px] font-mono text-gray-400 mt-0.5">prefix: {{ cl.prefix }}</p>
+          <p class="text-sm font-semibold text-gray-900">{{ s.name }}</p>
+          @if (s.prefix) {
+            <p class="text-[11px] font-mono text-gray-400 mt-0.5">prefix: {{ s.prefix }}</p>
           } @else {
             <p class="text-[11px] text-gray-300 mt-0.5">Base — no prefix</p>
           }
         </div>
-        <button (click)="remove(cl.id)" [disabled]="deleting() === cl.id"
+        <button (click)="remove(s.id)" [disabled]="deleting() === s.id"
           class="w-7 h-7 flex items-center justify-center rounded-full text-gray-300
                  hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40">
-          @if (deleting() === cl.id) {
+          @if (deleting() === s.id) {
             <i class="pi pi-spin pi-spinner text-xs"></i>
           } @else {
             <i class="pi pi-trash text-xs"></i>
@@ -84,7 +84,7 @@
         </button>
       </div>
       <div class="mt-2 pt-2 border-t border-gray-50">
-        <a [routerLink]="['/admin/sets', setId, 'checklists', cl.id, 'parallels']"
+        <a [routerLink]="['/admin/releases', releaseId, 'sets', s.id, 'parallels']"
           class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
-import { SetsService, PendingParallel } from '../../../core/services/sets';
+import { ReleasesService, PendingParallel } from '../../../core/services/releases';
 
 interface PromoteState {
   serial_max: number | null;
@@ -20,7 +20,7 @@ interface PromoteState {
   styleUrl: './pending-parallels.scss',
 })
 export class PendingParallels implements OnInit {
-  private setsService = inject(SetsService);
+  private releasesService = inject(ReleasesService);
   private messageService = inject(MessageService);
 
   items = signal<PendingParallel[]>([]);
@@ -35,20 +35,20 @@ export class PendingParallels implements OnInit {
 
   private async load() {
     this.loading.set(true);
-    this.items.set(await this.setsService.getPendingParallels());
+    this.items.set(await this.releasesService.getPendingParallels());
     this.loading.set(false);
   }
 
-  setName(item: PendingParallel): string {
-    const s = item.sets;
-    return s ? `${s.year} ${s.name}` : item.set_id;
+  releaseName(item: PendingParallel): string {
+    const r = item.releases;
+    return r ? `${r.year} ${r.name}` : item.set_id;
   }
 
   sportIcon(item: PendingParallel): string {
     const map: Record<string, string> = {
       Basketball: '🏀', Baseball: '⚾', Football: '🏈', Soccer: '⚽',
     };
-    return map[item.sets?.sport ?? ''] ?? '🃏';
+    return map[item.releases?.sport ?? ''] ?? '🃏';
   }
 
   togglePromote(item: PendingParallel) {
@@ -67,7 +67,7 @@ export class PendingParallels implements OnInit {
     const state = this.promoteState(item);
     if (!state) return;
     this.working.set(item.id);
-    const { error } = await this.setsService.approveParallel(item, state) as any;
+    const { error } = await this.releasesService.approveParallel(item, state) as any;
     this.working.set(null);
     if (error) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: error.message });
@@ -79,7 +79,7 @@ export class PendingParallels implements OnInit {
 
   async dismiss(item: PendingParallel) {
     this.working.set(item.id);
-    await this.setsService.dismissParallel(item.id);
+    await this.releasesService.dismissParallel(item.id);
     this.working.set(null);
     await this.load();
   }

@@ -1,15 +1,11 @@
 import { Injectable } from '@angular/core';
 import { AuthService } from './auth';
 
-export interface ChecklistRecord {
-  id: string;
-  set_id: string;
-  name: string;       // e.g. "Base Set", "Fireworks", "Monopoly Money"
-  prefix: string | null; // e.g. "F-", "M-"; null = base set
-  created_at: string;
-}
+// A Release is the top-level product (e.g. "2025 Topps Chrome").
+// A Set is a subset within a release (e.g. "Base", "Heavy Hitters", "Fresh Faces").
+// Parallels are variations of a set (e.g. "Silver", "Sapphire", "X-Factor").
 
-export interface SetRecord {
+export interface ReleaseRecord {
   id: string;
   name: string;
   year: number;
@@ -20,11 +16,21 @@ export interface SetRecord {
   created_at: string;
 }
 
-export type CreateSetPayload = Omit<SetRecord, 'id' | 'created_at'>;
+export type CreateReleasePayload = Omit<ReleaseRecord, 'id' | 'created_at'>;
+
+// A SetRecord represents a named subset within a release (what was previously called a "checklist").
+// The DB column `set_id` is the FK to the parent releases table.
+export interface SetRecord {
+  id: string;
+  set_id: string;       // FK → releases.id
+  name: string;         // e.g. "Base Set", "Heavy Hitters", "Fresh Faces"
+  prefix: string | null; // e.g. "F-", "M-"; null = base set
+  created_at: string;
+}
 
 export interface SetParallel {
   id: string;
-  checklist_id: string;
+  checklist_id: string; // FK → sets.id (DB column kept as-is)
   name: string;
   serial_max: number | null;
   is_auto: boolean;
@@ -37,30 +43,32 @@ export type UpsertParallelPayload = Omit<SetParallel, 'id' | 'created_at'>;
 
 export interface PendingParallel {
   id: string;
-  set_id: string;
+  set_id: string;       // FK → releases.id (DB column kept as-is)
   name: string;
   submitted_by: string | null;
   submission_count: number;
   status: 'pending' | 'approved' | 'dismissed';
   created_at: string;
   // joined
-  sets?: { name: string; year: number; sport: string };
+  releases?: { name: string; year: number; sport: string };
 }
 
 @Injectable({ providedIn: 'root' })
-export class SetsService {
+export class ReleasesService {
   constructor(private auth: AuthService) {}
 
   private get db() {
-    return this.auth.getClient().from('sets');
+    return this.auth.getClient().from('releases');
   }
 
-  async getSets(): Promise<SetRecord[]> {
+  // ── Releases ──────────────────────────────────────────────────────────────
+
+  async getReleases(): Promise<ReleaseRecord[]> {
     const { data } = await this.db
       .select('*')
       .order('year', { ascending: false })
       .order('name');
-    return (data as SetRecord[]) ?? [];
+    return (data as ReleaseRecord[]) ?? [];
   }
 
   async checkDuplicate(name: string, year: number, sport: string): Promise<boolean> {
@@ -73,40 +81,40 @@ export class SetsService {
     return (data?.length ?? 0) > 0;
   }
 
-  async createSet(payload: CreateSetPayload) {
+  async createRelease(payload: CreateReleasePayload) {
     return this.db.insert(payload).select().single();
   }
 
-  async searchSets(query: string): Promise<SetRecord[]> {
+  async searchReleases(query: string): Promise<ReleaseRecord[]> {
     const { data } = await this.db
       .select('*')
       .ilike('name', `%${query}%`)
       .order('year', { ascending: false })
       .limit(10);
+    return (data as ReleaseRecord[]) ?? [];
+  }
+
+  // ── Sets (subsets within a release) ──────────────────────────────────────
+
+  async getSets(releaseId: string): Promise<SetRecord[]> {
+    const { data } = await this.auth.getClient()
+      .from('sets')
+      .select('*')
+      .eq('set_id', releaseId)
+      .order('name');
     return (data as SetRecord[]) ?? [];
   }
 
-  // ── Checklists ────────────────────────────────────────────────────────────
-
-  async getChecklists(setId: string): Promise<ChecklistRecord[]> {
-    const { data } = await this.auth.getClient()
-      .from('checklists')
-      .select('*')
-      .eq('set_id', setId)
-      .order('name');
-    return (data as ChecklistRecord[]) ?? [];
-  }
-
-  async createChecklist(setId: string, name: string, prefix: string | null) {
+  async createSet(releaseId: string, name: string, prefix: string | null) {
     return this.auth.getClient()
-      .from('checklists')
-      .insert({ set_id: setId, name, prefix })
+      .from('sets')
+      .insert({ set_id: releaseId, name, prefix })
       .select()
       .single();
   }
 
-  async deleteChecklist(id: string) {
-    return this.auth.getClient().from('checklists').delete().eq('id', id);
+  async deleteSet(id: string) {
+    return this.auth.getClient().from('sets').delete().eq('id', id);
   }
 
   // ── Parallels ─────────────────────────────────────────────────────────────
@@ -115,10 +123,10 @@ export class SetsService {
     return this.auth.getClient().from('set_parallels');
   }
 
-  async getParallels(checklistId: string): Promise<SetParallel[]> {
+  async getParallels(setId: string): Promise<SetParallel[]> {
     const { data } = await this.parallelsDb
       .select('*')
-      .eq('checklist_id', checklistId)
+      .eq('checklist_id', setId)
       .order('sort_order')
       .order('name');
     return (data as SetParallel[]) ?? [];
@@ -140,10 +148,10 @@ export class SetsService {
   }
 
   /** Called from the Add Card dialog when user picks "Other…". Fire-and-forget safe. */
-  async submitPendingParallel(setId: string, name: string): Promise<void> {
+  async submitPendingParallel(releaseId: string, name: string): Promise<void> {
     const { data: { user } } = await this.auth.getClient().auth.getUser();
     await this.auth.getClient().rpc('submit_pending_parallel', {
-      p_set_id: setId,
+      p_set_id: releaseId,
       p_name: name,
       p_user_id: user?.id ?? null,
     });
@@ -151,7 +159,7 @@ export class SetsService {
 
   async getPendingParallels(): Promise<PendingParallel[]> {
     const { data } = await this.pendingDb
-      .select('*, sets(name, year, sport)')
+      .select('*, releases(name, year, sport)')
       .eq('status', 'pending')
       .order('submission_count', { ascending: false })
       .order('created_at');
@@ -169,14 +177,14 @@ export class SetsService {
     pending: PendingParallel,
     extras: { serial_max: number | null; is_auto: boolean; color_hex: string | null }
   ) {
-    // Parallels belong to checklists — default to the base checklist (null prefix) of the set
-    const checklists = await this.getChecklists(pending.set_id);
-    const baseChecklist = checklists.find(c => c.prefix === null) ?? checklists[0];
-    if (!baseChecklist) return { error: { message: 'No checklist found for this set' } };
+    // Parallels belong to sets — default to the base set (null prefix) of the release
+    const sets = await this.getSets(pending.set_id);
+    const baseSet = sets.find(s => s.prefix === null) ?? sets[0];
+    if (!baseSet) return { error: { message: 'No set found for this release' } };
 
     const { error } = await this.parallelsDb.upsert(
       {
-        checklist_id: baseChecklist.id,
+        checklist_id: baseSet.id,
         name: pending.name,
         serial_max: extras.serial_max,
         is_auto: extras.is_auto,

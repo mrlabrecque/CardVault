@@ -5,30 +5,30 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
-import { SetsService, SetRecord, UpsertParallelPayload } from '../../../core/services/sets';
+import { ReleasesService, ReleaseRecord, UpsertParallelPayload } from '../../../core/services/releases';
 
 @Component({
-  selector: 'app-set-builder',
+  selector: 'app-release-builder',
   imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterLink, Toast],
   providers: [MessageService],
   templateUrl: './set-builder.html',
   styleUrl: './set-builder.scss',
 })
-export class SetBuilder implements OnInit {
+export class ReleaseBuilder implements OnInit {
   private fb = inject(FormBuilder);
-  private setsService = inject(SetsService);
+  private releasesService = inject(ReleasesService);
   private messageService = inject(MessageService);
 
   readonly sports = ['Basketball', 'Baseball', 'Football', 'Soccer'];
   readonly releaseTypes = ['Hobby', 'Retail', 'FOTL'];
 
-  sets = signal<SetRecord[]>([]);
+  releases = signal<ReleaseRecord[]>([]);
   saving = signal(false);
   duplicateError = signal(false);
   templatePreview = signal('');
 
   bulkParallels = '';
-  bulkChecklists = '';
+  bulkSets = '';
 
   form = this.fb.group({
     name: ['', Validators.required],
@@ -39,7 +39,7 @@ export class SetBuilder implements OnInit {
   });
 
   ngOnInit() {
-    this.loadSets();
+    this.loadReleases();
     this.form.valueChanges.subscribe(() => this.updatePreview());
     this.updatePreview();
   }
@@ -55,9 +55,9 @@ export class SetBuilder implements OnInit {
     this.templatePreview.set(preview);
   }
 
-  private async loadSets() {
-    const data = await this.setsService.getSets();
-    this.sets.set(data);
+  private async loadReleases() {
+    const data = await this.releasesService.getReleases();
+    this.releases.set(data);
   }
 
   generateSlug(): string {
@@ -77,7 +77,7 @@ export class SetBuilder implements OnInit {
     this.duplicateError.set(false);
 
     const { name, year, sport } = this.form.value;
-    const isDupe = await this.setsService.checkDuplicate(name!, year!, sport!);
+    const isDupe = await this.releasesService.checkDuplicate(name!, year!, sport!);
     if (isDupe) {
       this.duplicateError.set(true);
       this.saving.set(false);
@@ -93,36 +93,36 @@ export class SetBuilder implements OnInit {
       set_slug: this.generateSlug(),
     };
 
-    const { data: newSet, error } = await this.setsService.createSet(payload);
+    const { data: newRelease, error } = await this.releasesService.createRelease(payload);
     this.saving.set(false);
 
     if (error) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: error.message });
     } else {
-      const setId = newSet!.id;
+      const releaseId = newRelease!.id;
 
-      // Always create the Base Set checklist — capture its ID for parallels
-      const { data: baseChecklist } = await this.setsService.createChecklist(setId, 'Base Set', null);
+      // Always create the Base Set — capture its ID for parallels
+      const { data: baseSet } = await this.releasesService.createSet(releaseId, 'Base Set', null);
 
-      // Create any additional insert checklists
-      const extraChecklists = this.parseChecklists(setId);
-      for (const cl of extraChecklists) {
-        await this.setsService.createChecklist(cl.setId, cl.name, cl.prefix);
+      // Create any additional insert sets
+      const extraSets = this.parseSets(releaseId);
+      for (const s of extraSets) {
+        await this.releasesService.createSet(s.releaseId, s.name, s.prefix);
       }
 
-      // Save parallels (belong to the Base Set checklist)
+      // Save parallels (belong to the Base Set)
       let parallelCount = 0;
-      if (baseChecklist) {
-        const parallels = this.parseParallels(baseChecklist.id);
+      if (baseSet) {
+        const parallels = this.parseParallels(baseSet.id);
         parallelCount = parallels.length;
         if (parallels.length > 0) {
-          await this.setsService.upsertParallels(parallels);
+          await this.releasesService.upsertParallels(parallels);
         }
       }
 
-      const clNote = extraChecklists.length > 0 ? ` + ${extraChecklists.length + 1} checklists` : '';
+      const setNote = extraSets.length > 0 ? ` + ${extraSets.length + 1} sets` : '';
       const parallelNote = parallelCount > 0 ? `, ${parallelCount} parallels` : '';
-      this.messageService.add({ severity: 'success', summary: 'Set Created', detail: `"${name}" added${clNote}${parallelNote}.` });
+      this.messageService.add({ severity: 'success', summary: 'Release Created', detail: `"${name}" added${setNote}${parallelNote}.` });
       this.form.reset({
         name: '',
         year: new Date().getFullYear(),
@@ -131,24 +131,24 @@ export class SetBuilder implements OnInit {
         ebay_search_template: '{year} {brand} #{card_number} {player_name} PSA',
       });
       this.bulkParallels = '';
-      this.bulkChecklists = '';
-      await this.loadSets();
+      this.bulkSets = '';
+      await this.loadReleases();
     }
   }
 
-  private parseChecklists(setId: string): { setId: string; name: string; prefix: string | null }[] {
-    if (!this.bulkChecklists.trim()) return [];
-    return this.bulkChecklists
+  private parseSets(releaseId: string): { releaseId: string; name: string; prefix: string | null }[] {
+    if (!this.bulkSets.trim()) return [];
+    return this.bulkSets
       .split(',')
       .map(s => s.trim())
       .filter(s => s.length > 0)
       .map(raw => {
         const [name, prefix] = raw.split(':').map(p => p.trim());
-        return { setId, name, prefix: prefix || null };
+        return { releaseId, name, prefix: prefix || null };
       });
   }
 
-  private parseParallels(checklistId: string): UpsertParallelPayload[] {
+  private parseParallels(setId: string): UpsertParallelPayload[] {
     if (!this.bulkParallels.trim()) return [];
     return this.bulkParallels
       .split(',')
@@ -158,7 +158,7 @@ export class SetBuilder implements OnInit {
         const parts = raw.split(':').map(p => p.trim());
         const serial_max = parts[1] ? parseInt(parts[1], 10) : null;
         return {
-          checklist_id: checklistId,
+          checklist_id: setId,
           name: parts[0],
           serial_max: serial_max !== null && !isNaN(serial_max) ? serial_max : null,
           is_auto: parts[2]?.toLowerCase() === 'auto',

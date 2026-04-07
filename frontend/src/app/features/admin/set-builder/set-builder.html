@@ -10,9 +10,9 @@
     Dashboard
   </a>
 
-  <!-- ── New Set Form ───────────────────────────────── -->
+  <!-- ── New Release Form ──────────────────────────── -->
   <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
-    <h2 class="text-base font-bold text-gray-900 mb-4">New Set</h2>
+    <h2 class="text-base font-bold text-gray-900 mb-4">New Release</h2>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
 
@@ -100,17 +100,17 @@
       <!-- Duplicate error -->
       @if (duplicateError()) {
         <div class="bg-red-50 border border-red-200 rounded-xl px-3.5 py-3 text-xs text-red-700">
-          A set with this name, year, and sport already exists.
+          A release with this name, year, and sport already exists.
         </div>
       }
 
-      <!-- Checklists (inserts) -->
+      <!-- Insert Sets -->
       <div class="flex flex-col gap-1">
         <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-          Insert Checklists <span class="font-normal normal-case">(optional — Base Set always created)</span>
+          Insert Sets <span class="font-normal normal-case">(optional — Base Set always created)</span>
         </label>
         <textarea
-          [(ngModel)]="bulkChecklists"
+          [(ngModel)]="bulkSets"
           [ngModelOptions]="{standalone: true}"
           rows="2"
           placeholder="Fireworks:F-, Monopoly Money:M-, Downtown:D-"
@@ -148,23 +148,23 @@
         [disabled]="saving()"
         class="w-full bg-[#800020] text-white rounded-xl py-3 text-sm font-semibold tracking-wide disabled:opacity-40 active:opacity-80 transition-opacity mt-1"
       >
-        {{ saving() ? 'Saving…' : 'Create Set' }}
+        {{ saving() ? 'Saving…' : 'Create Release' }}
       </button>
 
     </form>
   </div>
 
-  <!-- ── Existing Sets ──────────────────────────────── -->
+  <!-- ── Existing Releases ─────────────────────────── -->
   <div>
     <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-      Existing Sets ({{ sets().length }})
+      Existing Releases ({{ releases().length }})
     </p>
 
-    @if (sets().length === 0) {
-      <p class="text-sm text-gray-300 text-center py-10">No sets yet. Create one above.</p>
+    @if (releases().length === 0) {
+      <p class="text-sm text-gray-300 text-center py-10">No releases yet. Create one above.</p>
     }
 
-    @for (set of sets(); track set.id) {
+    @for (set of releases(); track set.id) {
       <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-2">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
@@ -182,14 +182,14 @@
         }
         <div class="flex items-center gap-4 mt-2.5">
           <a
-            [routerLink]="['/admin/sets', set.id, 'checklists']"
+            [routerLink]="['/admin/releases', set.id, 'sets']"
             class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
               <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
             </svg>
-            Checklists &amp; Parallels
+            Sets &amp; Parallels
           </a>
         </div>
       </div>

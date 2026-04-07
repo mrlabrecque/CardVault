@@ -3,28 +3,28 @@
 <div class="px-4 pt-5 pb-10">
 
   <!-- Back link -->
-  <a [routerLink]="['/admin/sets', setId, 'checklists']"
+  <a [routerLink]="['/admin/releases', releaseId, 'sets']"
     class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-700 transition-colors mb-5">
     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="15 18 9 12 15 6"/>
     </svg>
-    Checklists
+    Sets
   </a>
 
-  <!-- Set + checklist header -->
-  @if (set()) {
+  <!-- Release + set header -->
+  @if (release()) {
     <div class="mb-5">
       <h1 class="text-lg font-bold text-gray-900 leading-tight">
-        {{ set()!.year }} {{ set()!.name }}
+        {{ release()!.year }} {{ release()!.name }}
       </h1>
       <p class="text-xs text-gray-400 mt-0.5">
-        {{ sportIcon(set()!.sport) }} {{ set()!.sport }} &middot; {{ set()!.release_type }}
+        {{ sportIcon(release()!.sport) }} {{ release()!.sport }} &middot; {{ release()!.release_type }}
       </p>
-      @if (checklist()) {
+      @if (set()) {
         <p class="text-sm font-semibold text-[#800020] mt-2">
-          {{ checklist()!.name }}
-          @if (checklist()!.prefix) {
-            <span class="font-mono font-normal text-gray-400 text-xs ml-1">({{ checklist()!.prefix }})</span>
+          {{ set()!.name }}
+          @if (set()!.prefix) {
+            <span class="font-mono font-normal text-gray-400 text-xs ml-1">({{ set()!.prefix }})</span>
           }
         </p>
       }

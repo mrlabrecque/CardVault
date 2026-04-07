@@ -24,10 +24,10 @@
     <!-- Scrollable form body -->
     <div class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
 
-      <!-- ── SECTION 1: Set ──────────────────────────────── -->
+      <!-- ── SECTION 1: Release ────────────────────────── -->
       <div class="flex flex-col gap-2">
         <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-          Set <span class="text-red-400">*</span>
+          Release <span class="text-red-400">*</span>
         </label>
 
         @if (selectedSet(); as set) {
@@ -46,7 +46,7 @@
             <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
             <input
               type="text"
-              placeholder="Search sets… (e.g. Prizm, Topps Chrome)"
+              placeholder="Search releases… (e.g. Prizm, Topps Chrome)"
               [ngModel]="setQuery()"
               (ngModelChange)="onSetQueryChange($event)"
               class="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900
@@ -72,11 +72,11 @@
         }
       </div>
 
-      <!-- ── SECTION 1.5: Checklist ──────────────────────────────────── -->
+      <!-- ── SECTION 1.5: Set ──────────────────────────────────────── -->
       @if (selectedSet() && checklists().length > 0) {
         <div class="flex flex-col gap-2">
           <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            Checklist <span class="text-red-400">*</span>
+            Set <span class="text-red-400">*</span>
           </label>
           <div class="flex flex-wrap gap-2">
             @for (cl of checklists(); track cl.id) {
@@ -192,7 +192,7 @@
             </div>
             @if (noCardResults()) {
               <div class="mt-2 flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
-                <span class="text-sm text-gray-500">No cards found in this checklist.</span>
+                <span class="text-sm text-gray-500">No cards found in this set.</span>
                 <button class="text-sm font-semibold text-[#800020]" (click)="startNewCard()">
                   Add new +
                 </button>

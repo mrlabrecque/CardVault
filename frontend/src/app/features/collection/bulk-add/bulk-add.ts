@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CardsService, MasterCard, BulkStagedCard } from '../../../core/services/cards';
-import { SetsService, SetRecord, ChecklistRecord, SetParallel } from '../../../core/services/sets';
+import { ReleasesService, ReleaseRecord, SetRecord, SetParallel } from '../../../core/services/releases';
 
 const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 const FALLBACK_PARALLELS = ['Base', 'Silver Prizm', 'Gold Prizm', 'Red Prizm', 'Blue Prizm', 'Holo', 'Refractor', 'Gold Refractor', 'Xfractor', 'Rookie Patch Auto'];
@@ -14,17 +14,17 @@ const FALLBACK_PARALLELS = ['Base', 'Silver Prizm', 'Gold Prizm', 'Red Prizm', '
   templateUrl: './bulk-add.html',
 })
 export class BulkAdd {
-  private cardsService = inject(CardsService);
-  private setsService  = inject(SetsService);
-  private router       = inject(Router);
+  private cardsService    = inject(CardsService);
+  private releasesService = inject(ReleasesService);
+  private router          = inject(Router);
 
   readonly graders          = GRADERS;
   readonly fallbackParallels = FALLBACK_PARALLELS;
 
   // ── Session ───────────────────────────────────────────────
-  sessionSet        = signal<SetRecord | null>(null);
-  sessionChecklists = signal<ChecklistRecord[]>([]);
-  activeChecklist   = signal<ChecklistRecord | null>(null);
+  sessionSet        = signal<ReleaseRecord | null>(null);
+  sessionChecklists = signal<SetRecord[]>([]);
+  activeChecklist   = signal<SetRecord | null>(null);
   activeParallels   = signal<SetParallel[]>([]);
 
   // ── Box calculator ────────────────────────────────────────
@@ -37,7 +37,7 @@ export class BulkAdd {
   });
 
   setQuery        = signal('');
-  setResults      = signal<SetRecord[]>([]);
+  setResults      = signal<ReleaseRecord[]>([]);
   showSetDropdown = signal(false);
   private setSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -109,13 +109,13 @@ export class BulkAdd {
   }
 
   private async doSetSearch(query: string) {
-    const results = await this.setsService.searchSets(query);
+    const results = await this.releasesService.searchReleases(query);
     this.setResults.set(results);
     this.showSetDropdown.set(results.length > 0);
   }
 
-  async selectSessionSet(set: SetRecord) {
-    this.sessionSet.set(set);
+  async selectSessionSet(release: ReleaseRecord) {
+    this.sessionSet.set(release);
     this.setQuery.set('');
     this.showSetDropdown.set(false);
     this.activeChecklist.set(null);
@@ -123,14 +123,14 @@ export class BulkAdd {
     this.boxPrice.set(null);
     this.boxQty.set(null);
 
-    const checklists = await this.setsService.getChecklists(set.id);
-    this.sessionChecklists.set(checklists);
+    const sets = await this.releasesService.getSets(release.id);
+    this.sessionChecklists.set(sets);
     this.resetForm();
   }
 
-  async selectChecklist(cl: ChecklistRecord) {
-    this.activeChecklist.set(cl);
-    this.activeParallels.set(await this.setsService.getParallels(cl.id));
+  async selectChecklist(s: SetRecord) {
+    this.activeChecklist.set(s);
+    this.activeParallels.set(await this.releasesService.getParallels(s.id));
     this.resetForm();
   }
 
@@ -242,7 +242,7 @@ export class BulkAdd {
 
     // Fire-and-forget pending parallel if user typed a custom one
     if (this.parallelIsOther() && this.selectedParallelName().trim() && this.sessionSet()) {
-      this.setsService.submitPendingParallel(this.sessionSet()!.id, this.selectedParallelName().trim());
+      this.releasesService.submitPendingParallel(this.sessionSet()!.id, this.selectedParallelName().trim());
     }
 
     // Reset card identity + instance fields; keep checklist + parallel context

@@ -4,7 +4,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
-import { SetsService, SetRecord, SetParallel, ChecklistRecord } from '../../../core/services/sets';
+import { ReleasesService, ReleaseRecord, SetParallel, SetRecord } from '../../../core/services/releases';
 
 interface ParsedParallel {
   name: string;
@@ -26,11 +26,11 @@ interface ParsedParallel {
 })
 export class ParallelManager implements OnInit {
   private route = inject(ActivatedRoute);
-  private setsService = inject(SetsService);
+  private releasesService = inject(ReleasesService);
   private messageService = inject(MessageService);
 
+  release = signal<ReleaseRecord | null>(null);
   set = signal<SetRecord | null>(null);
-  checklist = signal<ChecklistRecord | null>(null);
   parallels = signal<SetParallel[]>([]);
   saving = signal(false);
   deleting = signal<string | null>(null);
@@ -39,29 +39,29 @@ export class ParallelManager implements OnInit {
   parseError = signal('');
   parsed = signal<ParsedParallel[]>([]);
 
-  readonly setId       = this.route.snapshot.paramMap.get('setId')!;
-  readonly checklistId = this.route.snapshot.paramMap.get('checklistId')!;
+  readonly releaseId = this.route.snapshot.paramMap.get('releaseId')!;
+  readonly setId     = this.route.snapshot.paramMap.get('setId')!;
 
   parallelCount = computed(() => this.parallels().length);
 
   ngOnInit() {
+    this.loadRelease();
     this.loadSet();
-    this.loadChecklist();
     this.loadParallels();
   }
 
+  private async loadRelease() {
+    const releases = await this.releasesService.getReleases();
+    this.release.set(releases.find(r => r.id === this.releaseId) ?? null);
+  }
+
   private async loadSet() {
-    const sets = await this.setsService.getSets();
+    const sets = await this.releasesService.getSets(this.releaseId);
     this.set.set(sets.find(s => s.id === this.setId) ?? null);
   }
 
-  private async loadChecklist() {
-    const checklists = await this.setsService.getChecklists(this.setId);
-    this.checklist.set(checklists.find(c => c.id === this.checklistId) ?? null);
-  }
-
   private async loadParallels() {
-    const data = await this.setsService.getParallels(this.checklistId);
+    const data = await this.releasesService.getParallels(this.setId);
     this.parallels.set(data);
   }
 
@@ -114,7 +114,7 @@ export class ParallelManager implements OnInit {
 
     this.saving.set(true);
     const payload = items.map((p, i) => ({
-      checklist_id: this.checklistId,
+      checklist_id: this.setId,
       name: p.name,
       serial_max: p.serial_max,
       is_auto: p.is_auto,
@@ -122,7 +122,7 @@ export class ParallelManager implements OnInit {
       sort_order: i,
     }));
 
-    const { error } = await this.setsService.upsertParallels(payload);
+    const { error } = await this.releasesService.upsertParallels(payload);
     this.saving.set(false);
 
     if (error) {
@@ -136,7 +136,7 @@ export class ParallelManager implements OnInit {
 
   async deleteParallel(p: SetParallel) {
     this.deleting.set(p.id);
-    await this.setsService.deleteParallel(p.id);
+    await this.releasesService.deleteParallel(p.id);
     this.deleting.set(null);
     await this.loadParallels();
   }

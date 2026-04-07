@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ScannerService, ParsedCard } from '../../core/services/scanner';
 import { CardsService, MasterCard, StagedCardPayload } from '../../core/services/cards';
-import { SetsService, SetRecord, SetParallel, ChecklistRecord } from '../../core/services/sets';
+import { ReleasesService, ReleaseRecord, SetRecord, SetParallel } from '../../core/services/releases';
 import { UiService } from '../../core/services/ui';
 
 export type ScanState = 'no-session' | 'ready' | 'processing' | 'matched' | 'no-match' | 'discovery';
@@ -30,7 +30,7 @@ export class Scanner implements OnInit, OnDestroy {
 
   private scannerService = inject(ScannerService);
   private cardsService   = inject(CardsService);
-  private setsService    = inject(SetsService);
+  private releasesService = inject(ReleasesService);
   private router         = inject(Router);
   readonly ui            = inject(UiService);
   private stream: MediaStream | null = null;
@@ -38,14 +38,14 @@ export class Scanner implements OnInit, OnDestroy {
 
   // ── Session state ────────────────────────────────────────
   scanState = signal<ScanState>('no-session');
-  sessionSet = signal<SetRecord | null>(null);
-  sessionChecklists = signal<ChecklistRecord[]>([]);
+  sessionSet = signal<ReleaseRecord | null>(null);
+  sessionChecklists = signal<SetRecord[]>([]);
   sessionParallels  = signal<SetParallel[]>([]);
-  activeChecklist   = signal<ChecklistRecord | null>(null);
+  activeChecklist   = signal<SetRecord | null>(null);
 
   // ── Set picker (used to start a session) ─────────────────
   setQuery   = signal('');
-  setResults = signal<SetRecord[]>([]);
+  setResults = signal<ReleaseRecord[]>([]);
   showSetDropdown = signal(false);
   private setSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -93,25 +93,25 @@ export class Scanner implements OnInit, OnDestroy {
   }
 
   private async doSetSearch(query: string) {
-    const results = await this.setsService.searchSets(query);
+    const results = await this.releasesService.searchReleases(query);
     this.setResults.set(results);
     this.showSetDropdown.set(results.length > 0);
   }
 
-  async selectSessionSet(set: SetRecord) {
-    this.sessionSet.set(set);
+  async selectSessionSet(release: ReleaseRecord) {
+    this.sessionSet.set(release);
     this.setQuery.set('');
     this.showSetDropdown.set(false);
 
-    const checklists = await this.setsService.getChecklists(set.id);
-    const baseChecklist = checklists.find(c => c.prefix === null) ?? checklists[0] ?? null;
+    const sets = await this.releasesService.getSets(release.id);
+    const baseChecklist = sets.find(s => s.prefix === null) ?? sets[0] ?? null;
 
     const [parallels, masterCards] = await Promise.all([
-      baseChecklist ? this.setsService.getParallels(baseChecklist.id) : Promise.resolve([]),
+      baseChecklist ? this.releasesService.getParallels(baseChecklist.id) : Promise.resolve([]),
       baseChecklist ? this.cardsService.getMasterCardsForChecklist(baseChecklist.id) : Promise.resolve([]),
     ]);
 
-    this.sessionChecklists.set(checklists);
+    this.sessionChecklists.set(sets);
     this.sessionParallels.set(parallels);
     this.activeChecklist.set(baseChecklist);
 
@@ -204,7 +204,7 @@ export class Scanner implements OnInit, OnDestroy {
         this.activeChecklist.set(targetChecklist);
         const [cards, parallels] = await Promise.all([
           this.cardsService.getMasterCardsForChecklist(targetChecklist.id),
-          this.setsService.getParallels(targetChecklist.id),
+          this.releasesService.getParallels(targetChecklist.id),
         ]);
         this.scannerService.buildIndex(targetChecklist.id, cards);
         this.sessionParallels.set(parallels);

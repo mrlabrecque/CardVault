@@ -24,21 +24,21 @@
     @if (sessionSet()) {
       <button (click)="endSession()"
         class="text-xs text-gray-400 hover:text-gray-700 transition-colors px-2 py-1 rounded-lg hover:bg-gray-100">
-        Change Set
+        Change Release
       </button>
     }
   </div>
 
   <div class="px-4 pt-5 pb-32 flex flex-col gap-5">
 
-    <!-- ── No session: Set picker ──────────────────────────── -->
+    <!-- ── No session: Release picker ───────────────────────── -->
     @if (!sessionSet()) {
       <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h2 class="text-sm font-bold text-gray-900 mb-1">Choose a Set</h2>
-        <p class="text-xs text-gray-400 mb-4">Search for the set you're adding cards from.</p>
+        <h2 class="text-sm font-bold text-gray-900 mb-1">Choose a Release</h2>
+        <p class="text-xs text-gray-400 mb-4">Search for the release you're adding cards from.</p>
         <div class="relative">
           <input type="text" [ngModel]="setQuery()" (ngModelChange)="onSetQueryChange($event)"
-            placeholder="Search sets…"
+            placeholder="Search releases…"
             class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
                    focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
           @if (showSetDropdown() && setResults().length > 0) {
@@ -57,11 +57,11 @@
       </div>
     }
 
-    <!-- ── Checklist picker (shown after set is chosen, before form) ── -->
+    <!-- ── Set picker (shown after release is chosen, before form) ──── -->
     @if (sessionSet() && !activeChecklist() && sessionChecklists().length > 0) {
       <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h2 class="text-sm font-bold text-gray-900 mb-1">Which checklist?</h2>
-        <p class="text-xs text-gray-400 mb-4">You can switch checklists at any time while adding cards.</p>
+        <h2 class="text-sm font-bold text-gray-900 mb-1">Which set?</h2>
+        <p class="text-xs text-gray-400 mb-4">You can switch sets at any time while adding cards.</p>
         <div class="flex flex-col gap-2">
           @for (cl of sessionChecklists(); track cl.id) {
             <button (click)="selectChecklist(cl)"
@@ -96,7 +96,7 @@
     <!-- ── Active session ──────────────────────────────────── -->
     @if (sessionSet() && activeChecklist()) {
 
-      <!-- Checklist tabs (switch mid-session) -->
+      <!-- Set tabs (switch mid-session) -->
       @if (sessionChecklists().length > 1) {
         <div class="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none">
           @for (cl of sessionChecklists(); track cl.id) {
@@ -235,7 +235,7 @@
             </div>
             @if (noPlayerResults()) {
               <div class="mt-2 flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
-                <span class="text-sm text-gray-500">No cards found in this checklist.</span>
+                <span class="text-sm text-gray-500">No cards found in this set.</span>
                 <button class="text-sm font-semibold text-[#800020]" (click)="startNewCard()">
                   Add new +
                 </button>

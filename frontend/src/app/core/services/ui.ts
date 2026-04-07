@@ -1,13 +1,13 @@
 import { Injectable, signal } from '@angular/core';
-import { SetRecord, ChecklistRecord, SetParallel } from './sets';
+import { ReleaseRecord, SetRecord, SetParallel } from './releases';
 
 export interface AddCardPrefill {
   player?: string;
   cardNumber?: string;
-  set?: SetRecord;
-  checklist?: ChecklistRecord;
-  checklists?: ChecklistRecord[];  // all checklists for the set
-  parallels?: SetParallel[];       // all parallels for the set
+  set?: ReleaseRecord;
+  checklist?: SetRecord;
+  checklists?: SetRecord[];    // all sets within the release
+  parallels?: SetParallel[];   // all parallels for the selected set
 }
 
 @Injectable({ providedIn: 'root' })

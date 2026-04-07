@@ -52,26 +52,27 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Set price thresholds on specific cards
 - Automated email alerts when eBay listings appear below the set threshold
 
-### F. Admin — Set Management
+### F. Admin — Release Management
 - Only accessible when `isAppAdmin` is `true`; guarded by `adminGuard` at the route level
-- **"Manage Sets" link** appears in the avatar dropdown (above Sign Out) for admin users only
-- Route: `/admin/sets` — `SetBuilder` component (`features/admin/set-builder/`)
+- **"Manage Releases" link** appears in the avatar dropdown (above Sign Out) for admin users only
+- Route: `/admin/releases` — `ReleaseBuilder` component (`features/admin/set-builder/`)
 - Create new product releases (e.g. "2025 Panini Prizm Basketball") that act as global parents for user cards
 - Fields: `name`, `year`, `sport` (Basketball / Baseball / Football / Soccer), `release_type` (Hobby / Retail / FOTL), `ebay_search_template`
 - Auto-generates a `set_slug` (e.g. `2025-prizm-basketball-hobby`) used in clean URLs
 - Duplicate guard: checks (name, year, sport) before saving; shows inline error if a match exists
 - Real-time eBay template preview replaces `{year}`, `{brand}`, `{player_name}`, `{card_number}` tokens using "Victor Wembanyama #298" as dummy values
-- Success PrimeNG Toast on create; form resets and sets list reloads automatically
-- **Parallels textarea** on the New Set form — comma-separated bulk input (`Silver, Mojo:25, Gold:10:auto`); parallels are upserted immediately after set creation
+- Success PrimeNG Toast on create; form resets and releases list reloads automatically
+- **Parallels textarea** on the New Release form — comma-separated bulk input (`Silver, Mojo:25, Gold:10:auto`); parallels are upserted immediately after release creation
 
-### F2. Admin — Parallel Management
-- Route: `/admin/sets/:setId/parallels` — `ParallelManager` component (`features/admin/parallel-manager/`)
-- Accessible via "Manage Parallels" link on each set row in the Set Builder list
+### F2. Admin — Set & Parallel Management
+- Route: `/admin/releases/:releaseId/sets` — `SetManager` component (`features/admin/checklist-manager/`)
+- Accessible via "Sets & Parallels" link on each release row in the Release Builder list
+- Route: `/admin/releases/:releaseId/sets/:setId/parallels` — `ParallelManager` component (`features/admin/parallel-manager/`)
 - Bulk textarea importer: `Name`, `Name:Max` (numbered), `Name:Max:auto` (numbered auto)
 - "Preview Parallels" parses input into pills before committing; safe to re-run (upsert on `checklist_id, name`)
 - Existing parallels listed with per-item delete (spinner while deleting)
-- `set_parallels` table: `checklist_id` (FK → checklists, **not** set_id), `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
-- Parallels are scoped to a checklist, not the set — inserts (e.g. Fireworks) have independent parallels from the base set
+- `set_parallels` table: `checklist_id` (FK → sets, DB column kept as `checklist_id`), `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
+- Parallels are scoped to a set, not the release — inserts (e.g. Fireworks) have independent parallels from the base set
 
 ### F3. Admin — Pending Parallels Review
 - Route: `/admin/parallels/pending` — `PendingParallels` component (`features/admin/pending-parallels/`)
@@ -79,19 +80,19 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Count loaded in `App` component via `effect()` on `isAppAdmin()` signal — refreshes automatically after login
 - When a user saves a card with an "Other…" parallel, `submit_pending_parallel()` RPC is called silently (fire-and-forget); increments `submission_count` on duplicates; resets dismissed items back to `pending` if re-submitted
 - Admin actions: **Promote** (expands inline form for `serial_max`, `is_auto`, `color_hex` → upserts to `set_parallels` and marks approved) | **Dismiss** (marks dismissed)
-- `pending_parallels` table: `set_id`, `name`, `submitted_by`, `submission_count`, `status` (`pending/approved/dismissed`); RLS: any auth user can insert/update count; admin-only read/delete
+- `pending_parallels` table: `set_id` (FK → releases, DB column kept as `set_id`), `name`, `submitted_by`, `submission_count`, `status` (`pending/approved/dismissed`); RLS: any auth user can insert/update count; admin-only read/delete
 
 ### H. Add Card Flow (Singular & Bulk)
 
 Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the Bulk Add page (`features/collection/bulk-add/`) share the same flow and field conventions:
 
-**Step order**: Set → Checklist → Card → Your Copy
+**Step order**: Release → Set → Card → Your Copy
 
-- **Checklist is always shown** after a set is selected, even if the set has only one checklist. Never auto-select — the user must explicitly choose. `canShowCardSearch` gates the card search until a checklist is selected.
-- **Card search** queries `master_card_definitions` filtered by the selected `checklist_id`.
+- **Set is always shown** after a release is selected, even if the release has only one set. Never auto-select — the user must explicitly choose. `canShowCardSearch` gates the card search until a set is selected.
+- **Card search** queries `master_card_definitions` filtered by the selected set's `checklist_id` (DB column name retained).
 - **"Your Copy" section** contains (in order): Parallel, Price Paid, Serial #, Graded toggle + grade fields. Parallel lives here — not in a separate section — because `parallel_id` is stored on `user_cards`, not `master_card_definitions`.
 - **Card Definition section** (new card only): Player Name, Card #, Serial Number (`serial_max` — the print run, e.g. `/99`), and attribute toggles (RC, AUTO, PATCH, SSP). The field label is "Serial Number" not "Print Run".
-- **Bulk Add header**: When a set is active, the sticky header shows the set name + checklist as title/subtitle — not the static "Bulk Add" label (which is already in the page title bar).
+- **Bulk Add header**: When a release is active, the sticky header shows the release name + set as title/subtitle — not the static "Bulk Add" label (which is already in the page title bar).
 - **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
@@ -281,15 +282,16 @@ Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when onl
 - [x] `profiles` table — `id`, `email`, `is_app_admin`; trigger auto-creates on signup; frontend upserts on every sign-in; RLS locks down admin promotion
 - [x] Database — RLS on `cards`, `lookup_history`, `wishlist`; `master_card_definitions` read-only catalog migration
 - [x] Dashboard, Collection list, Comps search, Wishlist — UI stubs with sample data in place
-- [x] Admin Set Builder — `/admin/sets` route; `SetBuilder` component; `SetsService`; `adminGuard`; `sets` table with RLS; "Manage Sets" link in avatar dropdown
-- [x] Admin Parallel Manager — `/admin/sets/:setId/parallels` route; `ParallelManager` component; bulk importer; `set_parallels` table with RLS
-- [x] Parallel input on New Set form — bulk textarea saves parallels in the same create flow
+- [x] Admin Release Builder — `/admin/releases` route; `ReleaseBuilder` component; `ReleasesService`; `adminGuard`; `releases` table with RLS; "Manage Releases" link in avatar dropdown
+- [x] Admin Set & Parallel Manager — `/admin/releases/:releaseId/sets` + `…/sets/:setId/parallels` routes; `SetManager` + `ParallelManager` components; bulk importer; `set_parallels` table with RLS
+- [x] Parallel input on New Release form — bulk textarea saves parallels in the same create flow
 - [x] Add Card dialog — parallel dropdown feeds from `set_parallels` for the selected set; auto-fills `serial_max`/`is_auto` from metadata; "Other…" escape hatch; falls back to static list if no parallels defined
 - [x] Pending Parallels review queue — `pending_parallels` table + `submit_pending_parallel()` RPC; "Other…" submissions silently queued on card save; `/admin/parallels/pending` route with `PendingParallels` component (promote with inline form, dismiss); "Pending Parallels" link with amber count badge in avatar dropdown
-- [x] Add Card dialog & Bulk Add — aligned flow (Set → Checklist always required → Card → Your Copy); parallel moved into "Your Copy"; Serial Number field in card definition; checklist never auto-selected
+- [x] Add Card dialog & Bulk Add — aligned flow (Release → Set always required → Card → Your Copy); parallel moved into "Your Copy"; Serial Number field in card definition; set never auto-selected
 - [x] Bulk Add page (`features/collection/bulk-add/`) — full manual bulk entry with staging list, commit, serial number tag display
-- [x] `set_parallels` migrated from `set_id` to `checklist_id` scope
+- [x] `set_parallels` scoped to set (`checklist_id` FK, DB column name retained)
 - [x] Collection list — wired to real `user_cards` data; serial number color-coded tags; refresh button inline with price; delete removed from stack header
+- [x] Hierarchy rename: `sets`→`releases`, `checklists`→`sets`, `pending_sets`→`pending_releases` (DB + service + components + routes)
 
 ### Up Next
 - [ ] Dashboard — wire to real Supabase data (P/L, sport distribution, top cards)
@@ -306,12 +308,13 @@ Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when onl
 | `20260404000001_profiles.sql` | `profiles` table + trigger + select/insert RLS |
 | `20260404000002_profiles_insert_policy.sql` | Insert policy for self-service profile creation |
 | `20260404000003_profiles_add_email.sql` | `email` column + update policy + trigger update |
-| `20260404000004_sets.sql` | `sets` table + RLS (all auth users read; admin-only write) |
+| `20260404000004_sets.sql` | Creates `sets` table (now renamed → `releases` by later migration) |
 | `20260404000005_user_cards.sql` | `user_cards` table + extends `master_card_definitions` with card-level fields + RLS |
 | `20260404000006_set_parallels.sql` | `set_parallels` table + RLS (all auth users read; admin-only write) |
 | `20260404000007_pending_parallels.sql` | `pending_parallels` table + RLS + `submit_pending_parallel()` RPC |
-| `20260405000001_checklists.sql` | `checklists` table — each set has one or more checklists (base + inserts) |
+| `20260405000001_checklists.sql` | Creates `checklists` table (now renamed → `sets` by later migration) |
 | `20260405000002_master_cards_refactor.sql` | `master_card_definitions` gains `checklist_id` FK; removes direct `set_id` |
 | `20260405000003_user_cards_parallel_id.sql` | `user_cards` gains `parallel_id` FK → `set_parallels` |
-| `20260405000004_pending_sets.sql` | Pending sets queue |
+| `20260405000004_pending_sets.sql` | Creates `pending_sets` table (now renamed → `pending_releases` by later migration) |
 | `20260405000005_parallels_by_checklist.sql` | Migrates `set_parallels.set_id` → `checklist_id`; unique constraint now on `(checklist_id, name)` |
+| `20260407000001_rename_hierarchy.sql` | Renames `sets`→`releases`, `checklists`→`sets`, `pending_sets`→`pending_releases`; recreates `user_inventory_by_grade` view |

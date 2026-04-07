@@ -23,8 +23,8 @@
           }
           <hr class="avatar-menu__divider" />
           @if (auth.isAppAdmin()) {
-            <a routerLink="/admin/sets" (click)="menuOpen.set(false)" class="avatar-menu__link">
-              Manage Sets
+            <a routerLink="/admin/releases" (click)="menuOpen.set(false)" class="avatar-menu__link">
+              Manage Releases
             </a>
             <a routerLink="/admin/parallels/pending" (click)="menuOpen.set(false)" class="avatar-menu__link flex items-center justify-between">
               <span>Pending Parallels</span>

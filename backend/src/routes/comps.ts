@@ -156,18 +156,18 @@ router.post('/card-value', async (req: AuthRequest, res) => {
         uc.grade_value,
         mcd.player,
         mcd.card_number,
-        mcd.parallel_type,
         mcd.is_rookie,
         mcd.is_auto,
         mcd.is_patch,
         mcd.serial_max,
-        s.name   AS set_name,
-        s.year,
-        s.sport,
-        s.ebay_search_template
+        r.name   AS set_name,
+        r.year,
+        r.sport,
+        r.ebay_search_template
       FROM user_cards uc
       JOIN master_card_definitions mcd ON mcd.id = uc.master_card_id
-      JOIN sets s ON s.id = mcd.set_id
+      LEFT JOIN sets s ON s.id = mcd.checklist_id
+      LEFT JOIN releases r ON r.id = s.set_id
       WHERE uc.id = ${cardId} AND uc.user_id = ${userId}
     `;
 

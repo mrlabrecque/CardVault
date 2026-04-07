@@ -7,9 +7,9 @@ import { ItemDetail } from './features/collection/item-detail/item-detail';
 import { Login } from './core/auth/login/login';
 import { Scanner } from './features/scanner/scanner';
 import { BulkAdd } from './features/collection/bulk-add/bulk-add';
-import { SetBuilder } from './features/admin/set-builder/set-builder';
+import { ReleaseBuilder } from './features/admin/set-builder/set-builder';
 import { ParallelManager } from './features/admin/parallel-manager/parallel-manager';
-import { ChecklistManager } from './features/admin/checklist-manager/checklist-manager';
+import { SetManager } from './features/admin/checklist-manager/checklist-manager';
 import { PendingParallels } from './features/admin/pending-parallels/pending-parallels';
 import { authGuard } from './core/guards/auth-guard';
 import { adminGuard } from './core/guards/admin-guard';
@@ -24,9 +24,9 @@ export const routes: Routes = [
   { path: 'wishlist',      component: Wishlist,      canActivate: [authGuard] },
   { path: 'scanner',       component: Scanner,       canActivate: [authGuard] },
   { path: 'bulk-add',      component: BulkAdd,       canActivate: [authGuard] },
-  { path: 'admin/sets',    component: SetBuilder,    canActivate: [adminGuard] },
-  { path: 'admin/sets/:setId/checklists/:checklistId/parallels', component: ParallelManager, canActivate: [adminGuard] },
-  { path: 'admin/sets/:setId/checklists', component: ChecklistManager,  canActivate: [adminGuard] },
+  { path: 'admin/releases',    component: ReleaseBuilder, canActivate: [adminGuard] },
+  { path: 'admin/releases/:releaseId/sets/:setId/parallels', component: ParallelManager, canActivate: [adminGuard] },
+  { path: 'admin/releases/:releaseId/sets', component: SetManager, canActivate: [adminGuard] },
   { path: 'admin/parallels/pending', component: PendingParallels, canActivate: [adminGuard] },
   { path: '**', redirectTo: 'dashboard' },
 ];
