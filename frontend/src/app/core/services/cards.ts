@@ -30,7 +30,7 @@ export interface MasterCard {
   id: string;
   player: string;
   card_number: string | null;
-  checklist_id: string | null;
+  set_id: string | null;
   is_rookie: boolean;
   is_auto: boolean;
   is_patch: boolean;
@@ -54,7 +54,7 @@ export interface SoldComp {
 }
 
 export interface AddCardFormData {
-  checklistId: string | null;  // null for sets that pre-date the checklists table
+  setId: string | null;  // FK → sets.id; null for cards not yet linked to a set
   masterCardId: string | null;   // null = create new master card
   // New master card fields (used when masterCardId is null)
   player: string;
@@ -87,7 +87,7 @@ export interface BulkStagedCard {
   masterCardId: string | null;  // null = will be created on commit
   player: string;
   cardNumber: string | null;
-  checklistId: string | null;
+  setId: string | null;
   checklistName: string | null;
   parallelId: string | null;
   parallelName: string;
@@ -194,24 +194,24 @@ export class CardsService {
     this.cards.set(cards);
   }
 
-  async searchMasterCards(checklistId: string | null, query: string): Promise<MasterCard[]> {
+  async searchMasterCards(setId: string | null, query: string): Promise<MasterCard[]> {
     if (!query.trim()) return [];
     let q = this.supabase
       .from('master_card_definitions')
-      .select('id, player, card_number, checklist_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
+      .select('id, player, card_number, set_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
       .or(`player.ilike.%${query}%,card_number.ilike.%${query}%`)
       .limit(20);
-    if (checklistId) q = q.eq('checklist_id', checklistId);
+    if (setId) q = q.eq('set_id', setId);
     const { data } = await q;
     return (data as MasterCard[]) ?? [];
   }
 
-  /** Load all master cards for a checklist into memory (used by scanner Fuse index). */
-  async getMasterCardsForChecklist(checklistId: string): Promise<MasterCard[]> {
+  /** Load all master cards for a set into memory (used by scanner Fuse index). */
+  async getMasterCardsForSet(setId: string): Promise<MasterCard[]> {
     const { data } = await this.supabase
       .from('master_card_definitions')
-      .select('id, player, card_number, checklist_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
-      .eq('checklist_id', checklistId);
+      .select('id, player, card_number, set_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
+      .eq('set_id', setId);
     return (data as MasterCard[]) ?? [];
   }
 
@@ -225,7 +225,7 @@ export class CardsService {
       const { data: newMaster, error: masterError } = await this.supabase
         .from('master_card_definitions')
         .insert({
-          checklist_id: formData.checklistId || null,
+          set_id: formData.setId || null,
           player: formData.player,
           card_number: formData.cardNumber || null,
           serial_max: formData.serialMax || null,
@@ -289,7 +289,7 @@ export class CardsService {
       const { data: masters, error: masterError } = await this.supabase
         .from('master_card_definitions')
         .insert(newCards.map(c => ({
-          checklist_id: c.checklistId,
+          set_id: c.setId,
           player: c.player,
           card_number: c.cardNumber || null,
           serial_max: c.serialMax || null,

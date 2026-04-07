@@ -18,7 +18,7 @@ export class ScannerService {
   private auth = inject(AuthService);
 
   private fuseIndex: Fuse<MasterCard> | null = null;
-  private indexedChecklistId: string | null = null;
+  private indexedSetId: string | null = null;
 
   // ── OCR ─────────────────────────────────────────────────
 
@@ -69,18 +69,18 @@ export class ScannerService {
   // ── Fuzzy Matching ────────────────────────────────────────
 
   /**
-   * Build (or rebuild) the Fuse index for a checklist.
-   * No-op if the same checklist is already indexed.
+   * Build (or rebuild) the Fuse index for a set.
+   * No-op if the same set is already indexed.
    */
-  buildIndex(checklistId: string, cards: MasterCard[]): void {
-    if (this.indexedChecklistId === checklistId) return;
+  buildIndex(setId: string, cards: MasterCard[]): void {
+    if (this.indexedSetId === setId) return;
     this.fuseIndex = new Fuse(cards, {
       keys: ['player'],
       threshold: 0.4,       // allows ~2 character OCR errors
       minMatchCharLength: 3,
       includeScore: true,
     });
-    this.indexedChecklistId = checklistId;
+    this.indexedSetId = setId;
   }
 
   /**
@@ -111,7 +111,7 @@ export class ScannerService {
 
   clearIndex(): void {
     this.fuseIndex = null;
-    this.indexedChecklistId = null;
+    this.indexedSetId = null;
   }
 
   // ── Pending Set Submission ────────────────────────────────

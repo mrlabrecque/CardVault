@@ -225,7 +225,7 @@ export class BulkAdd {
       masterCardId: master?.id ?? null,
       player,
       cardNumber,
-      checklistId: cl?.id ?? null,
+      setId: cl?.id ?? null,
       checklistName: cl?.prefix != null ? cl.name : null,
       parallelId: this.selectedParallelId(),
       parallelName: this.selectedParallelName() || 'Base',

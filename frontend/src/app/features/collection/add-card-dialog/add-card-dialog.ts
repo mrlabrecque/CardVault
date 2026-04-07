@@ -310,7 +310,7 @@ export class AddCardDialog {
     this.saveError.set(null);
 
     const { error, cardId } = await this.cardsService.addCardWithLookup({
-      checklistId: this.selectedChecklist()?.id ?? null,
+      setId: this.selectedChecklist()?.id ?? null,
       masterCardId: this.selectedMasterCard()?.id ?? null,
       player: this.newPlayer(),
       cardNumber: this.newCardNumber(),

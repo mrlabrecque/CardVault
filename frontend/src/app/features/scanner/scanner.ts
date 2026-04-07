@@ -108,7 +108,7 @@ export class Scanner implements OnInit, OnDestroy {
 
     const [parallels, masterCards] = await Promise.all([
       baseChecklist ? this.releasesService.getParallels(baseChecklist.id) : Promise.resolve([]),
-      baseChecklist ? this.cardsService.getMasterCardsForChecklist(baseChecklist.id) : Promise.resolve([]),
+      baseChecklist ? this.cardsService.getMasterCardsForSet(baseChecklist.id) : Promise.resolve([]),
     ]);
 
     this.sessionChecklists.set(sets);
@@ -203,7 +203,7 @@ export class Scanner implements OnInit, OnDestroy {
       if (targetChecklist && targetChecklist.id !== this.activeChecklist()?.id) {
         this.activeChecklist.set(targetChecklist);
         const [cards, parallels] = await Promise.all([
-          this.cardsService.getMasterCardsForChecklist(targetChecklist.id),
+          this.cardsService.getMasterCardsForSet(targetChecklist.id),
           this.releasesService.getParallels(targetChecklist.id),
         ]);
         this.scannerService.buildIndex(targetChecklist.id, cards);

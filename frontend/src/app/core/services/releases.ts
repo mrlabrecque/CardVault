@@ -19,10 +19,9 @@ export interface ReleaseRecord {
 export type CreateReleasePayload = Omit<ReleaseRecord, 'id' | 'created_at'>;
 
 // A SetRecord represents a named subset within a release (what was previously called a "checklist").
-// The DB column `set_id` is the FK to the parent releases table.
 export interface SetRecord {
   id: string;
-  set_id: string;       // FK → releases.id
+  release_id: string;   // FK → releases.id
   name: string;         // e.g. "Base Set", "Heavy Hitters", "Fresh Faces"
   prefix: string | null; // e.g. "F-", "M-"; null = base set
   created_at: string;
@@ -30,7 +29,7 @@ export interface SetRecord {
 
 export interface SetParallel {
   id: string;
-  checklist_id: string; // FK → sets.id (DB column kept as-is)
+  set_id: string;       // FK → sets.id
   name: string;
   serial_max: number | null;
   is_auto: boolean;
@@ -43,14 +42,14 @@ export type UpsertParallelPayload = Omit<SetParallel, 'id' | 'created_at'>;
 
 export interface PendingParallel {
   id: string;
-  set_id: string;       // FK → releases.id (DB column kept as-is)
+  set_id: string;       // FK → sets.id
   name: string;
   submitted_by: string | null;
   submission_count: number;
   status: 'pending' | 'approved' | 'dismissed';
   created_at: string;
-  // joined
-  releases?: { name: string; year: number; sport: string };
+  // joined through sets → releases
+  sets?: { name: string; releases?: { name: string; year: number; sport: string } };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -100,7 +99,7 @@ export class ReleasesService {
     const { data } = await this.auth.getClient()
       .from('sets')
       .select('*')
-      .eq('set_id', releaseId)
+      .eq('release_id', releaseId)
       .order('name');
     return (data as SetRecord[]) ?? [];
   }
@@ -108,7 +107,7 @@ export class ReleasesService {
   async createSet(releaseId: string, name: string, prefix: string | null) {
     return this.auth.getClient()
       .from('sets')
-      .insert({ set_id: releaseId, name, prefix })
+      .insert({ release_id: releaseId, name, prefix })
       .select()
       .single();
   }
@@ -126,7 +125,7 @@ export class ReleasesService {
   async getParallels(setId: string): Promise<SetParallel[]> {
     const { data } = await this.parallelsDb
       .select('*')
-      .eq('checklist_id', setId)
+      .eq('set_id', setId)
       .order('sort_order')
       .order('name');
     return (data as SetParallel[]) ?? [];
@@ -134,7 +133,7 @@ export class ReleasesService {
 
   async upsertParallels(parallels: UpsertParallelPayload[]) {
     return this.parallelsDb
-      .upsert(parallels, { onConflict: 'checklist_id,name', ignoreDuplicates: false });
+      .upsert(parallels, { onConflict: 'set_id,name', ignoreDuplicates: false });
   }
 
   async deleteParallel(id: string) {
@@ -148,10 +147,10 @@ export class ReleasesService {
   }
 
   /** Called from the Add Card dialog when user picks "Other…". Fire-and-forget safe. */
-  async submitPendingParallel(releaseId: string, name: string): Promise<void> {
+  async submitPendingParallel(setId: string, name: string): Promise<void> {
     const { data: { user } } = await this.auth.getClient().auth.getUser();
     await this.auth.getClient().rpc('submit_pending_parallel', {
-      p_set_id: releaseId,
+      p_set_id: setId,
       p_name: name,
       p_user_id: user?.id ?? null,
     });
@@ -159,7 +158,7 @@ export class ReleasesService {
 
   async getPendingParallels(): Promise<PendingParallel[]> {
     const { data } = await this.pendingDb
-      .select('*, releases(name, year, sport)')
+      .select('*, sets(name, releases(name, year, sport))')
       .eq('status', 'pending')
       .order('submission_count', { ascending: false })
       .order('created_at');
@@ -177,21 +176,17 @@ export class ReleasesService {
     pending: PendingParallel,
     extras: { serial_max: number | null; is_auto: boolean; color_hex: string | null }
   ) {
-    // Parallels belong to sets — default to the base set (null prefix) of the release
-    const sets = await this.getSets(pending.set_id);
-    const baseSet = sets.find(s => s.prefix === null) ?? sets[0];
-    if (!baseSet) return { error: { message: 'No set found for this release' } };
-
+    // pending.set_id is now a direct FK → sets, so we can promote without a lookup
     const { error } = await this.parallelsDb.upsert(
       {
-        checklist_id: baseSet.id,
+        set_id: pending.set_id,
         name: pending.name,
         serial_max: extras.serial_max,
         is_auto: extras.is_auto,
         color_hex: extras.color_hex,
         sort_order: 999,
       },
-      { onConflict: 'checklist_id,name', ignoreDuplicates: false }
+      { onConflict: 'set_id,name', ignoreDuplicates: false }
     );
     if (error) return { error };
     return this.pendingDb.update({ status: 'approved' }).eq('id', pending.id);

@@ -69,9 +69,9 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Accessible via "Sets & Parallels" link on each release row in the Release Builder list
 - Route: `/admin/releases/:releaseId/sets/:setId/parallels` — `ParallelManager` component (`features/admin/parallel-manager/`)
 - Bulk textarea importer: `Name`, `Name:Max` (numbered), `Name:Max:auto` (numbered auto)
-- "Preview Parallels" parses input into pills before committing; safe to re-run (upsert on `checklist_id, name`)
+- "Preview Parallels" parses input into pills before committing; safe to re-run (upsert on `set_id, name`)
 - Existing parallels listed with per-item delete (spinner while deleting)
-- `set_parallels` table: `checklist_id` (FK → sets, DB column kept as `checklist_id`), `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
+- `set_parallels` table: `set_id` (FK → sets), `name`, `serial_max`, `is_auto`, `color_hex`, `sort_order`; RLS: all auth users read; admin-only write/delete
 - Parallels are scoped to a set, not the release — inserts (e.g. Fireworks) have independent parallels from the base set
 
 ### F3. Admin — Pending Parallels Review
@@ -80,7 +80,7 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Count loaded in `App` component via `effect()` on `isAppAdmin()` signal — refreshes automatically after login
 - When a user saves a card with an "Other…" parallel, `submit_pending_parallel()` RPC is called silently (fire-and-forget); increments `submission_count` on duplicates; resets dismissed items back to `pending` if re-submitted
 - Admin actions: **Promote** (expands inline form for `serial_max`, `is_auto`, `color_hex` → upserts to `set_parallels` and marks approved) | **Dismiss** (marks dismissed)
-- `pending_parallels` table: `set_id` (FK → releases, DB column kept as `set_id`), `name`, `submitted_by`, `submission_count`, `status` (`pending/approved/dismissed`); RLS: any auth user can insert/update count; admin-only read/delete
+- `pending_parallels` table: `set_id` (FK → sets), `name`, `submitted_by`, `submission_count`, `status` (`pending/approved/dismissed`); RLS: any auth user can insert/update count; admin-only read/delete
 
 ### H. Add Card Flow (Singular & Bulk)
 
@@ -318,3 +318,4 @@ Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when onl
 | `20260405000004_pending_sets.sql` | Creates `pending_sets` table (now renamed → `pending_releases` by later migration) |
 | `20260405000005_parallels_by_checklist.sql` | Migrates `set_parallels.set_id` → `checklist_id`; unique constraint now on `(checklist_id, name)` |
 | `20260407000001_rename_hierarchy.sql` | Renames `sets`→`releases`, `checklists`→`sets`, `pending_sets`→`pending_releases`; recreates `user_inventory_by_grade` view |
+| `20260407000002_rename_fk_columns.sql` | Renames FK columns to match hierarchy: `sets.set_id`→`release_id`, `set_parallels.checklist_id`→`set_id`, `master_card_definitions.checklist_id`→`set_id`; re-points `pending_parallels.set_id` FK from `releases`→`sets` |

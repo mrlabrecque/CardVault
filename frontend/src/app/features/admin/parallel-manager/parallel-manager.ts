@@ -114,7 +114,7 @@ export class ParallelManager implements OnInit {
 
     this.saving.set(true);
     const payload = items.map((p, i) => ({
-      checklist_id: this.setId,
+      set_id: this.setId,
       name: p.name,
       serial_max: p.serial_max,
       is_auto: p.is_auto,

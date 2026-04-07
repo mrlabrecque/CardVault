@@ -158,7 +158,7 @@ export class ReleaseBuilder implements OnInit {
         const parts = raw.split(':').map(p => p.trim());
         const serial_max = parts[1] ? parseInt(parts[1], 10) : null;
         return {
-          checklist_id: setId,
+          set_id: setId,
           name: parts[0],
           serial_max: serial_max !== null && !isNaN(serial_max) ? serial_max : null,
           is_auto: parts[2]?.toLowerCase() === 'auto',

@@ -40,7 +40,7 @@ export class PendingParallels implements OnInit {
   }
 
   releaseName(item: PendingParallel): string {
-    const r = item.releases;
+    const r = item.sets?.releases;
     return r ? `${r.year} ${r.name}` : item.set_id;
   }
 
@@ -48,7 +48,7 @@ export class PendingParallels implements OnInit {
     const map: Record<string, string> = {
       Basketball: '🏀', Baseball: '⚾', Football: '🏈', Soccer: '⚽',
     };
-    return map[item.releases?.sport ?? ''] ?? '🃏';
+    return map[item.sets?.releases?.sport ?? ''] ?? '🃏';
   }
 
   togglePromote(item: PendingParallel) {
