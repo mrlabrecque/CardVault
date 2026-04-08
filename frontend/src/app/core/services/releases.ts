@@ -25,6 +25,7 @@ export interface SetRecord {
   name: string;         // e.g. "Base Set", "Heavy Hitters", "Fresh Faces"
   prefix: string | null; // e.g. "F-", "M-"; null = base set
   created_at: string;
+  parallel_count: number;
 }
 
 export interface SetParallel {
@@ -98,10 +99,13 @@ export class ReleasesService {
   async getSets(releaseId: string): Promise<SetRecord[]> {
     const { data } = await this.auth.getClient()
       .from('sets')
-      .select('*')
+      .select('*, set_parallels(count)')
       .eq('release_id', releaseId)
       .order('name');
-    return (data as SetRecord[]) ?? [];
+    return ((data ?? []) as any[]).map(row => ({
+      ...row,
+      parallel_count: (row.set_parallels as { count: number }[])[0]?.count ?? 0,
+    })) as SetRecord[];
   }
 
   async createSet(releaseId: string, name: string, prefix: string | null) {

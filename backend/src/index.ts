@@ -6,6 +6,7 @@ import cardsRouter from './routes/cards';
 import compsRouter from './routes/comps';
 import wishlistRouter from './routes/wishlist';
 import ebayRouter from './routes/ebay';
+import cardsightRouter from './routes/cardsight';
 import { startAlertJob } from './jobs/alertJob';
 
 dotenv.config();
@@ -20,6 +21,7 @@ app.use('/api/cards', cardsRouter);
 app.use('/api/comps', compsRouter);
 app.use('/api/wishlist', wishlistRouter);
 app.use('/api/ebay', ebayRouter);
+app.use('/api/cardsight', cardsightRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

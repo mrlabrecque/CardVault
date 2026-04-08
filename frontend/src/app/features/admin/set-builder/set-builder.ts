@@ -1,15 +1,16 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
 import { ReleasesService, ReleaseRecord, UpsertParallelPayload } from '../../../core/services/releases';
+import { CardsightService, CardsightReleaseResult } from '../../../core/services/cardsight';
 
 @Component({
   selector: 'app-release-builder',
-  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterLink, Toast],
+  imports: [CommonModule, DecimalPipe, ReactiveFormsModule, FormsModule, RouterLink, Toast],
   providers: [MessageService],
   templateUrl: './set-builder.html',
   styleUrl: './set-builder.scss',
@@ -17,6 +18,7 @@ import { ReleasesService, ReleaseRecord, UpsertParallelPayload } from '../../../
 export class ReleaseBuilder implements OnInit {
   private fb = inject(FormBuilder);
   private releasesService = inject(ReleasesService);
+  private cardsightService = inject(CardsightService);
   private messageService = inject(MessageService);
 
   readonly sports = ['Basketball', 'Baseball', 'Football', 'Soccer'];
@@ -26,6 +28,18 @@ export class ReleaseBuilder implements OnInit {
   saving = signal(false);
   duplicateError = signal(false);
   templatePreview = signal('');
+
+  // CardSight search state
+  csYear: number = new Date().getFullYear();
+  csManufacturer = '';
+  csSegment = '';
+  csResults = signal<CardsightReleaseResult[]>([]);
+  csSearching = signal(false);
+  csImportingId = signal<string | null>(null);
+  csImportProgress = signal(0);
+  csSearched = signal(false);
+
+  private progressTimer: ReturnType<typeof setInterval> | undefined = undefined;
 
   bulkParallels = '';
   bulkSets = '';
@@ -166,6 +180,63 @@ export class ReleaseBuilder implements OnInit {
           sort_order: i,
         };
       });
+  }
+
+  async searchCardSight() {
+    this.csSearching.set(true);
+    this.csSearched.set(false);
+    this.csResults.set([]);
+    try {
+      const results = await this.cardsightService.searchReleases({
+        year:         this.csYear       || undefined,
+        manufacturer: this.csManufacturer.trim() || undefined,
+        segment:      this.csSegment    || undefined,
+      });
+      this.csResults.set(results);
+      this.csSearched.set(true);
+    } catch (e: any) {
+      console.error('[searchCardSight]', e);
+      this.messageService.add({ severity: 'error', summary: 'Search Failed', detail: e?.message ?? 'Unknown error' });
+    } finally {
+      this.csSearching.set(false);
+    }
+  }
+
+  async importFromCardSight(result: CardsightReleaseResult) {
+    this.csImportingId.set(result.id);
+    this.csImportProgress.set(0);
+
+    // Advance progress toward 90% over ~20s; jump to 100% on completion
+    const TICK_MS = 200;
+    const TARGET = 90;
+    const DURATION_MS = 20_000;
+    const step = (TARGET / (DURATION_MS / TICK_MS));
+    this.progressTimer = setInterval(() => {
+      const next = Math.min(this.csImportProgress() + step, TARGET);
+      this.csImportProgress.set(next);
+    }, TICK_MS);
+
+    try {
+      const sport = this.csSegment || null;
+      const imported = await this.cardsightService.importRelease(result.id, sport);
+      clearInterval(this.progressTimer);
+      this.progressTimer = undefined;
+      this.csImportProgress.set(100);
+      await new Promise(r => setTimeout(r, 600)); // brief flash of 100%
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Imported',
+        detail: `"${imported.releaseName}" — ${imported.setsCount} sets, ${imported.parallelsCount} parallels.`,
+      });
+      await this.loadReleases();
+    } catch (e: any) {
+      clearInterval(this.progressTimer);
+      this.progressTimer = undefined;
+      this.messageService.add({ severity: 'error', summary: 'Import Failed', detail: e.message });
+    } finally {
+      this.csImportingId.set(null);
+      this.csImportProgress.set(0);
+    }
   }
 
   setReleaseType(rt: string) {

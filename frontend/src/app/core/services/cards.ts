@@ -135,10 +135,10 @@ export class CardsService {
           is_rookie,
           is_auto,
           is_patch,
-          checklists (
+          sets (
             name,
             prefix,
-            sets (
+            releases (
               name,
               year,
               sport
@@ -159,8 +159,8 @@ export class CardsService {
 
     const cards: Card[] = (data as any[]).map(uc => {
       const master = uc.master_card_definitions ?? {};
-      const checklist = master.checklists ?? {};
-      const set = checklist.sets ?? {};
+      const set = master.sets ?? {};
+      const release = set.releases ?? {};
       const parallelName = uc.set_parallels?.name ?? 'Base';
       const gradeLabel = uc.is_graded
         ? `${uc.grader ?? ''} ${uc.grade_value ?? ''}`.trim()
@@ -170,11 +170,11 @@ export class CardsService {
         masterCardId: uc.master_card_id,
         player: master.player ?? '',
         cardNumber: master.card_number ?? null,
-        sport: set.sport ?? '',
-        set: set.name ?? '',
-        year: set.year ?? 0,
-        // Only expose checklist name for inserts (prefix !== null); base set is implied
-        checklist: checklist.prefix != null ? (checklist.name ?? null) : null,
+        sport: release.sport ?? '',
+        set: release.name ?? '',
+        year: release.year ?? 0,
+        // Only expose set name for inserts (prefix !== null); base set is implied
+        checklist: set.prefix != null ? (set.name ?? null) : null,
         parallel: parallelName,
         grade: gradeLabel,
         isGraded: uc.is_graded ?? false,

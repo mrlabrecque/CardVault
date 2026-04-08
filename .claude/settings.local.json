@@ -16,7 +16,9 @@
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
       "Bash(git push:*)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://card-vault-baa674a7dceb.herokuapp.com/health)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://card-vault-baa674a7dceb.herokuapp.com/health)",
+      "WebFetch(domain:api.cardsight.ai)",
+      "Bash(wc -l /c/Users/mrlab/Projects/card-vault/frontend/src/app/core/services/*.ts /c/Users/mrlab/Projects/card-vault/backend/src/routes/*.ts /c/Users/mrlab/Projects/card-vault/backend/src/services/*.ts)"
     ]
   }
 }

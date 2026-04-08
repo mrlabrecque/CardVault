@@ -2,34 +2,22 @@
 
 <div class="px-4 pt-5 pb-10">
 
-  <!-- Back link -->
-  <a [routerLink]="['/admin/releases', releaseId, 'sets']"
-    class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-700 transition-colors mb-5">
-    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="15 18 9 12 15 6"/>
-    </svg>
-    Sets
-  </a>
-
-  <!-- Release + set header -->
-  @if (release()) {
-    <div class="mb-5">
-      <h1 class="text-lg font-bold text-gray-900 leading-tight">
-        {{ release()!.year }} {{ release()!.name }}
-      </h1>
-      <p class="text-xs text-gray-400 mt-0.5">
-        {{ sportIcon(release()!.sport) }} {{ release()!.sport }} &middot; {{ release()!.release_type }}
-      </p>
-      @if (set()) {
-        <p class="text-sm font-semibold text-[#800020] mt-2">
-          {{ set()!.name }}
-          @if (set()!.prefix) {
-            <span class="font-mono font-normal text-gray-400 text-xs ml-1">({{ set()!.prefix }})</span>
-          }
-        </p>
-      }
-    </div>
-  }
+  <!-- Breadcrumb -->
+  <nav class="flex items-center gap-1.5 text-xs mb-5 flex-wrap">
+    <a routerLink="/admin/releases" class="text-gray-400 hover:text-gray-700 font-medium transition-colors">Manage Releases</a>
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-gray-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    @if (release(); as r) {
+      <a [routerLink]="['/admin/releases', releaseId, 'sets']" class="text-gray-400 hover:text-gray-700 font-medium transition-colors">{{ r.year }} {{ r.name }}</a>
+    } @else {
+      <span class="text-gray-300">Loading…</span>
+    }
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-gray-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    @if (set(); as s) {
+      <span class="text-gray-700 font-semibold">{{ s.name }}</span>
+    } @else {
+      <span class="text-gray-300">Loading…</span>
+    }
+  </nav>
 
   <!-- ── Bulk Importer ─────────────────────────────────── -->
   <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">

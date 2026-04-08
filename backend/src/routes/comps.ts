@@ -166,8 +166,8 @@ router.post('/card-value', async (req: AuthRequest, res) => {
         r.ebay_search_template
       FROM user_cards uc
       JOIN master_card_definitions mcd ON mcd.id = uc.master_card_id
-      LEFT JOIN sets s ON s.id = mcd.checklist_id
-      LEFT JOIN releases r ON r.id = s.set_id
+      LEFT JOIN sets s ON s.id = mcd.set_id
+      LEFT JOIN releases r ON r.id = s.release_id
       WHERE uc.id = ${cardId} AND uc.user_id = ${userId}
     `;
 
