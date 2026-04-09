@@ -66,6 +66,7 @@ export interface AddCardFormData {
   isSSP: boolean;
   // Parallel (instance-level)
   parallelId: string | null;       // FK to set_parallels; null = Base
+  parallelName: string;            // display name (e.g. "Blue Prizm"); always populated
   pendingParallelName: string;     // non-empty when "Other..." is chosen
   // User instance fields
   pricePaid: number | null;
@@ -121,6 +122,7 @@ export class CardsService {
         id,
         master_card_id,
         parallel_id,
+        parallel_name,
         price_paid,
         serial_number,
         current_value,
@@ -161,7 +163,9 @@ export class CardsService {
       const master = uc.master_card_definitions ?? {};
       const set = master.sets ?? {};
       const release = set.releases ?? {};
-      const parallelName = uc.set_parallels?.name ?? 'Base';
+      const parallelName = uc.set_parallels
+        ? uc.set_parallels.name + (uc.set_parallels.serial_max ? ` /${uc.set_parallels.serial_max}` : '')
+        : (uc.parallel_name ?? 'Base');
       const gradeLabel = uc.is_graded
         ? `${uc.grader ?? ''} ${uc.grade_value ?? ''}`.trim()
         : 'Raw';
@@ -173,8 +177,7 @@ export class CardsService {
         sport: release.sport ?? '',
         set: release.name ?? '',
         year: release.year ?? 0,
-        // Only expose set name for inserts (prefix !== null); base set is implied
-        checklist: set.prefix != null ? (set.name ?? null) : null,
+        checklist: set.name ?? null,
         parallel: parallelName,
         grade: gradeLabel,
         isGraded: uc.is_graded ?? false,
@@ -247,6 +250,7 @@ export class CardsService {
         master_card_id: masterCardId,
         user_id: userId,
         parallel_id: formData.parallelId || null,
+        parallel_name: formData.parallelName || 'Base',
         price_paid: formData.pricePaid,
         serial_number: formData.serialNumber || null,
         is_graded: formData.isGraded,
@@ -307,6 +311,7 @@ export class CardsService {
       master_card_id: c.masterCardId ?? tempIdToMasterCardId.get(c.tempId)!,
       user_id: userId,
       parallel_id: c.parallelId || null,
+      parallel_name: c.parallelName || 'Base',
       price_paid: c.pricePaid,
       serial_number: c.serialNumber || null,
       is_graded: c.isGraded,

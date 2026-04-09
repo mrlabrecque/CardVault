@@ -109,7 +109,7 @@
               }
             </div>
             <p class="text-xs text-gray-400 truncate">
-              {{ stack.year }} {{ stack.set }}@if (stack.checklist) { · {{ stack.checklist }}} · {{ stack.parallel }}
+              {{ stack.year }} {{ stack.set }} · {{ stack.checklist }} · {{ stack.parallel }}
             </p>
             <div class="flex flex-wrap items-center gap-1.5 mt-1.5"
                  (click)="$event.preventDefault(); $event.stopPropagation()">

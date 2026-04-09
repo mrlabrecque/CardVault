@@ -78,21 +78,32 @@
           <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
             Set <span class="text-red-400">*</span>
           </label>
-          <div class="flex flex-wrap gap-2">
-            @for (cl of checklists(); track cl.id) {
-              <button
-                class="px-3 py-2 rounded-xl border text-sm font-medium transition-colors"
-                [class]="selectedChecklist()?.id === cl.id
-                  ? 'bg-[#800020] border-[#800020] text-white'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-[#800020]/40'"
-                (click)="selectChecklist(cl)">
-                {{ cl.name }}
+          @if (selectedChecklist(); as cl) {
+            <div class="flex items-center gap-2 bg-[#800020]/8 border border-[#800020]/20 rounded-xl px-3 py-2.5">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ cl.name }}</p>
                 @if (cl.prefix) {
-                  <span class="ml-1 text-[10px] opacity-70">{{ cl.prefix }}</span>
+                  <p class="text-[11px] text-gray-400">Prefix: {{ cl.prefix }}</p>
                 }
+              </div>
+              <button class="text-gray-400 hover:text-gray-600 ml-1" (click)="clearChecklist()">
+                <i class="pi pi-times text-xs"></i>
               </button>
-            }
-          </div>
+            </div>
+          } @else {
+            <div class="flex flex-wrap gap-2">
+              @for (cl of checklists(); track cl.id) {
+                <button
+                  class="px-3 py-2 rounded-xl border text-sm font-medium transition-colors bg-white border-gray-200 text-gray-600 hover:border-[#800020]/40"
+                  (click)="selectChecklist(cl)">
+                  {{ cl.name }}
+                  @if (cl.prefix) {
+                    <span class="ml-1 text-[10px] opacity-70">{{ cl.prefix }}</span>
+                  }
+                </button>
+              }
+            </div>
+          }
         </div>
       }
 
@@ -287,14 +298,12 @@
                 <option value="__other__">Other…</option>
               </select>
             } @else {
-              <select [ngModel]="selectedParallelName()" (ngModelChange)="onParallelChange($event)"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
-                       focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50">
-                @for (p of fallbackParallels; track p) {
-                  <option [value]="p">{{ p }}</option>
-                }
-                <option value="__other__">Other…</option>
-              </select>
+              <div class="flex gap-1.5">
+                <input type="text" placeholder="Describe parallel…"
+                  [ngModel]="selectedParallelName()" (ngModelChange)="selectedParallelName.set($event)"
+                  class="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50" />
+              </div>
             }
           </div>
 

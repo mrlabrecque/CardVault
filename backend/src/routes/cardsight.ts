@@ -34,7 +34,7 @@ router.get('/search', async (req: AuthRequest, res) => {
 // POST /api/cardsight/import
 // body: { cardsightReleaseId: string }
 router.post('/import', async (req: AuthRequest, res) => {
-  const { cardsightReleaseId, sport: sportParam } = req.body;
+  const { cardsightReleaseId, sport: sportParam, releaseType, ebaySearchTemplate } = req.body;
   if (!cardsightReleaseId) return res.status(400).json({ error: 'cardsightReleaseId is required' });
 
   try {
@@ -67,15 +67,17 @@ router.post('/import', async (req: AuthRequest, res) => {
         ${release.name},
         ${parseInt(release.year, 10)},
         ${sport},
-        ${'Hobby'},
-        ${'{year} {brand} #{card_number} {player_name}'},
+        ${releaseType ?? 'Hobby'},
+        ${ebaySearchTemplate ?? '{year} {brand} {player_name} #{card_number} {parallel} {set} {auto} {patch} /{serial_max}'},
         ${slug},
         ${release.id}
       )
       ON CONFLICT (cardsight_id) DO UPDATE SET
         name = EXCLUDED.name,
         year = EXCLUDED.year,
-        sport = COALESCE(releases.sport, EXCLUDED.sport)
+        sport = COALESCE(releases.sport, EXCLUDED.sport),
+        release_type = EXCLUDED.release_type,
+        ebay_search_template = EXCLUDED.ebay_search_template
       RETURNING id, name
     `;
 

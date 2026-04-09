@@ -80,15 +80,61 @@
                 <div class="min-w-0">
                   <p class="text-sm font-semibold text-gray-900 truncate">{{ r.year }} {{ r.name }}</p>
                 </div>
-                <button
-                  type="button"
-                  (click)="importFromCardSight(r)"
-                  [disabled]="csImportingId() !== null"
-                  class="shrink-0 px-3 py-1.5 border border-[#800020] text-[#800020] rounded-lg text-xs font-semibold disabled:opacity-40 active:opacity-80 transition-opacity"
-                >
-                  Import
-                </button>
+                @if (csExpandedId() !== r.id) {
+                  <button
+                    type="button"
+                    (click)="expandImportOptions(r)"
+                    [disabled]="csImportingId() !== null"
+                    class="shrink-0 px-3 py-1.5 border border-[#800020] text-[#800020] rounded-lg text-xs font-semibold disabled:opacity-40 active:opacity-80 transition-opacity"
+                  >
+                    Import
+                  </button>
+                }
               </div>
+
+              @if (csExpandedId() === r.id) {
+                <div class="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3">
+                  <!-- Release Type -->
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Release Type</label>
+                    <div class="flex gap-2">
+                      @for (rt of releaseTypes; track rt) {
+                        <button
+                          type="button"
+                          (click)="csOptionsByResult[r.id].releaseType = rt"
+                          [class]="'flex-1 py-1.5 rounded-xl text-xs font-semibold border transition-colors ' +
+                            (csOptionsByResult[r.id].releaseType === rt
+                              ? 'bg-[#800020] text-white border-[#800020]'
+                              : 'bg-white text-gray-500 border-gray-200')"
+                        >{{ rt }}</button>
+                      }
+                    </div>
+                  </div>
+                  <!-- eBay Template -->
+                  <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">eBay Search Template</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="csOptionsByResult[r.id].ebayTemplate"
+                      class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+                    />
+                  </div>
+                  <!-- Actions -->
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      (click)="collapseImportOptions()"
+                      class="flex-1 py-2 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-semibold"
+                    >Cancel</button>
+                    <button
+                      type="button"
+                      (click)="importFromCardSight(r)"
+                      [disabled]="csImportingId() !== null"
+                      class="flex-1 py-2 bg-[#800020] text-white rounded-xl text-xs font-semibold disabled:opacity-40"
+                    >Confirm Import</button>
+                  </div>
+                </div>
+              }
             }
           </div>
         }
@@ -177,7 +223,8 @@
           class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
         />
         <p class="text-[10px] text-gray-300 leading-relaxed">
-          Tokens: <span class="font-mono">&#123;year&#125;</span> &nbsp;<span class="font-mono">&#123;brand&#125;</span> &nbsp;<span class="font-mono">&#123;player_name&#125;</span> &nbsp;<span class="font-mono">&#123;card_number&#125;</span>
+          Release-level: <span class="font-mono">&#123;year&#125;</span> <span class="font-mono">&#123;brand&#125;</span> &nbsp;
+          Card-level: <span class="font-mono">&#123;player_name&#125;</span> <span class="font-mono">&#123;card_number&#125;</span> <span class="font-mono">&#123;parallel&#125;</span> <span class="font-mono">&#123;set&#125;</span> <span class="font-mono">&#123;auto&#125;</span> <span class="font-mono">&#123;patch&#125;</span> <span class="font-mono">&#123;serial_max&#125;</span>
         </p>
       </div>
 

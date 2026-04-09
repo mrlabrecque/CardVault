@@ -37,7 +37,7 @@
       <div class="text-5xl">{{ sportIcon(card.sport) }}</div>
       <h1 class="text-xl font-bold text-center">{{ card.player }}</h1>
       <p class="text-sm text-white/70 text-center">
-        {{ card.year }} {{ card.set }}@if (card.checklist) { · {{ card.checklist }}} · {{ card.parallel }}
+        {{ card.year }} {{ card.set }} · {{ card.checklist }} · {{ card.parallel }}
       </p>
       <app-card-tags
         [grade]="card.grade"
@@ -68,9 +68,9 @@
     <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
       @for (row of [
         ['Sport', card.sport],
-        ['Set', card.set],
+        ['Release', card.set],
+        ['Set', card.checklist],
         ['Year', card.year],
-        ...(card.checklist ? [['Insert', card.checklist]] : []),
         ['Parallel', card.parallel],
         ...((card.serialNumber || card.serialMax) ? [['Serial #', serialLabel(card)]] : []),
         ['Grade', card.grade],

@@ -6,7 +6,6 @@ import { ReleasesService, ReleaseRecord, SetParallel, SetRecord } from '../../..
 import { UiService } from '../../../core/services/ui';
 
 const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
-const FALLBACK_PARALLELS = ['Base', 'Silver Prizm', 'Gold Prizm', 'Red Prizm', 'Blue Prizm', 'Holo', 'Refractor', 'Gold Refractor', 'Xfractor', 'Rookie Patch Auto'];
 
 @Component({
   selector: 'app-add-card-dialog',
@@ -22,7 +21,6 @@ export class AddCardDialog {
   @Output() cardAdded = new EventEmitter<void>();
 
   readonly graders = GRADERS;
-  readonly fallbackParallels = FALLBACK_PARALLELS;
 
   readonly visible = this.ui.addCardOpen;
   saving = signal(false);
@@ -188,6 +186,12 @@ export class AddCardDialog {
     this.setParallels.set(parallels);
   }
 
+  clearChecklist() {
+    this.selectedChecklist.set(null);
+    this.setParallels.set([]);
+    this.resetCardSection();
+  }
+
   clearSet() {
     this.selectedSet.set(null);
     this.setQuery.set('');
@@ -294,7 +298,7 @@ export class AddCardDialog {
     const match = this.setParallels().find(p => p.id === value);
     if (match) {
       this.selectedParallelId.set(match.id);
-      this.selectedParallelName.set(match.name);
+      this.selectedParallelName.set(match.name + (match.serial_max ? ` /${match.serial_max}` : ''));
     } else {
       // fallback list — no FK, just a display name
       this.selectedParallelId.set(null);
@@ -316,6 +320,7 @@ export class AddCardDialog {
       cardNumber: this.newCardNumber(),
       serialMax: this.newSerialMax(),
       parallelId: this.selectedParallelId(),
+      parallelName: this.selectedParallelName(),
       pendingParallelName: this.parallelIsOther() ? this.selectedParallelName().trim() : '',
       isRookie: this.newIsRookie(),
       isAuto: this.newIsAuto(),
