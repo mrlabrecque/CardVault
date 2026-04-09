@@ -18,7 +18,12 @@
       "Bash(git push:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://card-vault-baa674a7dceb.herokuapp.com/health)",
       "WebFetch(domain:api.cardsight.ai)",
-      "Bash(wc -l /c/Users/mrlab/Projects/card-vault/frontend/src/app/core/services/*.ts /c/Users/mrlab/Projects/card-vault/backend/src/routes/*.ts /c/Users/mrlab/Projects/card-vault/backend/src/services/*.ts)"
+      "Bash(wc -l /c/Users/mrlab/Projects/card-vault/frontend/src/app/core/services/*.ts /c/Users/mrlab/Projects/card-vault/backend/src/routes/*.ts /c/Users/mrlab/Projects/card-vault/backend/src/services/*.ts)",
+      "WebFetch(domain:cardsight.ai)",
+      "WebFetch(domain:play.cardsight.ai)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/cardsightai/cardsightai-sdk-node/main/src/generated/types.ts\")"
     ]
   }
 }

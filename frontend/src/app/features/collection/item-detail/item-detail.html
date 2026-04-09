@@ -34,7 +34,12 @@
   @if (card) {
     <!-- Card Hero -->
     <div class="rounded-2xl bg-gradient-to-br from-[#800020] to-[#3d0010] p-6 flex flex-col items-center gap-3 text-white">
-      <div class="text-5xl">{{ sportIcon(card.sport) }}</div>
+      @if (card.imageUrl) {
+        <img [src]="card.imageUrl" [alt]="card.player"
+             class="h-40 w-auto object-contain rounded-lg shadow-lg" />
+      } @else {
+        <div class="text-5xl">{{ sportIcon(card.sport) }}</div>
+      }
       <h1 class="text-xl font-bold text-center">{{ card.player }}</h1>
       <p class="text-sm text-white/70 text-center">
         {{ card.year }} {{ card.set }} · {{ card.checklist }} · {{ card.parallel }}

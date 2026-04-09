@@ -23,6 +23,7 @@ export interface Card {
   rookie: boolean;
   autograph: boolean;
   memorabilia: boolean;
+  imageUrl: string | null;
   createdAt: string;
 }
 
@@ -36,6 +37,7 @@ export interface MasterCard {
   is_patch: boolean;
   is_ssp: boolean;
   serial_max: number | null;
+  image_url: string | null;
 }
 
 export interface SoldComp {
@@ -137,6 +139,7 @@ export class CardsService {
           is_rookie,
           is_auto,
           is_patch,
+          image_url,
           sets (
             name,
             prefix,
@@ -190,6 +193,7 @@ export class CardsService {
         rookie: master.is_rookie ?? false,
         autograph: master.is_auto ?? false,
         memorabilia: master.is_patch ?? false,
+        imageUrl: master.image_url ?? null,
         createdAt: uc.created_at ?? '',
       };
     });
@@ -201,12 +205,29 @@ export class CardsService {
     if (!query.trim()) return [];
     let q = this.supabase
       .from('master_card_definitions')
-      .select('id, player, card_number, set_id, is_rookie, is_auto, is_patch, is_ssp, serial_max')
+      .select('id, player, card_number, set_id, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url')
       .or(`player.ilike.%${query}%,card_number.ilike.%${query}%`)
       .limit(20);
     if (setId) q = q.eq('set_id', setId);
     const { data } = await q;
     return (data as MasterCard[]) ?? [];
+  }
+
+  /** Lazily fetch and cache a card image. Fire-and-forget from the call site. */
+  async fetchCardImage(masterCardId: string): Promise<string | null> {
+    const session = await this.auth.getSession();
+    if (!session) return null;
+    try {
+      const res = await fetch(`${environment.apiUrl}/api/cardsight/cards/${masterCardId}/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return null;
+      const { image_url } = await res.json();
+      return image_url ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Load all master cards for a set into memory (used by scanner Fuse index). */

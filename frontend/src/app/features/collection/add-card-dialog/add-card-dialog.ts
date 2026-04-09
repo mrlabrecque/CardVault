@@ -341,7 +341,10 @@ export class AddCardDialog {
       if (this.parallelIsOther() && this.selectedParallelName().trim() && this.selectedSet()) {
         this.releasesService.submitPendingParallel(this.selectedSet()!.id, this.selectedParallelName().trim());
       }
-      if (cardId) this.cardsService.fetchMarketValue(cardId);
+      // if (cardId) this.cardsService.fetchMarketValue(cardId);
+      // Lazily fetch card image if this was a catalog card without one yet
+      const mc = this.selectedMasterCard();
+      if (mc?.id && !mc.image_url) this.cardsService.fetchCardImage(mc.id);
       this.cardAdded.emit();
       this.close();
     }

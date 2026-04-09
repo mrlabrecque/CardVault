@@ -49,6 +49,15 @@ export interface CardsightSegment {
   name: string;
 }
 
+export interface CardsightCardSummary {
+  id: string;
+  name: string;
+  number?: string;
+  releaseYear?: string;
+  attributes?: string[];
+  isParallelOnly?: boolean;
+}
+
 const SEGMENT_TO_SPORT: Record<string, string> = {
   baseball:   'Baseball',
   mlb:        'Baseball',
@@ -99,4 +108,24 @@ export async function getSegment(id: string): Promise<CardsightSegment> {
   const res = await fetch(url, { headers: getHeaders() });
   if (!res.ok) throw new Error(`CardSight segment failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<CardsightSegment>;
+}
+
+export async function getSetCards(
+  setId: string,
+  skip = 0,
+  take = 100,
+): Promise<{ cards: CardsightCardSummary[]; total_count: number }> {
+  const url = new URL(`${CARDSIGHT_BASE}/v1/catalog/sets/${setId}/cards`);
+  url.searchParams.set('take', String(take));
+  url.searchParams.set('skip', String(skip));
+  const res = await fetch(url.toString(), { headers: getHeaders() });
+  if (!res.ok) throw new Error(`CardSight set cards failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<{ cards: CardsightCardSummary[]; total_count: number }>;
+}
+
+export async function getCardImage(cardsightCardId: string): Promise<ArrayBuffer> {
+  const url = `${CARDSIGHT_BASE}/v1/images/cards/${cardsightCardId}`;
+  const res = await fetch(url, { headers: getHeaders() });
+  if (!res.ok) throw new Error(`CardSight image failed: ${res.status} ${res.statusText}`);
+  return res.arrayBuffer();
 }

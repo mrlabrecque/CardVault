@@ -7,3 +7,9 @@ function createSupabaseClient(): SupabaseClient {
 }
 
 export const supabase = createSupabaseClient();
+
+// Service-role client for backend operations that bypass RLS (e.g. Storage uploads).
+export const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
