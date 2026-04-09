@@ -69,6 +69,21 @@
     </div>
   </div>
 
+  <!-- Sort control -->
+  <div class="flex items-center gap-2 overflow-x-auto pb-0.5">
+    <span class="text-[10px] text-gray-400 uppercase tracking-wide shrink-0">Sort</span>
+    @for (opt of sortOptions; track opt.value) {
+      <button
+        class="shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors"
+        [class]="sortBy() === opt.value
+          ? 'bg-[#800020] text-white border-[#800020]'
+          : 'bg-white text-gray-500 border-gray-200'"
+        (click)="sortBy.set(opt.value)">
+        {{ opt.label }}
+      </button>
+    }
+  </div>
+
   <!-- Empty state -->
   @if (stacks().length === 0) {
     <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
@@ -85,16 +100,24 @@
 
         <!-- Stack Header Row -->
         <button
-          class="w-full flex items-center gap-4 p-4 text-left active:bg-gray-50"
+          class="w-full flex items-stretch text-left active:bg-gray-50 relative overflow-hidden"
           (click)="toggleStack(stack)">
 
-          <!-- Sport Icon -->
-          <div class="w-12 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">
-            {{ sportIcon(stack.sport) }}
+          <!-- Left image area — bleeds left/top/bottom, fixed width on right -->
+          <div class="relative w-20 shrink-0 self-stretch bg-gray-50">
+            <!-- Sport icon: large, low opacity, bleeds off left edge -->
+            <span class="absolute inset-0 flex items-center justify-start -translate-x-3 text-6xl opacity-10 pointer-events-none select-none">
+              {{ sportIcon(stack.sport) }}
+            </span>
+            <!-- Card image on top, covers full area -->
+            @if (stack.imageUrl) {
+              <img [src]="stack.imageUrl" [alt]="stack.player"
+                   class="absolute inset-0 w-full h-full object-cover" />
+            }
           </div>
 
           <!-- Info -->
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 py-4 pl-3">
             <div class="flex items-center gap-2">
               <p class="text-sm font-bold text-gray-900 truncate">
                 {{ stack.player }}
@@ -141,7 +164,7 @@
           </div>
 
           <!-- Value + P/L + chevron -->
-          <div class="text-right shrink-0 flex flex-col items-end gap-0.5">
+          <div class="text-right shrink-0 flex flex-col items-end gap-0.5 py-4 pr-4">
             <!-- Value row: refresh inline to the left -->
             <div class="flex items-center gap-1">
               @if (!isStackValuing(stack)) {

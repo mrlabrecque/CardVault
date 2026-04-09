@@ -10,6 +10,8 @@ import { UiService } from '../../../core/services/ui';
 
 export type CardFilter = 'rookie' | 'autograph' | 'memorabilia';
 
+export type SortOption = 'player' | 'value-desc' | 'pl-pct' | 'date-desc';
+
 export interface CardStack {
   key: string;
   masterCardId: string;
@@ -24,6 +26,7 @@ export interface CardStack {
   isGraded: boolean;
   gradeValue: string | null;
   grader: string | null;
+  imageUrl: string | null;
   cards: Card[];
   qty: number;
   totalCost: number;
@@ -33,6 +36,7 @@ export interface CardStack {
   rookie: boolean;
   autograph: boolean;
   memorabilia: boolean;
+  latestCreatedAt: string;
 }
 
 @Component({
@@ -52,6 +56,14 @@ export class CollectionList implements OnInit {
   activeFilters = signal<Set<CardFilter>>(new Set());
   gradeFilters = signal<Set<string>>(new Set());
   expandedKeys = signal<Set<string>>(new Set());
+  sortBy = signal<SortOption>('date-desc');
+
+  sortOptions: { value: SortOption; label: string }[] = [
+    { value: 'date-desc',  label: 'Date Added' },
+    { value: 'player',     label: 'Player A–Z' },
+    { value: 'value-desc', label: 'Value' },
+    { value: 'pl-pct',     label: 'P/L %' },
+  ];
 
   filterConfig: { key: CardFilter; label: string; severity: 'info' | 'warn' | 'success' }[] = [
     { key: 'rookie',      label: 'RC',    severity: 'info' },
@@ -97,6 +109,7 @@ export class CollectionList implements OnInit {
           isGraded: card.isGraded,
           gradeValue: card.gradeValue,
           grader: card.grader,
+          imageUrl: card.imageUrl ?? null,
           cards: [],
           qty: 0,
           totalCost: 0,
@@ -106,6 +119,7 @@ export class CollectionList implements OnInit {
           rookie: card.rookie,
           autograph: card.autograph,
           memorabilia: card.memorabilia,
+          latestCreatedAt: card.createdAt,
         });
       }
       const stack = map.get(key)!;
@@ -113,12 +127,29 @@ export class CollectionList implements OnInit {
       stack.qty++;
       stack.totalCost += card.pricePaid;
       stack.totalValue += card.currentValue;
+      if (card.createdAt > stack.latestCreatedAt) stack.latestCreatedAt = card.createdAt;
+      // Use image from any card in the stack that has one
+      if (!stack.imageUrl && card.imageUrl) stack.imageUrl = card.imageUrl;
     }
     for (const stack of map.values()) {
       stack.avgCost = stack.qty > 0 ? stack.totalCost / stack.qty : 0;
       stack.marketValuePerCard = stack.qty > 0 ? stack.totalValue / stack.qty : 0;
     }
-    return Array.from(map.values());
+
+    const arr = Array.from(map.values());
+    const sort = this.sortBy();
+    arr.sort((a, b) => {
+      if (sort === 'player')     return a.player.localeCompare(b.player);
+      if (sort === 'value-desc') return b.totalValue - a.totalValue;
+      if (sort === 'pl-pct') {
+        const pctA = a.totalCost ? (a.totalValue - a.totalCost) / a.totalCost : 0;
+        const pctB = b.totalCost ? (b.totalValue - b.totalCost) / b.totalCost : 0;
+        return pctB - pctA;
+      }
+      // date-desc (default)
+      return b.latestCreatedAt.localeCompare(a.latestCreatedAt);
+    });
+    return arr;
   });
 
   totalCardCount = computed(() => this.filtered().length);

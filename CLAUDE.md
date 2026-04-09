@@ -56,13 +56,10 @@ A responsive, mobile-first web application for collectors to manage, value, and 
 - Only accessible when `isAppAdmin` is `true`; guarded by `adminGuard` at the route level
 - **"Manage Releases" link** appears in the avatar dropdown (above Sign Out) for admin users only
 - Route: `/admin/releases` — `ReleaseBuilder` component (`features/admin/set-builder/`)
-- Create new product releases (e.g. "2025 Panini Prizm Basketball") that act as global parents for user cards
-- Fields: `name`, `year`, `sport` (Basketball / Baseball / Football / Soccer), `release_type` (Hobby / Retail / FOTL), `ebay_search_template`
+- **Releases are imported from CardSight** (manual form removed) — admin searches by year/brand/sport, selects a result, fills in `release_type` and `ebay_search_template`, then imports. Import creates `releases`, `sets`, `set_parallels`, and all `master_card_definitions` in one operation.
+- `releases` stores `cardsight_id` (unique) for dedup on re-import; `sets` stores `cardsight_id` + `card_count`
 - Auto-generates a `set_slug` (e.g. `2025-prizm-basketball-hobby`) used in clean URLs
-- Duplicate guard: checks (name, year, sport) before saving; shows inline error if a match exists
-- Real-time eBay template preview replaces `{year}`, `{brand}`, `{player_name}`, `{card_number}` tokens using "Victor Wembanyama #298" as dummy values
-- Success PrimeNG Toast on create; form resets and releases list reloads automatically
-- **Parallels textarea** on the New Release form — comma-separated bulk input (`Silver, Mojo:25, Gold:10:auto`); parallels are upserted immediately after release creation
+- `supabaseAdmin` (service role key) is used for Storage uploads; regular Supabase client used elsewhere
 
 ### F2. Admin — Set & Parallel Management
 - Route: `/admin/releases/:releaseId/sets` — `SetManager` component (`features/admin/checklist-manager/`)
@@ -96,8 +93,15 @@ Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the
 - **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
-- **eBay API**: Real-time market value sync from sold listings; automated listing creation
-- **Checklist Integration**: Sync with sports card checklist databases to standardize card naming and numbering during the "Add to Collection" workflow
+- **eBay API**: Real-time market value sync from sold listings; automated listing creation. `fetchMarketValue()` call after add-card is currently commented out pending eBay API access.
+- **CardSight AI API** (`api.cardsight.ai`) — used server-side only (API key in backend `.env`). Raw `fetch` calls, not the SDK. Two flows:
+  - **Admin release import**: Search CardSight releases → select → backend upserts `releases`, `sets` (with `cardsight_id`), `set_parallels` (with `cardsight_id`), and all `master_card_definitions` for every set. Cards are paginated at 100 per page with 250ms delays between pages to avoid rate-limiting.
+  - **Lazy image fetch**: `POST /api/cardsight/cards/:masterCardId/image` — called fire-and-forget after a user adds a card. Fetches from CardSight, uploads to Supabase Storage (`card-images` bucket, public), writes URL to `master_card_definitions.image_url`. Safe to call multiple times — returns cached URL immediately if already populated.
+- **CardSight card import rules**:
+  - `isParallelOnly: true` cards are filtered out — parallels are managed via `set_parallels`, not `master_card_definitions`
+  - `attributes` is an array of **short name strings**: `RC`, `AU`, `GU`, `SSP` — use exact `includes()` checks, not regex
+  - Duplicates within a page (same player + card_number) are merged with OR on boolean flags before insert — never discard an `RC`/`AU` flag just because another row for the same card lacks it
+  - DB unique constraint on `(set_id, player, card_number)` (partial index, card_number nullable) — `ON CONFLICT` upsert ORs boolean flags so re-imports can only add flags, never remove them
 
 ---
 
@@ -271,6 +275,19 @@ Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when onl
 
 ---
 
+## UI Polish / Small Improvements
+
+Running list of small things to implement that aren't full features:
+
+- [x] Card image thumbnail in collection-list stack rows (replaces sport emoji when `image_url` is set)
+- [x] Sorting in collection-list (player A-Z, value high-low, P/L %, date added)
+- [ ] Card image thumbnail in bulk-add staged card list
+- [ ] Show card image in add-card-dialog search results dropdown
+- [ ] Empty `image_url` fallback in item-detail — show a nicer placeholder than just the sport emoji
+- [ ] Password login option alongside magic link — magic link clicks open in the browser breaking the PWA experience. Add email + password sign-in (Supabase `signInWithPassword`) as the primary flow; keep magic link as a fallback. Also needs a "Set Password" flow for existing magic-link-only users (send password reset email via `resetPasswordForEmail`).
+
+---
+
 ## Implementation Progress
 
 ### Done
@@ -298,7 +315,13 @@ Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when onl
 - [ ] Item detail — full card editor; "Post to eBay" button
 - [ ] Comps search — eBay sold listings integration; lookup history
 - [ ] Wishlist — price threshold editor; alert status
-- [ ] Backend API — Express routes, Supabase client, eBay service
+- [ ] eBay API access — uncomment `fetchMarketValue()` call in `add-card-dialog.ts` once credentials are available
+- [ ] Lot Builder — group cards into lots for bulk eBay listing; lot valuation and P/L
+- [ ] Market Movers — surface cards in the collection with the biggest recent price changes (up or down) using eBay sold comps data
+- [ ] Grade Recommendations — analyze raw cards and recommend which are worth grading based on estimated PSA 10 premium vs. raw value
+- [ ] Collection Heat Map — visual breakdown of collection balance (sport, year, player, set) to identify over/under-represented areas
+- [ ] Collection Importer — CSV/spreadsheet import with column mapping UI; maps user's column headers to our schema fields; supports bulk onboarding
+- [ ] Desktop/wide-screen layout for admin — the app is currently capped at 480px (mobile-first); admins working on desktop would benefit from a wider layout for the admin routes (`/admin/**`). Consider a responsive breakpoint that expands the shell for `lg:` screens on admin pages only, without affecting the mobile user experience.
 
 ### Supabase Migrations (apply in order)
 | File | Description |
@@ -319,3 +342,7 @@ Label logic: `serialNumber/serialMax` when both are known; `/serialMax` when onl
 | `20260405000005_parallels_by_checklist.sql` | Migrates `set_parallels.set_id` → `checklist_id`; unique constraint now on `(checklist_id, name)` |
 | `20260407000001_rename_hierarchy.sql` | Renames `sets`→`releases`, `checklists`→`sets`, `pending_sets`→`pending_releases`; recreates `user_inventory_by_grade` view |
 | `20260407000002_rename_fk_columns.sql` | Renames FK columns to match hierarchy: `sets.set_id`→`release_id`, `set_parallels.checklist_id`→`set_id`, `master_card_definitions.checklist_id`→`set_id`; re-points `pending_parallels.set_id` FK from `releases`→`sets` |
+| `20260407000003_cardsight_ids.sql` | Adds `cardsight_id` (unique) to `releases` and `sets`; `card_count` to `sets`; `cardsight_id` (non-unique) to `set_parallels` |
+| `20260408000001_user_cards_parallel_name.sql` | Adds `parallel_name` (text, default 'Base') to `user_cards` as denormalized display field |
+| `20260408000002_master_card_cardsight.sql` | Adds `cardsight_card_id` (unique) + `image_url` to `master_card_definitions`; creates `card-images` Storage bucket with RLS |
+| `20260409000001_master_card_unique_per_set.sql` | Partial unique indexes on `master_card_definitions (set_id, player, card_number)` to collapse CardSight duplicates |
