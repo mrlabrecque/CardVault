@@ -1,6 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
@@ -21,7 +22,7 @@ interface LookupEntry {
 
 @Component({
   selector: 'app-comps-search',
-  imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, TagModule],
+  imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, TagModule],
   templateUrl: './comps-search.html',
   styleUrl: './comps-search.scss',
 })

@@ -1,0 +1,53 @@
+<div class="px-4 pt-5 pb-10 space-y-3">
+
+  <!-- Breadcrumb -->
+  <nav class="flex items-center gap-1.5 text-xs mb-5 flex-wrap">
+    <span class="text-gray-700 font-semibold">Tools</span>
+  </nav>
+
+  @for (tool of tools; track tool.label) {
+    @if (tool.available) {
+      <a [routerLink]="tool.route"
+         class="flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-4 no-underline text-gray-900 active:bg-gray-50">
+        <div class="w-10 h-10 rounded-xl bg-[var(--color-primary)] flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5 stroke-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            @if (tool.label === 'Comps') {
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            }
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[15px] font-semibold leading-tight">{{ tool.label }}</p>
+          <p class="text-xs text-gray-500 mt-0.5 leading-snug">{{ tool.desc }}</p>
+        </div>
+        <svg class="w-4 h-4 stroke-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </a>
+    } @else {
+      <div class="flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-4 opacity-50">
+        <div class="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5 stroke-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            @if (tool.label === 'Lot Creator') {
+              <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+            } @else if (tool.label === 'Card Import') {
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            } @else if (tool.label === 'Grading') {
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            } @else if (tool.label === 'Market Movers') {
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+            } @else if (tool.label === 'Heat Map') {
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            }
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[15px] font-semibold leading-tight text-gray-500">{{ tool.label }}</p>
+          <p class="text-xs text-gray-400 mt-0.5 leading-snug">{{ tool.desc }}</p>
+        </div>
+        <span class="text-[10px] font-semibold uppercase tracking-wider bg-gray-100 text-gray-400 rounded-md px-2 py-1 shrink-0">Soon</span>
+      </div>
+    }
+  }
+
+</div>

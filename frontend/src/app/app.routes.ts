@@ -12,6 +12,7 @@ import { ReleaseBuilder } from './features/admin/set-builder/set-builder';
 import { ParallelManager } from './features/admin/parallel-manager/parallel-manager';
 import { SetManager } from './features/admin/checklist-manager/checklist-manager';
 import { PendingParallels } from './features/admin/pending-parallels/pending-parallels';
+import { Tools } from './features/tools/tools';
 import { authGuard } from './core/guards/auth-guard';
 import { adminGuard } from './core/guards/admin-guard';
 
@@ -24,6 +25,7 @@ export const routes: Routes = [
   { path: 'collection/:id', component: ItemDetail,   canActivate: [authGuard] },
   { path: 'comps',         component: CompsSearch,   canActivate: [authGuard] },
   { path: 'wishlist',      component: Wishlist,      canActivate: [authGuard] },
+  { path: 'tools',         component: Tools,         canActivate: [authGuard] },
   { path: 'scanner',       component: Scanner,       canActivate: [authGuard] },
   { path: 'bulk-add',      component: BulkAdd,       canActivate: [authGuard] },
   { path: 'admin/releases',    component: ReleaseBuilder, canActivate: [adminGuard] },
