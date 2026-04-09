@@ -18,6 +18,7 @@ export class Login {
   mode = signal<LoginMode>('password');
   state = signal<LoginState>('idle');
   errorMessage = signal('');
+  floatCards = [1, 2, 3, 4, 5, 6];
 
   constructor(private auth: AuthService) {}
 

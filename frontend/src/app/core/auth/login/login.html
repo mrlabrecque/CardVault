@@ -1,20 +1,37 @@
 <div class="login-bg">
 
-  <!-- PSA Slab -->
+  <!-- Floating graded slab silhouettes -->
+  <div class="login-cards" aria-hidden="true">
+    @for (c of floatCards; track c) {
+      <div class="login-card">
+        <div class="login-card__label">
+          <div class="login-card__lines">
+            <span class="login-card__line login-card__line--lg"></span>
+            <span class="login-card__line login-card__line--md"></span>
+            <span class="login-card__line login-card__line--sm"></span>
+          </div>
+          <div class="login-card__grade">10</div>
+        </div>
+        <div class="login-card__img"></div>
+      </div>
+    }
+  </div>
+
+  <!-- Slab + reflection wrapper -->
+  <div class="flex flex-col items-center w-full">
   <div class="slab-shell">
 
     <!-- PSA-style label strip (top of slab) -->
     <div class="psa-label">
-      <div class="grade-badge">
-        <span class="grade-badge__num">10</span>
-        <span class="grade-badge__text">GEM MT</span>
-      </div>
       <div class="psa-info">
         <span class="psa-info__title">CARD VAULT</span>
         <span class="psa-info__subtitle">COLLECTOR ACCESS PASS</span>
         <span class="psa-info__cert">CERT# 2026-CVT-AUTH-001</span>
       </div>
-      <div class="psa-logo">PSA</div>
+      <div class="grade-badge">
+        <span class="grade-badge__num">10</span>
+        <span class="grade-badge__text">GEM MT</span>
+      </div>
     </div>
 
     <!-- Card window (dark interior of the slab) -->
@@ -150,6 +167,7 @@
       </div>
     </div>
 
+  </div>
   </div>
 
 </div>
