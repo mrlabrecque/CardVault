@@ -35,6 +35,12 @@ export class AddCardDialog {
   // ── Step 1.5: Set (subset within the release) ─────────────
   checklists = signal<SetRecord[]>([]);
   selectedChecklist = signal<SetRecord | null>(null);
+  checklistQuery = signal('');
+  filteredChecklists = computed(() => {
+    const q = this.checklistQuery().toLowerCase().trim();
+    if (!q) return this.checklists();
+    return this.checklists().filter(c => c.name.toLowerCase().includes(q));
+  });
 
   // ── Step 2: Card search ──────────────────────────────────
   cardQuery = signal('');
@@ -139,6 +145,7 @@ export class AddCardDialog {
     this.newIsAuto.set(false);
     this.newIsPatch.set(false);
     this.newIsSSP.set(false);
+    this.checklistQuery.set('');
     this.setParallels.set([]);
     this.selectedParallelId.set(null);
     this.selectedParallelName.set('Base');
@@ -188,6 +195,7 @@ export class AddCardDialog {
 
   clearChecklist() {
     this.selectedChecklist.set(null);
+    this.checklistQuery.set('');
     this.setParallels.set([]);
     this.resetCardSection();
   }

@@ -341,7 +341,12 @@ export class CardsService {
     }));
 
     const { error } = await this.supabase.from('user_cards').insert(rows);
-    if (!error) await this.loadUserCards();
+    if (!error) {
+      await this.loadUserCards();
+      // Fire-and-forget image fetch for each master card (safe to call multiple times)
+      const masterCardIds = cards.map(c => c.masterCardId ?? tempIdToMasterCardId.get(c.tempId)!).filter(Boolean);
+      for (const id of masterCardIds) this.fetchCardImage(id);
+    }
     return { error, count: error ? 0 : rows.length };
   }
 

@@ -26,6 +26,12 @@ export class BulkAdd {
   sessionChecklists = signal<SetRecord[]>([]);
   activeChecklist   = signal<SetRecord | null>(null);
   activeParallels   = signal<SetParallel[]>([]);
+  checklistQuery    = signal('');
+  filteredChecklists = computed(() => {
+    const q = this.checklistQuery().toLowerCase().trim();
+    if (!q) return this.sessionChecklists();
+    return this.sessionChecklists().filter(c => c.name.toLowerCase().includes(q));
+  });
 
   // ── Box calculator ────────────────────────────────────────
   boxPrice      = signal<number | null>(null);
@@ -123,6 +129,7 @@ export class BulkAdd {
     this.boxPrice.set(null);
     this.boxQty.set(null);
 
+    this.checklistQuery.set('');
     const sets = await this.releasesService.getSets(release.id);
     this.sessionChecklists.set(sets);
     this.resetForm();
@@ -139,6 +146,7 @@ export class BulkAdd {
     this.sessionChecklists.set([]);
     this.activeChecklist.set(null);
     this.activeParallels.set([]);
+    this.checklistQuery.set('');
     this.stagingList.set([]);
     this.boxPrice.set(null);
     this.boxQty.set(null);

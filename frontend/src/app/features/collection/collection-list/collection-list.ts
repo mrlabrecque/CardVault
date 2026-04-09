@@ -93,7 +93,7 @@ export class CollectionList implements OnInit {
   stacks = computed(() => {
     const map = new Map<string, CardStack>();
     for (const card of this.filtered()) {
-      const key = `${card.masterCardId}|${card.isGraded}|${card.gradeValue ?? ''}`;
+      const key = `${card.masterCardId}|${card.parallel}|${card.isGraded}|${card.gradeValue ?? ''}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
