@@ -5,6 +5,7 @@ import { CompsSearch } from './features/comps/comps-search/comps-search';
 import { Wishlist } from './features/wishlist/wishlist/wishlist';
 import { ItemDetail } from './features/collection/item-detail/item-detail';
 import { Login } from './core/auth/login/login';
+import { SetPassword } from './core/auth/set-password/set-password';
 import { Scanner } from './features/scanner/scanner';
 import { BulkAdd } from './features/collection/bulk-add/bulk-add';
 import { ReleaseBuilder } from './features/admin/set-builder/set-builder';
@@ -16,6 +17,7 @@ import { adminGuard } from './core/guards/admin-guard';
 
 export const routes: Routes = [
   { path: 'login', component: Login },
+  { path: 'set-password', component: SetPassword },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'dashboard',     component: Dashboard,     canActivate: [authGuard] },
   { path: 'collection',    component: CollectionList, canActivate: [authGuard] },

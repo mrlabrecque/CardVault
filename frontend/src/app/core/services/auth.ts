@@ -30,7 +30,10 @@ export class AuthService {
       this._session.set(session);
       this._user.set(session?.user ?? null);
 
-      if (event === 'SIGNED_IN' && session?.user) {
+      if (event === 'PASSWORD_RECOVERY') {
+        // Reset link clicked — redirect to set-password page instead of dashboard
+        this.router.navigate(['/set-password']);
+      } else if (event === 'SIGNED_IN' && session?.user) {
         this.fetchProfile(session.user.id);
         this.router.navigate(['/dashboard']);
       } else if (event === 'SIGNED_OUT') {
@@ -70,6 +73,20 @@ export class AuthService {
       email,
       options: { emailRedirectTo: `${window.location.origin}/dashboard` },
     });
+  }
+
+  async signInWithPassword(email: string, password: string) {
+    return this.supabase.auth.signInWithPassword({ email, password });
+  }
+
+  async sendPasswordReset(email: string) {
+    return this.supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/set-password`,
+    });
+  }
+
+  async updatePassword(newPassword: string) {
+    return this.supabase.auth.updateUser({ password: newPassword });
   }
 
   async signOut() {
