@@ -12,6 +12,31 @@ export type CardFilter = 'rookie' | 'autograph' | 'memorabilia';
 
 export type SortOption = 'player' | 'value-desc' | 'pl-pct' | 'date-desc';
 
+export type SetSortOption = 'pct-desc' | 'value-desc' | 'name';
+
+export interface SetParallelRow {
+  parallelName: string;
+  ownedCount: number;   // distinct masterCardIds in this parallel
+  cardCount: number;    // same as parent SetRow.cardCount
+  pct: number;
+  totalValue: number;
+}
+
+export interface SetRow {
+  setId: string;
+  setName: string;       // e.g. "Base Set", "Fireworks"
+  releaseName: string;   // e.g. "2025 Panini Prizm"
+  year: number;
+  sport: string;
+  cardCount: number;     // total cards in set (from sets.card_count)
+  ownedCount: number;    // distinct masterCardIds owned (across all parallels)
+  pct: number;           // ownedCount / cardCount * 100 (capped at 100)
+  totalValue: number;
+  totalCost: number;
+  imageUrl: string | null;
+  parallels: SetParallelRow[];
+}
+
 export interface CardStack {
   key: string;
   masterCardId: string;
@@ -51,18 +76,27 @@ export class CollectionList implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
+  viewMode = signal<'cards' | 'sets'>('cards');
+
   searchQuery = signal('');
   textFilters = signal<string[]>([]);
   activeFilters = signal<Set<CardFilter>>(new Set());
   gradeFilters = signal<Set<string>>(new Set());
   expandedKeys = signal<Set<string>>(new Set());
   sortBy = signal<SortOption>('date-desc');
+  setSortBy = signal<SetSortOption>('pct-desc');
 
   sortOptions: { value: SortOption; label: string }[] = [
     { value: 'date-desc',  label: 'Date Added' },
     { value: 'player',     label: 'Player A–Z' },
     { value: 'value-desc', label: 'Value' },
     { value: 'pl-pct',     label: 'P/L %' },
+  ];
+
+  setSortOptions: { value: SetSortOption; label: string }[] = [
+    { value: 'pct-desc',   label: 'Most Complete' },
+    { value: 'value-desc', label: 'Value' },
+    { value: 'name',       label: 'Name A–Z' },
   ];
 
   filterConfig: { key: CardFilter; label: string; severity: 'info' | 'warn' | 'success' }[] = [
@@ -153,6 +187,100 @@ export class CollectionList implements OnInit {
   });
 
   totalCardCount = computed(() => this.filtered().length);
+
+  expandedSetIds = signal<Set<string>>(new Set());
+
+  toggleSetExpand(setId: string) {
+    this.expandedSetIds.update(prev => {
+      const next = new Set(prev);
+      next.has(setId) ? next.delete(setId) : next.add(setId);
+      return next;
+    });
+  }
+
+  isSetExpanded(setId: string): boolean {
+    return this.expandedSetIds().has(setId);
+  }
+
+  setRows = computed((): SetRow[] => {
+    const allCards = this.cardsService.cards();
+
+    // Per-set totals
+    const map = new Map<string, SetRow>();
+    // per-set, per-parallel: distinct masterCardIds + value
+    const parallelMasters = new Map<string, Map<string, Set<string>>>();
+    const parallelValues  = new Map<string, Map<string, number>>();
+
+    for (const card of allCards) {
+      if (!card.setId || !card.setCardCount) continue;
+
+      if (!map.has(card.setId)) {
+        map.set(card.setId, {
+          setId: card.setId,
+          setName: card.checklist ?? 'Base Set',
+          releaseName: card.set,
+          year: card.year,
+          sport: card.sport,
+          cardCount: card.setCardCount,
+          ownedCount: 0,
+          pct: 0,
+          totalValue: 0,
+          totalCost: 0,
+          imageUrl: null,
+          parallels: [],
+        });
+        parallelMasters.set(card.setId, new Map());
+        parallelValues.set(card.setId, new Map());
+      }
+
+      const row = map.get(card.setId)!;
+      row.totalValue += card.currentValue;
+      row.totalCost += card.pricePaid;
+      if (!row.imageUrl && card.imageUrl) row.imageUrl = card.imageUrl;
+
+      // Track per-parallel distinct masterCardIds
+      const pMasters = parallelMasters.get(card.setId)!;
+      const pValues  = parallelValues.get(card.setId)!;
+      if (!pMasters.has(card.parallel)) pMasters.set(card.parallel, new Set());
+      pMasters.get(card.parallel)!.add(card.masterCardId);
+      pValues.set(card.parallel, (pValues.get(card.parallel) ?? 0) + card.currentValue);
+    }
+
+    // Roll up: ownedCount (distinct masterCardIds across ALL parallels), parallels[]
+    const seenPerSet = new Map<string, Set<string>>();
+    for (const card of allCards) {
+      if (!card.setId) continue;
+      if (!seenPerSet.has(card.setId)) seenPerSet.set(card.setId, new Set());
+      seenPerSet.get(card.setId)!.add(card.masterCardId);
+    }
+
+    for (const [setId, row] of map) {
+      row.ownedCount = seenPerSet.get(setId)?.size ?? 0;
+      row.pct = row.cardCount > 0 ? Math.min(100, (row.ownedCount / row.cardCount) * 100) : 0;
+
+      const pMasters = parallelMasters.get(setId)!;
+      const pValues  = parallelValues.get(setId)!;
+      row.parallels = Array.from(pMasters.entries()).map(([parallelName, masterIds]) => {
+        const ownedCount = masterIds.size;
+        const pct = row.cardCount > 0 ? Math.min(100, (ownedCount / row.cardCount) * 100) : 0;
+        return { parallelName, ownedCount, cardCount: row.cardCount, pct, totalValue: pValues.get(parallelName) ?? 0 };
+      }).sort((a, b) => {
+        // Base always first, then by % desc
+        if (a.parallelName === 'Base') return -1;
+        if (b.parallelName === 'Base') return 1;
+        return b.pct - a.pct;
+      });
+    }
+
+    const arr = Array.from(map.values());
+    const sort = this.setSortBy();
+    arr.sort((a, b) => {
+      if (sort === 'pct-desc')   return b.pct - a.pct;
+      if (sort === 'value-desc') return b.totalValue - a.totalValue;
+      return `${a.year} ${a.releaseName} ${a.setName}`.localeCompare(`${b.year} ${b.releaseName} ${b.setName}`);
+    });
+    return arr;
+  });
 
   ngOnInit() {
     this.cardsService.loadUserCards();

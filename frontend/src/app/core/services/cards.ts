@@ -11,6 +11,8 @@ export interface Card {
   set: string;
   year: number;
   checklist: string | null;  // insert name (e.g. "Fireworks") — null for Base Set
+  setId: string | null;      // FK → sets.id
+  setCardCount: number | null; // sets.card_count — total cards in the set
   parallel: string;          // display name: comes from set_parallels.name or 'Base'
   grade: string;             // display label: "PSA 10" | "BGS 9.5" | "Raw"
   isGraded: boolean;
@@ -141,8 +143,10 @@ export class CardsService {
           is_patch,
           image_url,
           sets (
+            id,
             name,
             prefix,
+            card_count,
             releases (
               name,
               year,
@@ -181,6 +185,8 @@ export class CardsService {
         set: release.name ?? '',
         year: release.year ?? 0,
         checklist: set.name ?? null,
+        setId: set.id ?? null,
+        setCardCount: set.card_count ?? null,
         parallel: parallelName,
         grade: gradeLabel,
         isGraded: uc.is_graded ?? false,

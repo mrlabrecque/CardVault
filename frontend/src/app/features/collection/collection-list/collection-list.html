@@ -1,4 +1,4 @@
-<div class="flex flex-col gap-4 px-4 pt-6 pb-4">
+<div class="flex flex-col gap-4 px-4 pt-6 pb-6">
 
   <!-- Search -->
   <div class="relative">
@@ -14,8 +14,24 @@
     />
   </div>
 
-  <!-- Active filter chips -->
-  @if (textFilters().length > 0 || activeFilters().size > 0 || gradeFilters().size > 0) {
+  <!-- View toggle: Cards | Sets -->
+  <div class="flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5 gap-0.5">
+    <button
+      class="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+      [class]="viewMode() === 'cards' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"
+      (click)="viewMode.set('cards')">
+      Cards
+    </button>
+    <button
+      class="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+      [class]="viewMode() === 'sets' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"
+      (click)="viewMode.set('sets')">
+      Sets
+    </button>
+  </div>
+
+  <!-- Active filter chips (cards mode only) -->
+  @if (viewMode() === 'cards' && (textFilters().length > 0 || activeFilters().size > 0 || gradeFilters().size > 0)) {
     <div class="flex flex-wrap gap-2">
       @for (chip of textFilters(); track chip) {
         <button
@@ -46,57 +62,65 @@
     </div>
   }
 
-  <!-- Count + Add button -->
-  <div class="flex items-center justify-between">
-    <p class="text-xs text-gray-400">
-      {{ totalCardCount() }} {{ totalCardCount() === 1 ? 'card' : 'cards' }}
-      @if (stacks().length !== totalCardCount()) {
-        · {{ stacks().length }} {{ stacks().length === 1 ? 'stack' : 'stacks' }}
+  @if (viewMode() === 'cards') {
+
+    <!-- Count + Add button -->
+    <div class="flex items-center justify-between">
+      <p class="text-xs text-gray-400">
+        {{ totalCardCount() }} {{ totalCardCount() === 1 ? 'card' : 'cards' }}
+        @if (stacks().length !== totalCardCount()) {
+          · {{ stacks().length }} {{ stacks().length === 1 ? 'stack' : 'stacks' }}
+        }
+      </p>
+      <div class="flex items-center gap-2">
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#800020] text-white text-xs font-semibold active:opacity-80"
+          (click)="openAddCard()">
+          <i class="pi pi-plus text-[11px]"></i>
+          Add Card
+        </button>
+        <a routerLink="/bulk-add"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#800020] text-[#800020] text-xs font-semibold active:opacity-80">
+          <i class="pi pi-list text-[11px]"></i>
+          Bulk
+        </a>
+      </div>
+    </div>
+
+    <!-- Sort control -->
+    <div class="flex items-center gap-2 overflow-x-auto pb-0.5">
+      <span class="text-[10px] text-gray-400 uppercase tracking-wide shrink-0">Sort</span>
+      @for (opt of sortOptions; track opt.value) {
+        <button
+          class="shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors"
+          [class]="sortBy() === opt.value
+            ? 'bg-[#800020] text-white border-[#800020]'
+            : 'bg-white text-gray-500 border-gray-200'"
+          (click)="sortBy.set(opt.value)">
+          {{ opt.label }}
+        </button>
       }
-    </p>
-    <div class="flex items-center gap-2">
-      <button
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#800020] text-white text-xs font-semibold active:opacity-80"
-        (click)="openAddCard()">
-        <i class="pi pi-plus text-[11px]"></i>
-        Add Card
-      </button>
-      <a routerLink="/bulk-add"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#800020] text-[#800020] text-xs font-semibold active:opacity-80">
-        <i class="pi pi-list text-[11px]"></i>
-        Bulk
-      </a>
     </div>
-  </div>
 
-  <!-- Sort control -->
-  <div class="flex items-center gap-2 overflow-x-auto pb-0.5">
-    <span class="text-[10px] text-gray-400 uppercase tracking-wide shrink-0">Sort</span>
-    @for (opt of sortOptions; track opt.value) {
-      <button
-        class="shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors"
-        [class]="sortBy() === opt.value
-          ? 'bg-[#800020] text-white border-[#800020]'
-          : 'bg-white text-gray-500 border-gray-200'"
-        (click)="sortBy.set(opt.value)">
-        {{ opt.label }}
-      </button>
+    <!-- Empty state -->
+    @if (stacks().length === 0) {
+      <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
+        <div class="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">🃏</div>
+        <p class="text-sm font-semibold text-gray-400">No cards yet</p>
+        <p class="text-xs text-gray-300">Tap <strong class="text-gray-400">Add Card</strong> to build your collection.</p>
+      </div>
     }
-  </div>
 
-  <!-- Empty state -->
-  @if (stacks().length === 0) {
-    <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
-      <div class="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">🃏</div>
-      <p class="text-sm font-semibold text-gray-400">No cards yet</p>
-      <p class="text-xs text-gray-300">Tap <strong class="text-gray-400">Add Card</strong> to build your collection.</p>
-    </div>
-  }
-
-  <!-- Stack List -->
-  <div class="flex flex-col gap-3">
-    @for (stack of stacks(); track stack.key) {
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <!-- Stack List -->
+    <div class="flex flex-col gap-3">
+      @for (stack of stacks(); track stack.key) {
+      <!-- Stacked card wrapper — layers only shown when collapsed multi-card stack -->
+      <div class="relative" [class.pb-2]="stack.qty > 1 && !isExpanded(stack.key)">
+        @if (stack.qty > 1 && !isExpanded(stack.key)) {
+          <div class="absolute inset-x-4 top-2 bottom-0 rounded-2xl bg-gray-300 border border-gray-300 shadow-sm"></div>
+          <div class="absolute inset-x-2 top-1 bottom-0 rounded-2xl bg-gray-200 border border-gray-200 shadow-sm"></div>
+        }
+      <div class="relative bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
 
         <!-- Stack Header Row -->
         <button
@@ -192,10 +216,6 @@
                 {{ stackPlPct(stack) }}
               </p>
             }
-            @if (stack.qty > 1) {
-              <i class="pi text-gray-300 text-xs mt-0.5"
-                 [class]="isExpanded(stack.key) ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
-            }
           </div>
         </button>
 
@@ -257,7 +277,144 @@
         }
 
       </div>
+      </div><!-- /relative stack wrapper -->
     }
-  </div>
+    </div>
+
+  } @else {
+
+    <!-- ── Sets view ─────────────────────────────────── -->
+
+    <!-- Count + sort -->
+    <div class="flex items-center justify-between">
+      <p class="text-xs text-gray-400">
+        {{ setRows().length }} {{ setRows().length === 1 ? 'set' : 'sets' }}
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2 overflow-x-auto pb-0.5">
+      <span class="text-[10px] text-gray-400 uppercase tracking-wide shrink-0">Sort</span>
+      @for (opt of setSortOptions; track opt.value) {
+        <button
+          class="shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors"
+          [class]="setSortBy() === opt.value
+            ? 'bg-[#800020] text-white border-[#800020]'
+            : 'bg-white text-gray-500 border-gray-200'"
+          (click)="setSortBy.set(opt.value)">
+          {{ opt.label }}
+        </button>
+      }
+    </div>
+
+    <!-- Empty state -->
+    @if (setRows().length === 0) {
+      <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
+        <div class="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">📦</div>
+        <p class="text-sm font-semibold text-gray-400">No sets yet</p>
+        <p class="text-xs text-gray-300">Add cards from an imported release to track set completion.</p>
+      </div>
+    }
+
+    <!-- Set rows -->
+    <div class="flex flex-col gap-3">
+      @for (row of setRows(); track row.setId) {
+        <div class="relative" [class.pb-2]="row.parallels.length > 1 && !isSetExpanded(row.setId)">
+          @if (row.parallels.length > 1 && !isSetExpanded(row.setId)) {
+            <div class="absolute inset-x-5 top-3 bottom-0 rounded-2xl bg-gray-300 border border-gray-300 shadow-sm"></div>
+            <div class="absolute inset-x-2.5 top-1.5 bottom-0 rounded-2xl bg-gray-200 border border-gray-200 shadow-sm"></div>
+          }
+        <div class="relative bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+
+          <!-- Header row — tappable to expand parallels -->
+          <button
+            class="w-full flex items-stretch text-left active:bg-gray-50 transition-colors"
+            [disabled]="row.parallels.length <= 1"
+            (click)="toggleSetExpand(row.setId)">
+
+            <!-- Thumbnail -->
+            <div class="relative w-16 shrink-0 self-stretch bg-gray-50">
+              <span class="absolute inset-0 flex items-center justify-start -translate-x-2 text-5xl opacity-10 pointer-events-none select-none">
+                {{ sportIcon(row.sport) }}
+              </span>
+              @if (row.imageUrl) {
+                <img [src]="row.imageUrl" [alt]="row.releaseName"
+                     class="absolute inset-0 w-full h-full object-cover" />
+              }
+            </div>
+
+            <!-- Info -->
+            <div class="flex-1 min-w-0 py-3.5 pl-3 pr-3">
+              <p class="text-[11px] text-gray-400 truncate text-left">{{ row.year }} {{ row.releaseName }}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-bold text-gray-900 truncate leading-tight">{{ row.setName }}</p>
+                @if (row.parallels.length > 1) {
+                  <span class="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#800020] text-white text-[10px] font-bold flex items-center justify-center">
+                    ×{{ row.parallels.length }}
+                  </span>
+                }
+              </div>
+
+              <!-- Progress bar -->
+              <div class="mt-2.5 mb-1">
+                <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500"
+                       [class]="row.pct >= 100 ? 'bg-emerald-500' : 'bg-[#800020]'"
+                       [style.width.%]="row.pct">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Stats row -->
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-gray-400">
+                  {{ row.ownedCount }} / {{ row.cardCount }} cards
+                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-semibold"
+                        [class]="row.pct >= 100 ? 'text-emerald-600' : 'text-[#800020]'">
+                    {{ row.pct | number:'1.0-0' }}%
+                  </span>
+                  <span class="text-[11px] text-gray-400">·</span>
+                  <span class="text-[11px] font-semibold text-gray-700">${{ row.totalValue | number:'1.0-0' }}</span>
+                </div>
+              </div>
+            </div>
+
+          </button>
+
+          <!-- Parallels expanded -->
+          @if (isSetExpanded(row.setId)) {
+            <div class="border-t border-gray-50 divide-y divide-gray-50">
+              @for (p of row.parallels; track p.parallelName) {
+                <div class="flex items-center gap-3 px-4 py-2.5">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold text-gray-700 truncate">{{ p.parallelName }}</p>
+                    <div class="mt-1.5">
+                      <div class="h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500"
+                             [class]="p.pct >= 100 ? 'bg-emerald-500' : 'bg-[#800020]/60'"
+                             [style.width.%]="p.pct">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <p class="text-[11px] font-semibold"
+                       [class]="p.pct >= 100 ? 'text-emerald-600' : 'text-[#800020]'">
+                      {{ p.pct | number:'1.0-0' }}%
+                    </p>
+                    <p class="text-[10px] text-gray-400">{{ p.ownedCount }}/{{ p.cardCount }}</p>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+        </div>
+        </div><!-- /relative stack wrapper -->
+      }
+    </div>
+
+  }
 
 </div>
