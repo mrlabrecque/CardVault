@@ -13,6 +13,8 @@ export interface ReleaseRecord {
   release_type: string;
   ebay_search_template: string | null;
   set_slug: string;
+  cardsight_id: string | null;
+  source: string;
   created_at: string;
 }
 
@@ -85,12 +87,13 @@ export class ReleasesService {
     return this.db.insert(payload).select().single();
   }
 
-  async searchReleases(query: string): Promise<ReleaseRecord[]> {
+  async searchReleases(query: string, limit = 10, offset = 0): Promise<ReleaseRecord[]> {
     const { data } = await this.db
       .select('*')
       .ilike('name', `%${query}%`)
       .order('year', { ascending: false })
-      .limit(10);
+      .order('name')
+      .range(offset, offset + limit - 1);
     return (data as ReleaseRecord[]) ?? [];
   }
 

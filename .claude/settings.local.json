@@ -23,7 +23,8 @@
       "WebFetch(domain:play.cardsight.ai)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(curl -s \"https://raw.githubusercontent.com/cardsightai/cardsightai-sdk-node/main/src/generated/types.ts\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/cardsightai/cardsightai-sdk-node/main/src/generated/types.ts\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

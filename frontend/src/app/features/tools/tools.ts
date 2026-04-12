@@ -33,7 +33,7 @@ export class Tools {
       label: 'Card Import',
       desc: 'Import your collection from a CSV or spreadsheet.',
       route: '/import',
-      available: false,
+      available: true,
     },
     {
       label: 'Grading',

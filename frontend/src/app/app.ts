@@ -38,7 +38,10 @@ export class App {
     this.pageTitle = toSignal(
       this.router.events.pipe(
         filter(e => e instanceof NavigationEnd),
-        map(() => this.titleFromUrl()),
+        map(() => {
+          document.getElementById('app-content')?.scrollTo({ top: 0, behavior: 'instant' });
+          return this.titleFromUrl();
+        }),
         startWith(this.titleFromUrl())
       ),
       { initialValue: this.titleFromUrl() }

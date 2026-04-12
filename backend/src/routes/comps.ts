@@ -16,7 +16,7 @@ const PARALLEL_KEYWORDS = [
 
 function buildEbayQuery(card: any): string {
   const {
-    ebay_search_template, year, set_name, player, card_number,
+    ebay_search_template, year, set_name, subset_name, player, card_number,
     parallel_type, is_auto, is_patch, is_rookie, serial_max,
     is_graded, grader, grade_value,
   } = card;
@@ -25,23 +25,31 @@ function buildEbayQuery(card: any): string {
 
   if (ebay_search_template) {
     base = (ebay_search_template as string)
-      .replace('{year}', year ?? '')
-      .replace('{brand}', set_name ?? '')
+      .replace('{year}',        year ?? '')
+      .replace('{brand}',       set_name ?? '')
+      .replace('{set}',         subset_name ?? '')
       .replace('{player_name}', player ?? '')
-      .replace('{card_number}', card_number ?? '');
+      .replace('{card_number}', card_number ?? '')
+      .replace('{parallel}',    (parallel_type && parallel_type !== 'Base') ? parallel_type : '')
+      .replace('{auto}',        is_auto  ? 'Auto'  : '')
+      .replace('{patch}',       is_patch ? 'Patch' : '')
+      .replace(/{serial_max}/g, serial_max ? String(serial_max) : '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   } else {
-    const parts: string[] = [String(year ?? ''), set_name ?? '', player ?? ''];
+    const parts: string[] = [String(year ?? ''), set_name ?? '', subset_name ?? '', player ?? ''];
     if (card_number) parts.push(`#${card_number}`);
     base = parts.filter(Boolean).join(' ');
   }
 
-  // Append card-specific attributes so eBay narrows to the right variant
+  // Append attributes not already in the template
+  const templateStr = ebay_search_template ?? '';
   const attrs: string[] = [];
-  if (parallel_type && parallel_type !== 'Base') attrs.push(parallel_type);
-  if (is_rookie)  attrs.push('RC');
-  if (is_auto)    attrs.push('Auto');
-  if (is_patch)   attrs.push('Patch');
-  if (serial_max) attrs.push(`/${serial_max}`);
+  if (!templateStr.includes('{parallel}')    && parallel_type && parallel_type !== 'Base') attrs.push(parallel_type);
+  if (!templateStr.includes('{auto}')        && is_auto)    attrs.push('Auto');
+  if (!templateStr.includes('{patch}')       && is_patch)   attrs.push('Patch');
+  if (!templateStr.includes('{serial_max}')  && serial_max) attrs.push(`/${serial_max}`);
+  if (!templateStr.includes('RC')            && is_rookie)  attrs.push('RC');
   if (is_graded && grader && grade_value) attrs.push(`${grader} ${grade_value}`);
 
   return [base, ...attrs].filter(Boolean).join(' ');
@@ -154,19 +162,21 @@ router.post('/card-value', async (req: AuthRequest, res) => {
         uc.is_graded,
         uc.grader,
         uc.grade_value,
-        mcd.player,
-        mcd.card_number,
-        mcd.is_rookie,
-        mcd.is_auto,
-        mcd.is_patch,
+        COALESCE(mcd.player,      uc.player)       AS player,
+        COALESCE(mcd.card_number, uc.card_number)  AS card_number,
+        COALESCE(mcd.is_rookie,   uc.is_rookie)    AS is_rookie,
+        COALESCE(mcd.is_auto,     uc.is_auto)      AS is_auto,
+        COALESCE(mcd.is_patch,    uc.is_patch)     AS is_patch,
         mcd.serial_max,
-        r.name   AS set_name,
+        uc.parallel_name                           AS parallel_type,
+        r.name                                     AS set_name,
+        s.name                                     AS subset_name,
         r.year,
         r.sport,
         r.ebay_search_template
       FROM user_cards uc
-      JOIN master_card_definitions mcd ON mcd.id = uc.master_card_id
-      LEFT JOIN sets s ON s.id = mcd.set_id
+      LEFT JOIN master_card_definitions mcd ON mcd.id = uc.master_card_id
+      LEFT JOIN sets s ON s.id = COALESCE(mcd.set_id, uc.set_id)
       LEFT JOIN releases r ON r.id = s.release_id
       WHERE uc.id = ${cardId} AND uc.user_id = ${userId}
     `;

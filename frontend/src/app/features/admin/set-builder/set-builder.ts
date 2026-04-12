@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -7,6 +7,8 @@ import { MessageService } from 'primeng/api';
 import { Toast } from 'primeng/toast';
 import { ReleasesService, ReleaseRecord, UpsertParallelPayload } from '../../../core/services/releases';
 import { CardsightService, CardsightReleaseResult } from '../../../core/services/cardsight';
+
+const RELEASES_PAGE_SIZE = 10;
 
 @Component({
   selector: 'app-release-builder',
@@ -25,6 +27,31 @@ export class ReleaseBuilder implements OnInit {
   readonly releaseTypes = ['Hobby', 'Retail', 'FOTL'];
 
   releases = signal<ReleaseRecord[]>([]);
+  releasesSearch = signal('');
+  releasesPage = signal(0);
+
+  filteredReleases = computed(() => {
+    const q = this.releasesSearch().toLowerCase().trim();
+    return q
+      ? this.releases().filter(r =>
+          r.name.toLowerCase().includes(q) ||
+          String(r.year).includes(q) ||
+          r.sport.toLowerCase().includes(q)
+        )
+      : this.releases();
+  });
+
+  pagedReleases = computed(() =>
+    this.filteredReleases().slice(
+      this.releasesPage() * RELEASES_PAGE_SIZE,
+      (this.releasesPage() + 1) * RELEASES_PAGE_SIZE
+    )
+  );
+
+  totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.filteredReleases().length / RELEASES_PAGE_SIZE))
+  );
+
   saving = signal(false);
   duplicateError = signal(false);
   templatePreview = signal('');
@@ -38,6 +65,32 @@ export class ReleaseBuilder implements OnInit {
   csImportingId = signal<string | null>(null);
   csImportProgress = signal(0);
   csSearched = signal(false);
+
+  // CardSight results filter + pagination
+  csFilter = signal('');
+  csPage = signal(0);
+
+  csFilteredResults = computed(() => {
+    const q = this.csFilter().toLowerCase().trim();
+    return q
+      ? this.csResults().filter(r => r.name.toLowerCase().includes(q) || String(r.year).includes(q))
+      : this.csResults();
+  });
+
+  csPagedResults = computed(() =>
+    this.csFilteredResults().slice(
+      this.csPage() * RELEASES_PAGE_SIZE,
+      (this.csPage() + 1) * RELEASES_PAGE_SIZE
+    )
+  );
+
+  csTotalPages = computed(() =>
+    Math.max(1, Math.ceil(this.csFilteredResults().length / RELEASES_PAGE_SIZE))
+  );
+
+  importedCardsightIds = computed(() =>
+    new Set(this.releases().map(r => r.cardsight_id).filter(Boolean))
+  );
 
   // Per-result expanded options state
   csExpandedId = signal<string | null>(null);
@@ -116,6 +169,8 @@ export class ReleaseBuilder implements OnInit {
       release_type: this.form.value.release_type!,
       ebay_search_template: this.form.value.ebay_search_template ?? null,
       set_slug: this.generateSlug(),
+      cardsight_id: null,
+      source: 'manual',
     };
 
     const { data: newRelease, error } = await this.releasesService.createRelease(payload);
@@ -193,10 +248,17 @@ export class ReleaseBuilder implements OnInit {
       });
   }
 
+  onCsFilter(q: string) {
+    this.csFilter.set(q);
+    this.csPage.set(0);
+  }
+
   async searchCardSight() {
     this.csSearching.set(true);
     this.csSearched.set(false);
     this.csResults.set([]);
+    this.csFilter.set('');
+    this.csPage.set(0);
     try {
       const results = await this.cardsightService.searchReleases({
         year:         this.csYear       || undefined,
@@ -264,6 +326,11 @@ export class ReleaseBuilder implements OnInit {
       this.csImportingId.set(null);
       this.csImportProgress.set(0);
     }
+  }
+
+  onReleasesSearch(q: string) {
+    this.releasesSearch.set(q);
+    this.releasesPage.set(0);
   }
 
   setReleaseType(rt: string) {
