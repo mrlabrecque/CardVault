@@ -30,12 +30,6 @@ export class Tools {
       available: false,
     },
     {
-      label: 'Card Import',
-      desc: 'Import your collection from a CSV or spreadsheet.',
-      route: '/import',
-      available: true,
-    },
-    {
       label: 'Grading',
       desc: 'Grading recommendations based on estimated PSA 10 premiums.',
       route: '/grading',
