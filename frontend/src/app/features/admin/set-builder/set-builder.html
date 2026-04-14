@@ -179,17 +179,46 @@
     }
   </div>
 
-  <div class="flex items-center gap-3 mb-4">
+  <!-- ── Manual Entry Trigger ─────────────────────── -->
+  <div class="flex items-center gap-3 mb-6">
     <div class="flex-1 h-px bg-gray-100"></div>
-    <span class="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">or add manually</span>
+    <button
+      type="button"
+      (click)="showManualForm.set(true)"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors text-xs font-semibold uppercase tracking-wider"
+    >
+      <i class="pi pi-plus text-[10px]"></i>
+      Add manually
+    </button>
     <div class="flex-1 h-px bg-gray-100"></div>
   </div>
 
-  <!-- ── New Release Form ──────────────────────────── -->
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
-    <h2 class="text-base font-bold text-gray-900 mb-4">New Release</h2>
+  <!-- ── New Release Modal ──────────────────────────── -->
+  @if (showManualForm()) {
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-black/50 z-[120]" (click)="showManualForm.set(false)"></div>
 
-    <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
+  <!-- Bottom Sheet -->
+  <div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white rounded-t-2xl z-[130] flex flex-col"
+       style="height: 85dvh;">
+
+    <!-- Handle + Header -->
+    <div class="flex-shrink-0">
+      <div class="flex justify-center pt-3 pb-1">
+        <div class="w-10 h-1 rounded-full bg-gray-200"></div>
+      </div>
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <h2 class="text-base font-bold text-gray-900">New Release</h2>
+        <button class="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                (click)="showManualForm.set(false)">
+          <i class="pi pi-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Scrollable form body -->
+    <div class="flex-1 overflow-y-auto px-5 py-4">
+    <form [formGroup]="form" class="flex flex-col gap-4">
 
       <!-- Brand / Name -->
       <div class="flex flex-col gap-1">
@@ -318,17 +347,30 @@
         <span class="font-mono text-gray-400">{{ generateSlug() }}</span>
       </div>
 
-      <!-- Submit -->
-      <button
-        type="submit"
-        [disabled]="saving()"
-        class="w-full bg-[#800020] text-white rounded-xl py-3 text-sm font-semibold tracking-wide disabled:opacity-40 active:opacity-80 transition-opacity mt-1"
-      >
-        {{ saving() ? 'Saving…' : 'Create Release' }}
-      </button>
-
     </form>
+    </div>
+
+    <!-- Sticky Footer -->
+    <div class="flex-shrink-0 px-5 py-4 border-t border-gray-100 bg-white">
+      <button
+        type="button"
+        (click)="submit()"
+        [disabled]="saving()"
+        class="w-full py-3 rounded-xl text-sm font-bold transition-all"
+        [class]="saving() ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#800020] text-white active:opacity-90'"
+      >
+        @if (saving()) {
+          <span class="flex items-center justify-center gap-2">
+            <i class="pi pi-spin pi-spinner"></i> Saving…
+          </span>
+        } @else {
+          Create Release
+        }
+      </button>
+    </div>
+
   </div>
+  }
 
   <!-- ── Existing Releases ─────────────────────────── -->
   <div>

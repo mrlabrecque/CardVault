@@ -370,6 +370,33 @@ export class CardsService {
     }
   }
 
+  async updateCard(cardId: string, patch: {
+    pricePaid?: number | null;
+    serialNumber?: string | null;
+    isGraded?: boolean;
+    grader?: string | null;
+    gradeValue?: string | null;
+    parallelId?: string | null;
+    parallelName?: string;
+  }): Promise<{ error: any }> {
+    const row: Record<string, any> = {};
+    if ('pricePaid'    in patch) row['price_paid']    = patch.pricePaid;
+    if ('serialNumber' in patch) row['serial_number'] = patch.serialNumber || null;
+    if ('isGraded'     in patch) row['is_graded']     = patch.isGraded;
+    if ('grader'       in patch) row['grader']        = patch.grader;
+    if ('gradeValue'   in patch) row['grade_value']   = patch.gradeValue;
+    if ('parallelId'   in patch) row['parallel_id']   = patch.parallelId;
+    if ('parallelName' in patch) row['parallel_name'] = patch.parallelName;
+
+    const { error } = await this.supabase
+      .from('user_cards')
+      .update(row)
+      .eq('id', cardId);
+
+    if (!error) await this.loadUserCards();
+    return { error };
+  }
+
   async deleteCard(cardId: string): Promise<{ error: any }> {
     const { error } = await this.supabase
       .from('user_cards')

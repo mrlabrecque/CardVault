@@ -23,6 +23,32 @@ body {
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
 }
 
+/* Tablet — expand to full width, keep bottom tab bar */
+@media (min-width: 640px) {
+  .app-shell {
+    max-width: 100%;
+  }
+}
+
+/* Desktop — sidebar layout */
+@media (min-width: 1024px) {
+  .app-shell {
+    flex-direction: row;
+    max-width: 100%;
+    margin: 0;
+  }
+}
+
+/* ── Main column (wraps header + content + tab bar) ── */
+.main-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 .app-content {
   flex: 1;
   overflow-y: auto;
@@ -31,6 +57,12 @@ body {
 
 .app-content--authenticated {
   padding-bottom: var(--tab-bar-height);
+}
+
+@media (min-width: 1024px) {
+  .app-content--authenticated {
+    padding-bottom: 0;
+  }
 }
 
 /* ── App Header ──────────────────────────────────── */
@@ -59,6 +91,13 @@ body {
   }
 }
 
+/* Hide eyebrow on desktop since brand is in the sidebar */
+@media (min-width: 1024px) {
+  .app-header__eyebrow {
+    display: none;
+  }
+}
+
 /* ── Avatar button ── */
 .avatar-wrap {
   position: relative;
@@ -80,6 +119,13 @@ body {
   transition: opacity 0.15s;
 
   &:hover { opacity: 0.85; }
+}
+
+/* Hide mobile avatar on desktop (user info is in sidebar) */
+@media (min-width: 1024px) {
+  .app-header .avatar-wrap {
+    display: none;
+  }
 }
 
 /* ── Dropdown menu ── */
@@ -175,6 +221,22 @@ body {
   z-index: 100;
 }
 
+/* Tablet — tab bar spans full width */
+@media (min-width: 640px) {
+  .tab-bar {
+    max-width: 100%;
+    left: 0;
+    transform: none;
+  }
+}
+
+/* Desktop — hide tab bar, sidebar takes over */
+@media (min-width: 1024px) {
+  .tab-bar {
+    display: none;
+  }
+}
+
 .tab-item {
   display: flex;
   flex-direction: column;
@@ -236,6 +298,167 @@ body {
       background: #f0f0f0;
       transform: scale(0.94);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+  }
+}
+
+/* ── Desktop Sidebar ─────────────────────────────── */
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--color-primary);
+    height: 100dvh;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
+
+    &__brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    &__logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    &__app-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+
+    &__tagline {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    &__nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 12px;
+      gap: 2px;
+    }
+
+    &__nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+
+      svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+      }
+
+      &.active {
+        background: rgba(255, 255, 255, 0.15);
+        color: #ffffff;
+      }
+    }
+
+    &__divider {
+      border: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      margin: 6px 12px;
+    }
+
+    &__footer {
+      padding: 12px 12px 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    &__user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 4px 12px;
+    }
+
+    &__avatar {
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.2) !important;
+      cursor: default !important;
+
+      &:hover { opacity: 1 !important; }
+    }
+
+    &__user-info {
+      min-width: 0;
+    }
+
+    &__user-email {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 140px;
+    }
+
+    &__user-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-top: 2px;
+    }
+
+    &__signout {
+      width: 100%;
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.5);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.15s, color 0.15s;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+      }
     }
   }
 }

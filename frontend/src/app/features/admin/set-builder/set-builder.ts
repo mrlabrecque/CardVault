@@ -26,6 +26,8 @@ export class ReleaseBuilder implements OnInit {
   readonly sports = ['Basketball', 'Baseball', 'Football', 'Soccer'];
   readonly releaseTypes = ['Hobby', 'Retail', 'FOTL'];
 
+  showManualForm = signal(false);
+
   releases = signal<ReleaseRecord[]>([]);
   releasesSearch = signal('');
   releasesPage = signal(0);
@@ -203,6 +205,7 @@ export class ReleaseBuilder implements OnInit {
       const setNote = extraSets.length > 0 ? ` + ${extraSets.length + 1} sets` : '';
       const parallelNote = parallelCount > 0 ? `, ${parallelCount} parallels` : '';
       this.messageService.add({ severity: 'success', summary: 'Release Created', detail: `"${name}" added${setNote}${parallelNote}.` });
+      this.showManualForm.set(false);
       this.form.reset({
         name: '',
         year: new Date().getFullYear(),

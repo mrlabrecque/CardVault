@@ -1,97 +1,189 @@
 <div class="app-shell">
 
   @if (auth.isAuthenticated()) {
-  <header class="app-header">
-    <div>
-      <p class="app-header__eyebrow">Card Vault</p>
-      <h1 class="app-header__title">{{ pageTitle() }}</h1>
+  <!-- Desktop sidebar — hidden on mobile/tablet via CSS -->
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <div class="sidebar__logo">CV</div>
+      <div>
+        <p class="sidebar__app-name">Card Vault</p>
+        <p class="sidebar__tagline">Collection Manager</p>
+      </div>
     </div>
 
-    <div class="avatar-wrap">
-      <button class="avatar-btn" (click)="toggleMenu()" [attr.aria-expanded]="menuOpen()">
-        {{ initials() }}
-      </button>
+    <nav class="sidebar__nav">
+      <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="sidebar__nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span>Dashboard</span>
+      </a>
 
-      @if (menuOpen()) {
-        <!-- Backdrop to close on outside click -->
-        <div class="menu-backdrop" (click)="menuOpen.set(false)"></div>
+      <a routerLink="/collection" routerLinkActive="active" class="sidebar__nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+        <span>Collection</span>
+      </a>
 
-        <div class="avatar-menu">
-          <p class="avatar-menu__email">{{ auth.user()?.email }}</p>
-          @if (auth.isAppAdmin()) {
-            <span class="avatar-menu__badge">App Admin</span>
-          }
-          <hr class="avatar-menu__divider" />
-          @if (auth.isAppAdmin()) {
-            <a routerLink="/admin/releases" (click)="menuOpen.set(false)" class="avatar-menu__link">
-              Manage Releases
-            </a>
-            <a routerLink="/admin/parallels/pending" (click)="menuOpen.set(false)" class="avatar-menu__link flex items-center justify-between">
-              <span>Pending Parallels</span>
-              @if (pendingParallelCount() > 0) {
-                <span class="bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                  {{ pendingParallelCount() }}
-                </span>
-              }
-            </a>
-            <hr class="avatar-menu__divider" />
-          }
-          <button class="avatar-menu__signout" (click)="signOut()">
-            Sign out
-          </button>
-        </div>
-      }
-    </div>
-  </header>
-  }
-
-  <main id="app-content" [class]="'app-content' + (auth.isAuthenticated() ? ' app-content--authenticated' : '')">
-    <router-outlet />
-  </main>
-
-  @if (auth.isAuthenticated()) {
-  <nav class="tab-bar">
-    <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="tab-item">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <polyline points="9 22 9 12 15 12 15 22"/>
-      </svg>
-      <span>Dashboard</span>
-    </a>
-
-    <a routerLink="/collection" routerLinkActive="active" class="tab-item">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2"/>
-        <path d="M8 21h8M12 17v4"/>
-      </svg>
-      <span>Collection</span>
-    </a>
-
-    <a routerLink="/scanner" routerLinkActive="active" class="tab-item tab-item--add">
-      <div class="add-fab">
+      <a routerLink="/scanner" routerLinkActive="active" class="sidebar__nav-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
           <circle cx="12" cy="13" r="4"/>
         </svg>
+        <span>Scan / Add</span>
+      </a>
+
+      <a routerLink="/wishlist" routerLinkActive="active" class="sidebar__nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        <span>Wishlist</span>
+      </a>
+
+      <a routerLink="/tools" routerLinkActive="active" class="sidebar__nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+        <span>Tools</span>
+      </a>
+
+      @if (auth.isAppAdmin()) {
+        <hr class="sidebar__divider" />
+        <a routerLink="/admin/releases" routerLinkActive="active" class="sidebar__nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          <span>Releases</span>
+        </a>
+        <a routerLink="/admin/parallels/pending" routerLinkActive="active" class="sidebar__nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span class="flex items-center gap-2">
+            Pending
+            @if (pendingParallelCount() > 0) {
+              <span class="bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                {{ pendingParallelCount() }}
+              </span>
+            }
+          </span>
+        </a>
+      }
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="sidebar__user">
+        <div class="avatar-btn sidebar__avatar">{{ initials() }}</div>
+        <div class="sidebar__user-info">
+          <p class="sidebar__user-email">{{ auth.user()?.email }}</p>
+          @if (auth.isAppAdmin()) {
+            <span class="sidebar__user-badge">App Admin</span>
+          }
+        </div>
       </div>
-      <span>Scan</span>
-    </a>
-
-    <a routerLink="/wishlist" routerLinkActive="active" class="tab-item">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-      </svg>
-      <span>Wishlist</span>
-    </a>
-
-    <a routerLink="/tools" routerLinkActive="active" class="tab-item">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-      </svg>
-      <span>Tools</span>
-    </a>
-  </nav>
+      <button class="sidebar__signout" (click)="signOut()">Sign out</button>
+    </div>
+  </aside>
   }
+
+  <!-- Main content column -->
+  <div class="main-column">
+    @if (auth.isAuthenticated()) {
+    <header class="app-header">
+      <div>
+        <p class="app-header__eyebrow">Card Vault</p>
+        <h1 class="app-header__title">{{ pageTitle() }}</h1>
+      </div>
+
+      <div class="avatar-wrap">
+        <button class="avatar-btn" (click)="toggleMenu()" [attr.aria-expanded]="menuOpen()">
+          {{ initials() }}
+        </button>
+
+        @if (menuOpen()) {
+          <!-- Backdrop to close on outside click -->
+          <div class="menu-backdrop" (click)="menuOpen.set(false)"></div>
+
+          <div class="avatar-menu">
+            <p class="avatar-menu__email">{{ auth.user()?.email }}</p>
+            @if (auth.isAppAdmin()) {
+              <span class="avatar-menu__badge">App Admin</span>
+            }
+            <hr class="avatar-menu__divider" />
+            @if (auth.isAppAdmin()) {
+              <a routerLink="/admin/releases" (click)="menuOpen.set(false)" class="avatar-menu__link">
+                Manage Releases
+              </a>
+              <a routerLink="/admin/parallels/pending" (click)="menuOpen.set(false)" class="avatar-menu__link flex items-center justify-between">
+                <span>Pending Parallels</span>
+                @if (pendingParallelCount() > 0) {
+                  <span class="bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {{ pendingParallelCount() }}
+                  </span>
+                }
+              </a>
+              <hr class="avatar-menu__divider" />
+            }
+            <button class="avatar-menu__signout" (click)="signOut()">
+              Sign out
+            </button>
+          </div>
+        }
+      </div>
+    </header>
+    }
+
+    <main id="app-content" [class]="'app-content' + (auth.isAuthenticated() ? ' app-content--authenticated' : '')">
+      <router-outlet />
+    </main>
+
+    @if (auth.isAuthenticated()) {
+    <nav class="tab-bar">
+      <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="tab-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span>Dashboard</span>
+      </a>
+
+      <a routerLink="/collection" routerLinkActive="active" class="tab-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+        <span>Collection</span>
+      </a>
+
+      <a routerLink="/scanner" routerLinkActive="active" class="tab-item tab-item--add">
+        <div class="add-fab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </div>
+        <span>Scan</span>
+      </a>
+
+      <a routerLink="/wishlist" routerLinkActive="active" class="tab-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        <span>Wishlist</span>
+      </a>
+
+      <a routerLink="/tools" routerLinkActive="active" class="tab-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+        <span>Tools</span>
+      </a>
+    </nav>
+    }
+  </div>
 </div>
 
 <app-add-card-dialog />
