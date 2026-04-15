@@ -1,9 +1,10 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../core/services/auth';
 import { environment } from '../../../../environments/environment';
+import { AddToWishlistDialog, WishlistSeed } from '../../wishlist/add-to-wishlist-dialog/add-to-wishlist-dialog';
 
 export interface SoldItem {
   itemId:       string | null;
@@ -33,12 +34,13 @@ interface HistoryEntry {
 
 @Component({
   selector: 'app-comps-search',
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, AddToWishlistDialog],
   templateUrl: './comps-search.html',
   styleUrl: './comps-search.scss',
 })
 export class CompsSearch implements OnInit {
-  private auth = inject(AuthService);
+  private auth  = inject(AuthService);
+  private route = inject(ActivatedRoute);
 
   query     = signal('');
   searching = signal(false);
@@ -58,11 +60,22 @@ export class CompsSearch implements OnInit {
 
   totalPages = computed(() => Math.max(1, Math.ceil(this.items().length / this.PAGE_SIZE)));
 
-  history       = signal<HistoryEntry[]>([]);
+  history        = signal<HistoryEntry[]>([]);
   historyLoading = signal(false);
+
+  // Wishlist add dialog
+  showWishlistDialog = signal(false);
+  wishlistSeed       = signal<WishlistSeed | null>(null);
 
   async ngOnInit() {
     await this.loadHistory();
+
+    // Auto-search if ?q= param is present (e.g. navigated from wishlist)
+    const q = this.route.snapshot.queryParamMap.get('q');
+    if (q?.trim()) {
+      this.query.set(q.trim());
+      await this.search();
+    }
   }
 
   async search() {
@@ -123,5 +136,13 @@ export class CompsSearch implements OnInit {
 
   price(item: SoldItem): number {
     return parseFloat(item.price?.value ?? '0');
+  }
+
+  openWishlist(item: SoldItem) {
+    this.wishlistSeed.set({
+      player: item.title,           // user will trim this down
+      suggested_price: this.price(item),
+    });
+    this.showWishlistDialog.set(true);
   }
 }

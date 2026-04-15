@@ -26,7 +26,9 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/cardsightai/cardsightai-sdk-node/main/src/generated/types.ts\")",
       "Bash(npx tsc:*)",
       "WebFetch(domain:api.github.com)",
-      "Bash(curl -s https://raw.githubusercontent.com/colindaniels/eBay-sold-items-documentation/main/README.md)"
+      "Bash(curl -s https://raw.githubusercontent.com/colindaniels/eBay-sold-items-documentation/main/README.md)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration"
     ]
   }
 }

@@ -98,13 +98,28 @@
                 </div>
               </div>
             </div>
-            @if (item.itemWebUrl) {
-              <a [href]="item.itemWebUrl" target="_blank" rel="noopener noreferrer"
-                 class="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors">
-                <i class="pi pi-external-link text-[10px]"></i>
-                View on eBay
-              </a>
-            }
+
+            <!-- Actions row -->
+            <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-50">
+              @if (item.itemWebUrl) {
+                <a [href]="item.itemWebUrl" target="_blank" rel="noopener noreferrer"
+                   class="flex-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors">
+                  <i class="pi pi-external-link text-[10px]"></i>
+                  View on eBay
+                </a>
+              } @else {
+                <span class="flex-1"></span>
+              }
+              <!-- Add to Wishlist -->
+              <button
+                (click)="openWishlist(item)"
+                class="flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-[#800020] transition-colors"
+                title="Add to Wishlist"
+              >
+                <i class="pi pi-bookmark text-xs"></i>
+                Watch
+              </button>
+            </div>
           </div>
         }
       </div>
@@ -152,3 +167,10 @@
   }
 
 </div>
+
+<!-- Add to Wishlist dialog -->
+<app-add-to-wishlist-dialog
+  [visible]="showWishlistDialog()"
+  [seed]="wishlistSeed()"
+  (visibleChange)="showWishlistDialog.set($event)"
+/>

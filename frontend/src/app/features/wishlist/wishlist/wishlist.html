@@ -1,57 +1,145 @@
 <div class="flex flex-col gap-5 px-4 pt-6 pb-4">
 
+  <!-- Empty state -->
+  @if (!wishlist.loading() && wishlist.items().length === 0) {
+    <div class="flex flex-col items-center gap-4 py-16 text-center">
+      <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+        <i class="pi pi-bookmark text-2xl text-gray-300"></i>
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-gray-700">No cards on your wishlist</p>
+        <p class="text-xs text-gray-400 mt-1">Add cards to watch for deals on eBay.</p>
+      </div>
+      <button
+        (click)="showAddDialog.set(true)"
+        class="px-5 py-2.5 rounded-xl bg-[#800020] text-white text-sm font-semibold"
+      >Add a Card</button>
+    </div>
+  }
+
+  <!-- Loading -->
+  @if (wishlist.loading()) {
+    <div class="flex justify-center py-16">
+      <i class="pi pi-spin pi-spinner text-gray-300 text-2xl"></i>
+    </div>
+  }
 
   <!-- Items -->
-  <div class="flex flex-col gap-3">
-    @for (item of items(); track item.id) {
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+  @if (!wishlist.loading() && wishlist.items().length > 0) {
+    <div class="flex flex-col gap-3">
+      @for (item of wishlist.items(); track item.id) {
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
 
-        <!-- Top row -->
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-bold text-gray-900 truncate">{{ item.player }}</p>
-            <p class="text-xs text-gray-400 truncate">{{ item.year }} {{ item.set }} · {{ item.parallel }}</p>
-          </div>
-          <p-tag
-            [value]="statusLabel[item.alertStatus]"
-            [severity]="statusSeverity[item.alertStatus]"
-            styleClass="text-[10px]! shrink-0"
-          />
-        </div>
-
-        <!-- Price info -->
-        <div class="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50">
-          <div class="flex-1">
-            <p class="text-[10px] text-gray-400 uppercase tracking-wide">Target</p>
-            <p class="text-sm font-bold text-[#800020]">${{ item.targetPrice | number }}</p>
-          </div>
-          <div class="flex-1">
-            <p class="text-[10px] text-gray-400 uppercase tracking-wide">Last Seen</p>
-            @if (item.lastSeenPrice) {
-              <p class="text-sm font-bold"
-                 [class]="item.lastSeenPrice <= item.targetPrice ? 'text-emerald-500' : 'text-gray-700'">
-                ${{ item.lastSeenPrice | number }}
+          <!-- Top row: name + status badge -->
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-bold text-gray-900 truncate">{{ item.player }}</p>
+              <p class="text-xs text-gray-400 truncate">
+                @if (item.year) { {{ item.year }} }
+                @if (item.set_name) { {{ item.set_name }} }
+                @if (item.parallel) { · {{ item.parallel }} }
               </p>
-            } @else {
-              <p class="text-sm text-gray-300">—</p>
-            }
+            </div>
+            <p-tag
+              [value]="statusLabel[item.alert_status]"
+              [severity]="statusSeverity[item.alert_status]"
+              styleClass="text-[10px]! shrink-0"
+            />
           </div>
-          <div class="flex-1">
-            <p class="text-[10px] text-gray-400 uppercase tracking-wide">Grade</p>
-            <p class="text-sm font-semibold text-gray-700">{{ item.grade }}</p>
+
+          <!-- Attributes row -->
+          @if (attrs(item).length > 0 || item.card_number) {
+            <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+              @if (item.card_number) {
+                <span class="text-[10px] font-semibold text-gray-400">#{{ item.card_number }}</span>
+              }
+              @for (tag of attrs(item); track tag) {
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full
+                  {{ tag === 'RC' ? 'bg-blue-100 text-blue-700' :
+                     tag === 'AUTO' ? 'bg-purple-100 text-purple-700' :
+                     tag === 'PATCH' ? 'bg-amber-100 text-amber-700' :
+                     'bg-gray-100 text-gray-500' }}">
+                  {{ tag }}
+                </span>
+              }
+            </div>
+          }
+
+          <!-- Price info -->
+          <div class="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50">
+            <div class="flex-1">
+              <p class="text-[10px] text-gray-400 uppercase tracking-wide">Target</p>
+              @if (item.target_price) {
+                <p class="text-sm font-bold text-[#800020]">${{ item.target_price | number:'1.0-0' }}</p>
+              } @else {
+                <p class="text-sm text-gray-300">—</p>
+              }
+            </div>
+            <div class="flex-1">
+              <p class="text-[10px] text-gray-400 uppercase tracking-wide">Last Seen</p>
+              @if (item.last_seen_price) {
+                <p class="text-sm font-bold"
+                   [class]="item.target_price && item.last_seen_price <= item.target_price ? 'text-emerald-500' : 'text-gray-700'">
+                  ${{ item.last_seen_price | number:'1.0-0' }}
+                </p>
+              } @else {
+                <p class="text-sm text-gray-300">—</p>
+              }
+            </div>
+            <div class="flex-1">
+              <p class="text-[10px] text-gray-400 uppercase tracking-wide">Grade</p>
+              <p class="text-sm font-semibold text-gray-700">{{ item.grade || 'Any' }}</p>
+            </div>
           </div>
-        </div>
 
-        <!-- Actions -->
-        <div class="flex gap-2 mt-3">
-          <p-button icon="pi pi-search" label="Search Comps" size="small" [outlined]="true"
-                    severity="secondary" styleClass="flex-1 text-xs!" />
-          <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true"
-                    styleClass="text-xs!" (onClick)="removeItem(item.id)" />
-        </div>
+          <!-- Actions -->
+          <div class="flex gap-2 mt-3">
+            <button
+              (click)="searchComps(item)"
+              class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <i class="pi pi-search text-[11px]"></i>
+              Search Comps
+            </button>
+            <button
+              (click)="togglePause(item)"
+              class="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+              [title]="item.alert_status === 'paused' ? 'Resume watching' : 'Pause watching'"
+            >
+              <i [class]="item.alert_status === 'paused' ? 'pi pi-play text-xs' : 'pi pi-pause text-xs'"></i>
+            </button>
+            <button
+              (click)="removeItem(item.id)"
+              [disabled]="deletingId() === item.id"
+              class="w-9 h-9 flex items-center justify-center rounded-xl border border-red-100 text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40"
+            >
+              @if (deletingId() === item.id) {
+                <i class="pi pi-spin pi-spinner text-xs"></i>
+              } @else {
+                <i class="pi pi-trash text-xs"></i>
+              }
+            </button>
+          </div>
 
-      </div>
-    }
-  </div>
+        </div>
+      }
+    </div>
+
+    <!-- FAB-style add button at bottom -->
+    <button
+      (click)="showAddDialog.set(true)"
+      class="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-gray-400 hover:border-[#800020]/30 hover:text-[#800020]/60 transition-colors"
+    >
+      <i class="pi pi-plus text-xs"></i>
+      Add Another Card
+    </button>
+  }
 
 </div>
+
+<!-- Add to Wishlist dialog -->
+<app-add-to-wishlist-dialog
+  [visible]="showAddDialog()"
+  (visibleChange)="showAddDialog.set($event)"
+  (added)="wishlist.load()"
+/>

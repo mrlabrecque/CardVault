@@ -1,51 +1,62 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
-import { InputNumberModule } from 'primeng/inputnumber';
-
-export type AlertStatus = 'active' | 'triggered' | 'paused';
-
-export interface WishlistItem {
-  id: string;
-  player: string;
-  set: string;
-  year: number;
-  parallel: string;
-  grade: string;
-  targetPrice: number;
-  lastSeenPrice: number | null;
-  alertStatus: AlertStatus;
-}
+import { WishlistService, WishlistItem, AlertStatus } from '../../../core/services/wishlist';
+import { AddToWishlistDialog } from '../add-to-wishlist-dialog/add-to-wishlist-dialog';
 
 @Component({
   selector: 'app-wishlist',
-  imports: [CommonModule, FormsModule, ButtonModule, TagModule, InputNumberModule],
+  imports: [CommonModule, ButtonModule, TagModule, AddToWishlistDialog],
   templateUrl: './wishlist.html',
   styleUrl: './wishlist.scss',
 })
-export class Wishlist {
-  items = signal<WishlistItem[]>([
-    { id: '1', player: 'Auston Matthews', set: 'Upper Deck Young Guns', year: 2016, parallel: 'Base', grade: 'PSA 10', targetPrice: 400, lastSeenPrice: 520, alertStatus: 'active' },
-    { id: '2', player: 'Caitlin Clark', set: 'Topps Chrome', year: 2024, parallel: 'Refractor', grade: 'PSA 10', targetPrice: 300, lastSeenPrice: 295, alertStatus: 'triggered' },
-    { id: '3', player: 'Jayden Daniels', set: 'Panini Prizm', year: 2024, parallel: 'Silver', grade: 'PSA 10', targetPrice: 150, lastSeenPrice: null, alertStatus: 'paused' },
-    { id: '4', player: 'Sam Bennett', set: 'Upper Deck', year: 2014, parallel: 'Base', grade: 'PSA 9', targetPrice: 80, lastSeenPrice: 95, alertStatus: 'active' },
-  ]);
+export class Wishlist implements OnInit {
+  readonly wishlist = inject(WishlistService);
+  private router = inject(Router);
+
+  showAddDialog = signal(false);
+  deletingId = signal<string | null>(null);
 
   statusLabel: Record<AlertStatus, string> = {
-    active: 'Watching',
+    active:    'Watching',
     triggered: 'Below Target!',
-    paused: 'Paused',
+    paused:    'Paused',
   };
 
   statusSeverity: Record<AlertStatus, 'success' | 'warn' | 'secondary'> = {
-    active: 'success',
+    active:    'success',
     triggered: 'warn',
-    paused: 'secondary',
+    paused:    'secondary',
   };
 
-  removeItem(id: string) {
-    this.items.update(items => items.filter(i => i.id !== id));
+  async ngOnInit() {
+    await this.wishlist.load();
+  }
+
+  searchComps(item: WishlistItem) {
+    const q = item.ebay_query || item.player || '';
+    this.router.navigate(['/comps'], { queryParams: { q } });
+  }
+
+  async togglePause(item: WishlistItem) {
+    const next: AlertStatus = item.alert_status === 'paused' ? 'active' : 'paused';
+    await this.wishlist.patch(item.id, { alert_status: next });
+  }
+
+  async removeItem(id: string) {
+    this.deletingId.set(id);
+    await this.wishlist.remove(id);
+    this.deletingId.set(null);
+  }
+
+  attrs(item: WishlistItem): string[] {
+    const tags: string[] = [];
+    if (item.is_rookie) tags.push('RC');
+    if (item.is_auto)   tags.push('AUTO');
+    if (item.is_patch)  tags.push('PATCH');
+    if (item.serial_max) tags.push(`/${item.serial_max}`);
+    return tags;
   }
 }

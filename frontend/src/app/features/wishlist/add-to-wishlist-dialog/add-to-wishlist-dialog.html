@@ -1,0 +1,198 @@
+@if (visible()) {
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-black/50 z-[120]" (click)="close()"></div>
+
+  <!-- Bottom Sheet -->
+  <div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white rounded-t-2xl z-[130] flex flex-col"
+       style="max-height: 90dvh;">
+
+    <!-- Handle + Header -->
+    <div class="flex-shrink-0">
+      <div class="flex justify-center pt-3 pb-1">
+        <div class="w-10 h-1 rounded-full bg-gray-200"></div>
+      </div>
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <h2 class="text-base font-bold text-gray-900">Add to Wishlist</h2>
+        <button class="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                (click)="close()">
+          <i class="pi pi-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Scrollable form -->
+    <div class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+
+      <!-- Error -->
+      @if (error()) {
+        <div class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-600">
+          <i class="pi pi-exclamation-circle shrink-0 text-xs"></i>
+          {{ error() }}
+        </div>
+      }
+
+      <!-- Player (required) -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Player <span class="text-red-400">*</span></label>
+        <input
+          type="text"
+          placeholder="e.g. Connor Bedard"
+          class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          [ngModel]="player()"
+          (ngModelChange)="player.set($event); rebuildQuery()"
+        />
+      </div>
+
+      <!-- Year + Card # -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Year</label>
+          <p-inputnumber
+            [ngModel]="year()"
+            (ngModelChange)="year.set($event); rebuildQuery()"
+            [useGrouping]="false"
+            placeholder="2024"
+            inputStyleClass="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Card #</label>
+          <input
+            type="text"
+            placeholder="e.g. 201"
+            class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+            [ngModel]="card_number()"
+            (ngModelChange)="card_number.set($event)"
+          />
+        </div>
+      </div>
+
+      <!-- Set -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Set</label>
+        <input
+          type="text"
+          placeholder="e.g. Upper Deck Series 1"
+          class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          [ngModel]="set_name()"
+          (ngModelChange)="set_name.set($event); rebuildQuery()"
+        />
+      </div>
+
+      <!-- Parallel + Grade -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Parallel</label>
+          <input
+            type="text"
+            placeholder="e.g. Silver"
+            class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+            [ngModel]="parallel()"
+            (ngModelChange)="parallel.set($event); rebuildQuery()"
+          />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Grade</label>
+          <input
+            type="text"
+            placeholder="e.g. PSA 10"
+            class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+            [ngModel]="grade()"
+            (ngModelChange)="grade.set($event); rebuildQuery()"
+          />
+        </div>
+      </div>
+
+      <!-- Attributes + Serial Max -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Attributes</label>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            (click)="toggleAttr('is_rookie')"
+            [class]="is_rookie()
+              ? 'px-3 py-1.5 rounded-full text-xs font-bold bg-blue-600 text-white'
+              : 'px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500'"
+          >RC</button>
+          <button
+            type="button"
+            (click)="toggleAttr('is_auto')"
+            [class]="is_auto()
+              ? 'px-3 py-1.5 rounded-full text-xs font-bold bg-purple-600 text-white'
+              : 'px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500'"
+          >AUTO</button>
+          <button
+            type="button"
+            (click)="toggleAttr('is_patch')"
+            [class]="is_patch()
+              ? 'px-3 py-1.5 rounded-full text-xs font-bold bg-amber-500 text-white'
+              : 'px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500'"
+          >PATCH</button>
+
+          <div class="flex items-center gap-1.5 ml-auto">
+            <span class="text-xs text-gray-400 font-semibold">/</span>
+            <p-inputnumber
+              [ngModel]="serial_max()"
+              (ngModelChange)="serial_max.set($event); rebuildQuery()"
+              [useGrouping]="false"
+              placeholder="99"
+              inputStyleClass="w-16 px-2 py-1.5 rounded-xl border border-gray-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- eBay Query -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+          eBay Search Query
+          <span class="ml-1 font-normal text-gray-300 normal-case">(auto-built · editable)</span>
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. Connor Bedard Young Guns PSA 10"
+          class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          [ngModel]="ebay_query()"
+          (ngModelChange)="onQueryInput($event)"
+        />
+      </div>
+
+      <!-- Target Price -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Target Price</label>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">$</span>
+          <p-inputnumber
+            [ngModel]="target_price()"
+            (ngModelChange)="target_price.set($event)"
+            mode="decimal"
+            [minFractionDigits]="2"
+            [maxFractionDigits]="2"
+            placeholder="0.00"
+            inputStyleClass="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
+          />
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="flex-shrink-0 px-5 py-4 border-t border-gray-100 flex gap-3">
+      <button
+        type="button"
+        (click)="close()"
+        class="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+      >Cancel</button>
+      <button
+        type="button"
+        (click)="save()"
+        [disabled]="saving()"
+        class="flex-1 py-3 rounded-xl bg-[#800020] text-white text-sm font-semibold disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
+      >
+        @if (saving()) { <i class="pi pi-spin pi-spinner text-xs"></i> }
+        {{ saving() ? 'Saving…' : 'Add to Wishlist' }}
+      </button>
+    </div>
+
+  </div>
+}

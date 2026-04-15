@@ -1,5 +1,5 @@
 import { Component, signal, computed, inject, effect } from '@angular/core';
-import { Router, RouterOutlet, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive, NavigationEnd, NavigationStart, NavigationCancel, NavigationError } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from './core/services/auth';
@@ -27,6 +27,7 @@ const PAGE_TITLES: Record<string, string> = {
 export class App {
   menuOpen = signal(false);
   pendingParallelCount = signal(0);
+  isNavigating = signal(false);
   readonly ui = inject(UiService);
   private releasesService = inject(ReleasesService);
 
@@ -46,6 +47,11 @@ export class App {
       ),
       { initialValue: this.titleFromUrl() }
     );
+
+    this.router.events.subscribe(e => {
+      if (e instanceof NavigationStart)                                          this.isNavigating.set(true);
+      if (e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError) this.isNavigating.set(false);
+    });
 
     effect(() => {
       if (this.auth.isAppAdmin()) {
