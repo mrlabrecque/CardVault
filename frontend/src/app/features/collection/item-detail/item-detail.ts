@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -26,6 +26,14 @@ export class ItemDetail {
 
   card: Card | undefined;
   comps = signal<SoldComp[]>([]);
+  compsWindow = signal<30 | 90>(90);
+  filteredComps = computed(() => {
+    const window = this.compsWindow();
+    if (window === 90) return this.comps();
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - window);
+    return this.comps().filter(c => !c.sold_at || new Date(c.sold_at) >= cutoff);
+  });
   compsLoading = signal(false);
   confirmingDelete = signal(false);
   deleting = signal(false);

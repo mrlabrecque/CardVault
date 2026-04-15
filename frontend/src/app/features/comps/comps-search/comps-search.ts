@@ -1,60 +1,116 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { TagModule } from 'primeng/tag';
+import { AuthService } from '../../../core/services/auth';
+import { environment } from '../../../../environments/environment';
 
-interface CompResult {
-  title: string;
-  price: number;
-  condition: string;
-  soldDate: string;
-  platform: string;
+export interface SoldItem {
+  itemId:       string | null;
+  title:        string;
+  price:        { value: string; currency: string };
+  buyingOptions: string[];
+  itemEndDate:  string | null;
+  itemWebUrl:   string | null;
+  imageUrl:     string | null;
+  condition:    string;
 }
 
-interface LookupEntry {
-  query: string;
-  timestamp: Date;
-  topPrice: number;
+export interface CompsStats {
+  average_price: number;
+  median_price:  number;
+  min_price:     number;
+  max_price:     number;
+  total_results: number;
+}
+
+interface HistoryEntry {
+  id:        string;
+  query:     string;
+  timestamp: string;
+  results:   SoldItem[];
 }
 
 @Component({
   selector: 'app-comps-search',
-  imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, TagModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './comps-search.html',
   styleUrl: './comps-search.scss',
 })
-export class CompsSearch {
-  query = signal('');
-  hasSearched = signal(false);
+export class CompsSearch implements OnInit {
+  private auth = inject(AuthService);
 
-  results = signal<CompResult[]>([
-    { title: 'Patrick Mahomes 2017 Panini Prizm Silver PSA 10', price: 1249.99, condition: 'PSA 10', soldDate: '2026-04-01', platform: 'eBay' },
-    { title: 'Patrick Mahomes 2017 Panini Prizm Silver PSA 10', price: 1175.00, condition: 'PSA 10', soldDate: '2026-03-29', platform: 'eBay' },
-    { title: 'Mahomes 2017 Prizm Silver RC PSA 10', price: 1300.00, condition: 'PSA 10', soldDate: '2026-03-27', platform: 'eBay' },
-    { title: 'Patrick Mahomes 2017 Prizm Silver PSA 9', price: 420.00, condition: 'PSA 9', soldDate: '2026-03-25', platform: 'eBay' },
-    { title: 'Patrick Mahomes Prizm RC Silver Rookie 2017', price: 389.00, condition: 'Ungraded', soldDate: '2026-03-22', platform: 'eBay' },
-  ]);
+  query     = signal('');
+  searching = signal(false);
+  searched  = signal(false);
+  error     = signal<string | null>(null);
 
-  history = signal<LookupEntry[]>([
-    { query: 'Mahomes 2017 Prizm Silver PSA 10', timestamp: new Date('2026-04-03T18:22:00'), topPrice: 1300 },
-    { query: 'McDavid Young Guns BGS 9.5', timestamp: new Date('2026-04-02T10:05:00'), topPrice: 980 },
-    { query: 'Luka Doncic Prizm Silver PSA 9', timestamp: new Date('2026-04-01T14:30:00'), topPrice: 740 },
-    { query: 'Wembanyama Prizm Gold PSA 10', timestamp: new Date('2026-03-31T09:15:00'), topPrice: 950 },
-  ]);
+  items = signal<SoldItem[]>([]);
+  stats = signal<CompsStats | null>(null);
 
-  search() {
-    if (!this.query().trim()) return;
-    this.hasSearched.set(true);
+  history       = signal<HistoryEntry[]>([]);
+  historyLoading = signal(false);
+
+  async ngOnInit() {
+    await this.loadHistory();
   }
 
-  addToCollection(result: CompResult) {
-    // TODO: open add-to-collection dialog
+  async search() {
+    const q = this.query().trim();
+    if (!q || this.searching()) return;
+
+    this.searching.set(true);
+    this.error.set(null);
+    this.searched.set(false);
+
+    try {
+      const session = await this.auth.getSession();
+      const res = await fetch(`${environment.apiUrl}/api/comps/search`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          Authorization:   `Bearer ${session!.access_token}`,
+        },
+        body: JSON.stringify({ query: q }),
+      });
+
+      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+
+      const data = await res.json();
+      this.items.set(data.items ?? []);
+      this.stats.set(data.stats ?? null);
+      this.searched.set(true);
+      await this.loadHistory();
+    } catch (e: any) {
+      this.error.set(e.message ?? 'Search failed. Please try again.');
+    } finally {
+      this.searching.set(false);
+    }
   }
 
-  addToWishlist(result: CompResult) {
-    // TODO: add to wishlist
+  private async loadHistory() {
+    this.historyLoading.set(true);
+    try {
+      const session = await this.auth.getSession();
+      const res = await fetch(`${environment.apiUrl}/api/comps/history`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (res.ok) this.history.set(await res.json());
+    } catch {}
+    this.historyLoading.set(false);
+  }
+
+  rerun(entry: HistoryEntry) {
+    this.query.set(entry.query);
+    this.search();
+  }
+
+  historyTopPrice(entry: HistoryEntry): number {
+    const prices = (entry.results ?? []).map(r => parseFloat(r.price?.value ?? '0')).filter(p => p > 0);
+    return prices.length ? Math.max(...prices) : 0;
+  }
+
+  price(item: SoldItem): number {
+    return parseFloat(item.price?.value ?? '0');
   }
 }

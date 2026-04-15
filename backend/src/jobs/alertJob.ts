@@ -17,7 +17,7 @@ export function startAlertJob() {
     for (const item of items) {
       const listings = await searchSoldListings(JSON.stringify(item.card_details));
       // TODO: Filter active (not sold) listings below target_price and send alerts
-      console.log(`Checked alerts for wishlist item ${item.id}:`, listings.length, 'results');
+      console.log(`Checked alerts for wishlist item ${item.id}:`, listings.items.length, 'results');
     }
   });
 }

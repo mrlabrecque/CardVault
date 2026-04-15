@@ -245,9 +245,9 @@ export class CardsService {
     return (data as MasterCard[]) ?? [];
   }
 
-  async addCardWithLookup(formData: AddCardFormData): Promise<{ error: any; cardId: string | null }> {
+  async addCardWithLookup(formData: AddCardFormData): Promise<{ error: any; cardId: string | null; masterCardId: string | null }> {
     const userId = this.auth.user()?.id;
-    if (!userId) return { error: new Error('Not authenticated'), cardId: null };
+    if (!userId) return { error: new Error('Not authenticated'), cardId: null, masterCardId: null };
 
     let masterCardId = formData.masterCardId;
 
@@ -267,7 +267,7 @@ export class CardsService {
         .select('id')
         .single();
 
-      if (masterError) return { error: masterError, cardId: null };
+      if (masterError) return { error: masterError, cardId: null, masterCardId: null };
       masterCardId = newMaster.id;
     }
 
@@ -288,7 +288,7 @@ export class CardsService {
       .single();
 
     if (!error) await this.loadUserCards();
-    return { error, cardId: data?.id ?? null };
+    return { error, cardId: data?.id ?? null, masterCardId: masterCardId ?? null };
   }
 
   /** Batch-commit staged cards from a scanner session. price_paid left null for later editing. */
@@ -414,7 +414,7 @@ export class CardsService {
       const session = await this.auth.getSession();
       if (!session) return;
 
-      await fetch(`${environment.apiUrl}/api/comps/card-value`, {
+      const res = await fetch(`${environment.apiUrl}/api/comps/card-value`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -423,7 +423,13 @@ export class CardsService {
         body: JSON.stringify({ cardId }),
       });
 
-      await this.loadUserCards();
+      if (res.ok) {
+        const { value } = await res.json();
+        // Patch just this card's value in-memory — avoids re-sorting the whole list
+        this.cards.update(cards =>
+          cards.map(c => c.id === cardId ? { ...c, currentValue: value ?? 0 } : c)
+        );
+      }
     } catch (e) {
       console.error('[CardsService] fetchMarketValue error:', e);
     } finally {

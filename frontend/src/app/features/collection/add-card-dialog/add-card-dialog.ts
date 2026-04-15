@@ -321,7 +321,7 @@ export class AddCardDialog {
     this.saving.set(true);
     this.saveError.set(null);
 
-    const { error, cardId } = await this.cardsService.addCardWithLookup({
+    const { error, cardId, masterCardId } = await this.cardsService.addCardWithLookup({
       setId: this.selectedChecklist()?.id ?? null,
       masterCardId: this.selectedMasterCard()?.id ?? null,
       player: this.newPlayer(),
@@ -349,12 +349,15 @@ export class AddCardDialog {
       if (this.parallelIsOther() && this.selectedParallelName().trim() && this.selectedSet()) {
         this.releasesService.submitPendingParallel(this.selectedSet()!.id, this.selectedParallelName().trim());
       }
-      // if (cardId) this.cardsService.fetchMarketValue(cardId);
-      // Lazily fetch card image if this was a catalog card without one yet
-      const mc = this.selectedMasterCard();
-      if (mc?.id && !mc.image_url) this.cardsService.fetchCardImage(mc.id);
+      if (cardId) this.cardsService.fetchMarketValue(cardId);
       this.cardAdded.emit();
       this.close();
+      // Fetch image after closing — reloads cards once URL is cached so it appears without refresh.
+      if (masterCardId) {
+        this.cardsService.fetchCardImage(masterCardId).then(url => {
+          if (url) this.cardsService.loadUserCards();
+        });
+      }
     }
   }
 

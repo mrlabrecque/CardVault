@@ -24,7 +24,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(curl -s \"https://raw.githubusercontent.com/cardsightai/cardsightai-sdk-node/main/src/generated/types.ts\")",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(curl -s https://raw.githubusercontent.com/colindaniels/eBay-sold-items-documentation/main/README.md)"
     ]
   }
 }

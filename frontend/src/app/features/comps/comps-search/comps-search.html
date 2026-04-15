@@ -12,44 +12,99 @@
     <div class="relative flex-1">
       <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
       <input
-        pInputText
         type="text"
         placeholder="Player, set, year, grade…"
-        class="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
         [ngModel]="query()"
         (ngModelChange)="query.set($event)"
         (keyup.enter)="search()"
       />
     </div>
-    <p-button icon="pi pi-camera" severity="secondary" [rounded]="true" [outlined]="true"
-              pTooltip="Image search" tooltipPosition="left" />
-    <p-button icon="pi pi-search" (onClick)="search()" [rounded]="true" />
+    <button
+      (click)="search()"
+      [disabled]="searching() || !query().trim()"
+      class="w-11 h-11 flex items-center justify-center rounded-xl bg-[#800020] text-white disabled:opacity-40 transition-opacity shrink-0"
+    >
+      @if (searching()) {
+        <i class="pi pi-spin pi-spinner text-sm"></i>
+      } @else {
+        <i class="pi pi-search text-sm"></i>
+      }
+    </button>
   </div>
 
+  <!-- Error -->
+  @if (error()) {
+    <div class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600">
+      <i class="pi pi-exclamation-circle shrink-0"></i>
+      {{ error() }}
+    </div>
+  }
+
+  <!-- Stats Bar -->
+  @if (stats(); as s) {
+    <div class="grid grid-cols-4 gap-2">
+      <div class="bg-white rounded-xl border border-gray-100 px-3 py-2.5 text-center">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Avg</p>
+        <p class="text-sm font-bold text-gray-900">${{ s.average_price | number:'1.0-0' }}</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-100 px-3 py-2.5 text-center">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Median</p>
+        <p class="text-sm font-bold text-gray-900">${{ s.median_price | number:'1.0-0' }}</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-100 px-3 py-2.5 text-center">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Low</p>
+        <p class="text-sm font-bold text-gray-900">${{ s.min_price | number:'1.0-0' }}</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-100 px-3 py-2.5 text-center">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">High</p>
+        <p class="text-sm font-bold text-gray-900">${{ s.max_price | number:'1.0-0' }}</p>
+      </div>
+    </div>
+  }
+
   <!-- Results -->
-  @if (hasSearched()) {
+  @if (searched()) {
     <div>
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm font-semibold text-gray-700">Results</h2>
-        <span class="text-xs text-gray-400">{{ results().length }} sold</span>
+        <span class="text-xs text-gray-400">{{ items().length }} sold</span>
       </div>
+
+      @if (items().length === 0) {
+        <p class="text-sm text-gray-400 text-center py-8">No sold listings found.</p>
+      }
+
       <div class="flex flex-col gap-3">
-        @for (result of results(); track result.soldDate + result.price) {
+        @for (item of items(); track item.itemId ?? item.title) {
           <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-            <div class="flex items-start justify-between gap-3">
-              <p class="text-sm font-semibold text-gray-900 flex-1 leading-snug">{{ result.title }}</p>
-              <span class="text-base font-bold text-gray-900 shrink-0">${{ result.price | number:'1.2-2' }}</span>
+            <div class="flex items-start gap-3">
+              <!-- Card image -->
+              @if (item.imageUrl) {
+                <img [src]="item.imageUrl" alt="" class="w-14 h-14 rounded-lg object-cover shrink-0 bg-gray-100" />
+              }
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                  <p class="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{{ item.title }}</p>
+                  <span class="text-base font-bold text-gray-900 shrink-0">${{ price(item) | number:'1.2-2' }}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                  @if (item.condition) {
+                    <span class="text-[10px] font-semibold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{{ item.condition }}</span>
+                  }
+                  @if (item.itemEndDate) {
+                    <span class="text-xs text-gray-400">{{ item.itemEndDate | date:'MMM d' }}</span>
+                  }
+                </div>
+              </div>
             </div>
-            <div class="flex items-center gap-2 mt-2">
-              <p-tag [value]="result.condition" severity="secondary" styleClass="text-[10px]!" />
-              <span class="text-xs text-gray-400">Sold {{ result.soldDate }}</span>
-            </div>
-            <div class="flex gap-2 mt-3">
-              <p-button label="Add to Collection" size="small" [outlined]="true"
-                        styleClass="flex-1 text-xs!" (onClick)="addToCollection(result)" />
-              <p-button label="Wishlist" icon="pi pi-heart" size="small" severity="secondary"
-                        [outlined]="true" styleClass="text-xs!" (onClick)="addToWishlist(result)" />
-            </div>
+            @if (item.itemWebUrl) {
+              <a [href]="item.itemWebUrl" target="_blank" rel="noopener noreferrer"
+                 class="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-[#800020]/70 hover:text-[#800020] transition-colors">
+                <i class="pi pi-external-link text-[10px]"></i>
+                View on eBay
+              </a>
+            }
           </div>
         }
       </div>
@@ -57,20 +112,24 @@
   }
 
   <!-- Recent Lookups -->
-  <div>
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Recent Lookups</h2>
-    <div class="flex flex-col gap-2">
-      @for (entry of history(); track entry.timestamp) {
-        <button
-          class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 text-left w-full hover:bg-gray-50 transition-colors"
-          (click)="query.set(entry.query); search()">
-          <i class="pi pi-history text-gray-300 text-sm"></i>
-          <span class="flex-1 text-sm text-gray-700 truncate">{{ entry.query }}</span>
-          <span class="text-xs font-bold text-gray-500 shrink-0">${{ entry.topPrice | number }}</span>
-          <i class="pi pi-arrow-up-right text-gray-300 text-xs"></i>
-        </button>
-      }
+  @if (history().length > 0) {
+    <div>
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">Recent Lookups</h2>
+      <div class="flex flex-col gap-2">
+        @for (entry of history(); track entry.id) {
+          <button
+            class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 text-left w-full hover:bg-gray-50 transition-colors"
+            (click)="rerun(entry)">
+            <i class="pi pi-history text-gray-300 text-sm shrink-0"></i>
+            <span class="flex-1 text-sm text-gray-700 truncate">{{ entry.query }}</span>
+            @if (historyTopPrice(entry) > 0) {
+              <span class="text-xs font-bold text-gray-500 shrink-0">${{ historyTopPrice(entry) | number:'1.0-0' }}</span>
+            }
+            <i class="pi pi-arrow-up-right text-gray-300 text-xs shrink-0"></i>
+          </button>
+        }
+      </div>
     </div>
-  </div>
+  }
 
 </div>

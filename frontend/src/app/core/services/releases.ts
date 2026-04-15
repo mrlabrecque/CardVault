@@ -11,7 +11,7 @@ export interface ReleaseRecord {
   year: number;
   sport: string;
   release_type: string;
-  ebay_search_template: string | null;
+  ebay_search_template?: string | null;
   set_slug: string;
   cardsight_id: string | null;
   source: string;

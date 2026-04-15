@@ -55,13 +55,12 @@ export class CardsightService {
     cardsightReleaseId: string,
     sport: string | null,
     releaseType: string,
-    ebaySearchTemplate: string,
   ): Promise<CardsightImportResult> {
     const headers = await this.authHeaders();
     const res = await fetch(`${environment.apiUrl}/api/cardsight/import`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cardsightReleaseId, sport, releaseType, ebaySearchTemplate }),
+      body: JSON.stringify({ cardsightReleaseId, sport, releaseType }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

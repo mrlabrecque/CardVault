@@ -37,7 +37,7 @@ router.get('/search', async (req: AuthRequest, res) => {
 // POST /api/cardsight/import
 // body: { cardsightReleaseId: string }
 router.post('/import', async (req: AuthRequest, res) => {
-  const { cardsightReleaseId, sport: sportParam, releaseType, ebaySearchTemplate } = req.body;
+  const { cardsightReleaseId, sport: sportParam, releaseType } = req.body;
   if (!cardsightReleaseId) return res.status(400).json({ error: 'cardsightReleaseId is required' });
 
   try {
@@ -65,13 +65,12 @@ router.post('/import', async (req: AuthRequest, res) => {
     // 4. Upsert release — ON CONFLICT (cardsight_id) preserves any admin edits to sport
     //    (COALESCE keeps existing sport if already set, only fills in when null)
     const [dbRelease] = await sql`
-      INSERT INTO releases (name, year, sport, release_type, ebay_search_template, set_slug, cardsight_id)
+      INSERT INTO releases (name, year, sport, release_type, set_slug, cardsight_id)
       VALUES (
         ${release.name},
         ${parseInt(release.year, 10)},
         ${sport},
         ${releaseType ?? 'Hobby'},
-        ${ebaySearchTemplate ?? '{year} {brand} {player_name} #{card_number} {parallel} {set} {auto} {patch} /{serial_max}'},
         ${slug},
         ${release.id}
       )
@@ -79,8 +78,7 @@ router.post('/import', async (req: AuthRequest, res) => {
         name = EXCLUDED.name,
         year = EXCLUDED.year,
         sport = COALESCE(releases.sport, EXCLUDED.sport),
-        release_type = EXCLUDED.release_type,
-        ebay_search_template = EXCLUDED.ebay_search_template
+        release_type = EXCLUDED.release_type
       RETURNING id, name
     `;
 
@@ -232,18 +230,66 @@ router.post('/cards/:masterCardId/image', async (req: AuthRequest, res) => {
   const { masterCardId } = req.params;
 
   try {
-    const [master] = await sql<{ cardsight_card_id: string | null; image_url: string | null }[]>`
-      SELECT cardsight_card_id, image_url
-      FROM master_card_definitions
-      WHERE id = ${masterCardId}
+    const [master] = await sql<{
+      cardsight_card_id: string | null;
+      image_url: string | null;
+      player: string | null;
+      card_number: string | null;
+      set_cardsight_id: string | null;
+    }[]>`
+      SELECT
+        mcd.cardsight_card_id,
+        mcd.image_url,
+        mcd.player,
+        mcd.card_number,
+        s.cardsight_id AS set_cardsight_id
+      FROM master_card_definitions mcd
+      LEFT JOIN sets s ON s.id = mcd.set_id
+      WHERE mcd.id = ${masterCardId}
     `;
     if (!master) return res.status(404).json({ error: 'Card not found' });
+
+    console.log(`[cardsight/image] masterCardId=${masterCardId} cardsight_card_id=${master.cardsight_card_id} image_url=${master.image_url} set_cardsight_id=${master.set_cardsight_id} player=${master.player}`);
 
     // Already cached — return immediately
     if (master.image_url) return res.json({ image_url: master.image_url });
 
-    // Manual entry with no CardSight ID — no image available
-    if (!master.cardsight_card_id) return res.json({ image_url: null });
+    // No CardSight card ID yet — try to find it by searching the set's cards on CardSight
+    if (!master.cardsight_card_id) {
+      if (!master.set_cardsight_id || !master.player) {
+        console.log(`[cardsight/image] no cardsight_card_id and missing set_cardsight_id or player — skipping`);
+        return res.json({ image_url: null });
+      }
+
+      // Page through CardSight cards for this set looking for player + card_number match
+      let found: string | null = null;
+      let skip = 0;
+      const take = 100;
+      const playerLower = master.player.toLowerCase();
+      const cardNum = master.card_number ?? null;
+
+      outer: while (true) {
+        const { cards, total_count } = await getSetCards(master.set_cardsight_id, skip, take);
+        for (const c of cards) {
+          if (c.isParallelOnly) continue;
+          const nameMatch = c.name.toLowerCase().includes(playerLower) || playerLower.includes(c.name.toLowerCase());
+          const numMatch = !cardNum || !c.number || c.number === cardNum;
+          if (nameMatch && numMatch) { found = c.id; break outer; }
+        }
+        skip += take;
+        if (skip >= total_count || cards.length === 0) break;
+      }
+
+      if (!found) {
+        console.log(`[cardsight/image] no match found in CardSight for player="${master.player}" card_number="${master.card_number}" set_cardsight_id=${master.set_cardsight_id}`);
+        return res.json({ image_url: null });
+      }
+      console.log(`[cardsight/image] found cardsight_card_id=${found} for player="${master.player}"`);
+
+      // Cache the discovered CardSight ID for future calls
+      await sql`UPDATE master_card_definitions SET cardsight_card_id = ${found} WHERE id = ${masterCardId}`;
+      master.cardsight_card_id = found;
+    }
 
     const imageBuffer = await getCardImage(master.cardsight_card_id);
 
@@ -266,6 +312,10 @@ router.post('/cards/:masterCardId/image', async (req: AuthRequest, res) => {
 
     return res.json({ image_url: publicUrl });
   } catch (e: any) {
+    if (e.message?.includes('404')) {
+      console.warn(`[cardsight/cards/image] no image available for masterCardId=${masterCardId}`);
+      return res.json({ image_url: null });
+    }
     console.error('[cardsight/cards/image]', e.message);
     return res.status(500).json({ error: e.message });
   }

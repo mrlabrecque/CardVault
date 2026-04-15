@@ -6,91 +6,202 @@ import sql from '../db/db';
 // Grading company keywords — if any appear in a title for an ungraded card, reject it
 const GRADER_KEYWORDS = ['psa', 'bgs', 'sgc', 'cgc', 'csg', 'beckett'];
 
-// Common parallel/variation keywords — if any appear in a base-card title, reject it
-// (We only apply this when parallel_type is Base/null)
+// Parallel/variation keywords. Any keyword found in a result title but NOT in the
+// query string is treated as an unexpected parallel and the result is rejected.
+// This handles both base-card searches (reject all parallels) and specific-parallel
+// searches (reject other parallels — e.g. searching Silver shouldn't return Gold).
 const PARALLEL_KEYWORDS = [
-  'prizm', 'refractor', 'holo', 'silver', 'gold', 'red', 'blue', 'green', 'orange',
-  'purple', 'pink', 'black', 'white', 'hyper', 'neon', 'aqua', 'mojo', 'wave',
-  'cracked ice', 'disco', 'tiger', 'nebula', 'shimmer', 'choice',
+  'refractor', 'holo', 'silver', 'gold', 'red', 'blue', 'green', 'orange',
+  'purple', 'pink', 'black', 'white', 'teal', 'yellow', 'brown', 'gray', 'grey',
+  'hyper', 'neon', 'aqua', 'mojo', 'wave', 'velocity', 'stars', 'scope',
+  'cracked ice', 'disco', 'tiger', 'nebula', 'shimmer', 'choice', 'lava',
+  'sp', 'ssp', 'foil', 'logo',
 ];
+
+// Generic words that appear in eBay card titles without indicating a specific insert/parallel.
+// Words in this list are allowed in result titles even if they weren't in the search query.
+const LISTING_NOISE = new Set([
+  // Card attributes / grading language
+  'rookie', 'rated', 'serial', 'numbered', 'graded', 'limited', 'edition',
+  'insert', 'parallel', 'short', 'print', 'chrome', 'refractor', 'invest',
+  // Sports
+  'basketball', 'football', 'baseball', 'hockey', 'soccer',
+  // NFL teams
+  'ravens', 'steelers', 'browns', 'bengals', 'patriots', 'bills', 'dolphins', 'jets',
+  'ravens', 'texans', 'colts', 'jaguars', 'titans', 'broncos', 'raiders', 'chiefs',
+  'chargers', 'cowboys', 'giants', 'eagles', 'commanders', 'bears', 'packers',
+  'vikings', 'lions', 'falcons', 'panthers', 'saints', 'buccaneers', 'seahawks',
+  'rams', 'cardinals', 'niners', 'falcons', 'broncos',
+  // NBA teams
+  'lakers', 'warriors', 'celtics', 'knicks', 'bulls', 'heat', 'spurs', 'rockets',
+  'nuggets', 'suns', 'maverick', 'mavericks', 'clippers', 'blazers', 'thunder',
+  'pacers', 'bucks', 'raptors', 'pistons', 'cavaliers', 'hornets', 'hawks',
+  'pelicans', 'grizzlies', 'timberwolves', 'jazz', 'kings', 'magic', 'wizards',
+  'nets', 'sixers',
+  // MLB teams
+  'yankees', 'redsox', 'dodgers', 'giants', 'cubs', 'cardinals', 'braves',
+  'astros', 'mets', 'phillies', 'nationals', 'marlins', 'brewers', 'pirates',
+  'reds', 'padres', 'rockies', 'diamondbacks', 'giants', 'rangers', 'angels',
+  'athletics', 'mariners', 'tigers', 'indians', 'guardians', 'twins', 'whitesox',
+  'royals', 'orioles', 'bluejays', 'rays',
+  // Brands / manufacturers
+  'panini', 'topps', 'donruss', 'fleer', 'score', 'ultra', 'select', 'optic',
+  'mosaic', 'chronicles', 'certified', 'absolute', 'contenders', 'playoff',
+  'treasures', 'prestige', 'titanium', 'spectra', 'bowman', 'stadium',
+  'heritage', 'update', 'series', 'national', 'upper', 'deck', 'illusions',
+  'revolution', 'majestic', 'lightning', 'genesis', 'zenith', 'phoenix', 'prizm',
+  // Common eBay listing filler
+  'trading', 'sports', 'card', 'cards', 'single', 'color', 'colour',
+]);
+
+// Reject if the title contains a significant word (>5 chars) that is not present
+// in the reference query and is not a known generic listing word.
+// This catches unexpected insert set names like "Confetti", "Fireworks", "Downtown"
+// that PARALLEL_KEYWORDS doesn't cover.
+function noUnexpectedWords(title: string, query: string): boolean {
+  const t = title.toLowerCase();
+  const q = query.toLowerCase();
+  const titleWords = t.match(/\b[a-z]{6,}\b/g) ?? [];
+  return titleWords.every(word => q.includes(word) || LISTING_NOISE.has(word));
+}
+
+// Returns false if the title contains a parallel keyword that the query didn't ask for.
+function noUnexpectedParallels(title: string, query: string): boolean {
+  const t = title.toLowerCase();
+  const q = query.toLowerCase();
+  return !PARALLEL_KEYWORDS.some(k => {
+    const re = new RegExp(`\\b${k.replace(/\s+/g, '\\s+')}\\b`);
+    return re.test(t) && !q.includes(k);
+  });
+}
 
 function buildEbayQuery(card: any): string {
   const {
-    ebay_search_template, year, set_name, subset_name, player, card_number,
+    year, release_name, set_name, player, card_number,
     parallel_type, is_auto, is_patch, is_rookie, serial_max,
     is_graded, grader, grade_value,
   } = card;
 
-  let base: string;
+  const parts: string[] = [String(year ?? ''), release_name ?? '', player ?? ''];
+  if (card_number) parts.push(`#${card_number}`);
 
-  if (ebay_search_template) {
-    base = (ebay_search_template as string)
-      .replace('{year}',        year ?? '')
-      .replace('{brand}',       set_name ?? '')
-      .replace('{set}',         subset_name ?? '')
-      .replace('{player_name}', player ?? '')
-      .replace('{card_number}', card_number ?? '')
-      .replace('{parallel}',    (parallel_type && parallel_type !== 'Base') ? parallel_type : '')
-      .replace('{auto}',        is_auto  ? 'Auto'  : '')
-      .replace('{patch}',       is_patch ? 'Patch' : '')
-      .replace(/{serial_max}/g, serial_max ? String(serial_max) : '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-  } else {
-    const parts: string[] = [String(year ?? ''), set_name ?? '', subset_name ?? '', player ?? ''];
-    if (card_number) parts.push(`#${card_number}`);
-    base = parts.filter(Boolean).join(' ');
-  }
+  // Strip serial suffix from parallel_name (e.g. "Blue Hyper /49" → "Blue Hyper")
+  const parallelLabel = (parallel_type ?? '').replace(/\s*\/\d+$/, '').trim();
 
-  // Append attributes not already in the template
-  const templateStr = ebay_search_template ?? '';
   const attrs: string[] = [];
-  if (!templateStr.includes('{parallel}')    && parallel_type && parallel_type !== 'Base') attrs.push(parallel_type);
-  if (!templateStr.includes('{auto}')        && is_auto)    attrs.push('Auto');
-  if (!templateStr.includes('{patch}')       && is_patch)   attrs.push('Patch');
-  if (!templateStr.includes('{serial_max}')  && serial_max) attrs.push(`/${serial_max}`);
-  if (!templateStr.includes('RC')            && is_rookie)  attrs.push('RC');
+  if (parallelLabel && parallelLabel !== 'Base') attrs.push(parallelLabel);
+  if (is_auto)    attrs.push('Auto');
+  if (is_patch)   attrs.push('Patch');
+  if (serial_max) attrs.push(`/${serial_max}`);
+  if (is_rookie)  attrs.push('RC');
   if (is_graded && grader && grade_value) attrs.push(`${grader} ${grade_value}`);
 
-  return [base, ...attrs].filter(Boolean).join(' ');
+  return [...parts, ...attrs].filter(Boolean).join(' ');
 }
 
-function filterResults(items: any[], card: any): any[] {
-  const { player, parallel_type, is_auto, is_patch, serial_max, is_graded, grader, grade_value } = card;
-  const playerWords = (player ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-  const isBase = !parallel_type || parallel_type === 'Base';
 
-  return items.filter(item => {
+
+// Parse a free-text eBay query string into structured filter fields,
+// then filter raw results. Used by both the comps search and card-value endpoints.
+// strictWords=true: also rejects titles with unexpected 6+ char words not in query or LISTING_NOISE.
+//   Use for card-value where the query was machine-built from structured card data.
+//   Skip for free-text comps search where the user controls the query.
+function parseAndFilter(raw: any[], query: string, strictWords = false): any[] {
+  const yearMatch    = query.match(/\b(19|20)\d{2}\b/);
+  const cardNumMatch = query.match(/(?:^|\s)#?(\d{1,4})(?:\s|$)/);
+  const serialMatch  = query.match(/\/(\d{1,4})\b/);
+  const graderFound  = GRADER_KEYWORDS.find(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
+  const gradeNumMatch = query.match(/\b(\d+(?:\.\d+)?)\s*(?:gem\s*mint)?$/i);
+
+  const parallelsInQuery = PARALLEL_KEYWORDS.filter(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
+  const parallelFromQuery = parallelsInQuery.length ? parallelsInQuery.join(' ') : null;
+
+  // Strip structured tokens and known noise words to isolate the player name
+  const noisePattern = new RegExp(`\\b(${[...LISTING_NOISE].join('|')})\\b`, 'gi');
+  const playerGuess = query
+    .replace(/\b(19|20)\d{2}\b/, '')
+    .replace(/(?:^|\s)#?\d{1,4}(?:\s|$)/, ' ')
+    .replace(/\/\d{1,4}\b/, '')
+    .replace(new RegExp(`\\b(${PARALLEL_KEYWORDS.join('|')})\\b`, 'gi'), '')
+    .replace(new RegExp(`\\b(${GRADER_KEYWORDS.join('|')})\\b`, 'gi'), '')
+    .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
+    .replace(noisePattern, '')
+    .replace(/\s{2,}/g, ' ').trim();
+
+  const year       = yearMatch ? parseInt(yearMatch[0]) : null;
+  const serial_max = serialMatch ? parseInt(serialMatch[1]) : null;
+  const playerWords = playerGuess.toLowerCase().split(/\s+/).filter(Boolean);
+  const parallelStr = parallelFromQuery ?? '';
+  const is_auto    = /\bauto(graph)?\b/i.test(query);
+  const is_patch   = /\b(patch|relic|jersey)\b/i.test(query);
+  const is_graded  = !!graderFound;
+  const grader     = graderFound ?? null;
+  const grade_value = gradeNumMatch ? gradeNumMatch[1] : null;
+
+  console.log(`[comps/filter] player="${playerGuess}" year=${year} serial=${serial_max} parallel="${parallelStr}" auto=${is_auto} patch=${is_patch} graded=${is_graded}${grader ? ` grader=${grader} grade=${grade_value}` : ''} strictWords=${strictWords}`);
+
+  const reject = (item: any, reason: string) => {
+    console.log(`[comps/reject] "${item.title}" — ${reason}`);
+    return false;
+  };
+
+  return raw.filter(item => {
     const title = (item.title ?? '').toLowerCase();
 
-    // Player's full name must appear in the title
-    if (playerWords.some((w: string) => !title.includes(w))) return false;
+    // Player — every word must appear
+    if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) return reject(item, `missing player word`);
 
-    // ── Serial number ────────────────────────────────────────────
-    // Matches patterns like /10, /25, /49, /99, /149, /199, /249, /299, /999
+    // Year
+    if (year && !title.includes(String(year))) return reject(item, `missing year ${year}`);
+
+    // Card number
+    if (cardNumMatch) {
+      const num = cardNumMatch[1];
+      if (!new RegExp(`\\b${num}\\b`).test(title)) return reject(item, `missing card number ${num}`);
+    }
+
+    // Reject lots
+    if (/\blot\b/i.test(title)) return reject(item, 'lot listing');
+
+    // Serial — reject numbered cards if none requested, reject wrong serial if specified
     const hasSerial = /\/\d{1,4}\b/.test(title);
-    if (!serial_max && hasSerial) return false;          // card isn't serial-numbered but result is
-    if (serial_max  && !new RegExp(`\\/${serial_max}\\b`).test(title)) return false; // wrong print run
+    if (!serial_max && hasSerial) return reject(item, 'unexpected serial number');
+    if (serial_max  && !new RegExp(`\\/${serial_max}\\b`).test(title)) return reject(item, `wrong serial (want /${serial_max})`);
 
-    // ── Grade ────────────────────────────────────────────────────
-    const hasGrade = GRADER_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`).test(title));
-    if (!is_graded && hasGrade) return false;            // card is raw but result is graded
-    if (is_graded  && grader && !title.includes(grader.toLowerCase())) return false;
-    if (is_graded  && grade_value && !title.includes(grade_value.toLowerCase())) return false;
+    // Graded — only enforce if grader was in query
+    if (is_graded && grader     && !title.includes(grader.toLowerCase())) return reject(item, `missing grader ${grader}`);
+    if (is_graded && grade_value && !title.includes(grade_value)) return reject(item, `missing grade ${grade_value}`);
 
-    // ── Autograph ────────────────────────────────────────────────
+    // Auto
     const hasAuto = /\bauto(graph)?\b/.test(title);
-    if (!is_auto && hasAuto) return false;               // card isn't auto but result is
-    if (is_auto  && !hasAuto) return false;              // card is auto but result isn't
+    if (is_auto && !hasAuto) return reject(item, 'missing auto');
+    if (strictWords && !is_auto && hasAuto) return reject(item, 'unexpected auto');
 
-    // ── Patch / Memorabilia ──────────────────────────────────────
+    // Patch
     const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
-    if (!is_patch && hasPatch) return false;
-    if (is_patch  && !hasPatch) return false;
+    if (is_patch && !hasPatch) return reject(item, 'missing patch');
+    if (strictWords && !is_patch && hasPatch) return reject(item, 'unexpected patch');
 
-    // ── Parallel specificity (base cards only) ───────────────────
-    // If this card is a base/non-parallel, reject results that include well-known parallel keywords
-    if (isBase && PARALLEL_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`).test(title))) return false;
+    // SSP / SP / Variation — reject unless query asked for them
+    if (/\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) return reject(item, 'unexpected SSP');
+    if (/\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) return reject(item, 'unexpected variation');
+
+    // Parallel — if parallel keywords were in query, every one must be in title
+    if (parallelStr) {
+      const parallelWords = parallelStr.toLowerCase().split(/\s+/).filter(Boolean);
+      const missing = parallelWords.find(w => !title.includes(w));
+      if (missing) return reject(item, `missing parallel word "${missing}"`);
+    }
+    // Reject titles with unexpected parallel color keywords
+    if (!noUnexpectedParallels(item.title, query)) return reject(item, 'unexpected parallel keyword');
+
+    // Strict mode: reject titles with any 4+ char word not in query or LISTING_NOISE.
+    if (strictWords && !noUnexpectedWords(item.title, query)) {
+      const t = title;
+      const q = query.toLowerCase();
+      const unexpected = (t.match(/\b[a-z]{6,}\b/g) ?? []).find((w: string) => !q.includes(w) && !LISTING_NOISE.has(w));
+      return reject(item, `unexpected word "${unexpected}"`);
+    }
 
     return true;
   });
@@ -115,7 +226,8 @@ router.post('/search', async (req: AuthRequest, res) => {
   if (!query) return res.status(400).json({ error: 'query is required' });
 
   try {
-    const results = await searchSoldListings(query);
+    const { items: raw, stats } = await searchSoldListings(query);
+    const items = parseAndFilter(raw, query);
     const userId = req.userId!;
 
     // Rolling history: delete oldest if at limit
@@ -129,9 +241,9 @@ router.post('/search', async (req: AuthRequest, res) => {
 
     await sql`
       INSERT INTO lookup_history (user_id, query, results, timestamp)
-      VALUES (${userId}, ${query}, ${sql.json(results as any)}, NOW())`;
+      VALUES (${userId}, ${query}, ${sql.json(items as any)}, NOW())`;
 
-    return res.json(results);
+    return res.json({ items, stats });
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }
@@ -169,11 +281,10 @@ router.post('/card-value', async (req: AuthRequest, res) => {
         COALESCE(mcd.is_patch,    uc.is_patch)     AS is_patch,
         mcd.serial_max,
         uc.parallel_name                           AS parallel_type,
-        r.name                                     AS set_name,
-        s.name                                     AS subset_name,
+        r.name                                     AS release_name,
+        s.name                                     AS set_name,
         r.year,
-        r.sport,
-        r.ebay_search_template
+        r.sport
       FROM user_cards uc
       LEFT JOIN master_card_definitions mcd ON mcd.id = uc.master_card_id
       LEFT JOIN sets s ON s.id = COALESCE(mcd.set_id, uc.set_id)
@@ -186,8 +297,8 @@ router.post('/card-value', async (req: AuthRequest, res) => {
     const query = buildEbayQuery(card);
     console.log(`[comps] eBay query: "${query}"`);
 
-    const raw = (await searchSoldListings(query)) as any[];
-    const items = filterResults(raw, card);
+    const { items: raw } = await searchSoldListings(query);
+    const items = parseAndFilter(raw, query, /* strictWords */ true);
     console.log(`[comps] ${raw.length} results → ${items.length} after filtering`);
 
     const prices = items
@@ -197,12 +308,10 @@ router.post('/card-value', async (req: AuthRequest, res) => {
     const avgValue =
       prices.length > 0 ? prices.reduce((sum: number, p: number) => sum + p, 0) / prices.length : 0;
 
-    if (avgValue > 0) {
-      await sql`
-        UPDATE user_cards SET current_value = ${avgValue}
-        WHERE id = ${cardId} AND user_id = ${userId}
-      `;
-    }
+    await sql`
+      UPDATE user_cards SET current_value = ${avgValue}
+      WHERE id = ${cardId} AND user_id = ${userId}
+    `;
 
     // Persist the filtered sold comps linked to this card (replace previous batch)
     await sql`DELETE FROM card_sold_comps WHERE user_card_id = ${cardId}`;

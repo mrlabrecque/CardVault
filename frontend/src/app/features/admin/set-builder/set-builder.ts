@@ -56,7 +56,6 @@ export class ReleaseBuilder implements OnInit {
 
   saving = signal(false);
   duplicateError = signal(false);
-  templatePreview = signal('');
 
   // CardSight search state
   csYear: number = new Date().getFullYear();
@@ -96,7 +95,7 @@ export class ReleaseBuilder implements OnInit {
 
   // Per-result expanded options state
   csExpandedId = signal<string | null>(null);
-  csOptionsByResult: Record<string, { releaseType: string; ebayTemplate: string }> = {};
+  csOptionsByResult: Record<string, { releaseType: string }> = {};
 
   private progressTimer: ReturnType<typeof setInterval> | undefined = undefined;
 
@@ -108,31 +107,10 @@ export class ReleaseBuilder implements OnInit {
     year: [new Date().getFullYear(), [Validators.required, Validators.min(1901)]],
     sport: ['Basketball', Validators.required],
     release_type: ['Hobby', Validators.required],
-    ebay_search_template: ['{year} {brand} {player_name} #{card_number} {parallel} {set} {auto} {patch} /{serial_max}'],
   });
 
   ngOnInit() {
     this.loadReleases();
-    this.form.valueChanges.subscribe(() => this.updatePreview());
-    this.updatePreview();
-  }
-
-  private updatePreview() {
-    const { year, name, ebay_search_template } = this.form.value;
-    const template = ebay_search_template ?? '';
-    const preview = template
-      .replace(/{year}/g, String(year ?? ''))
-      .replace(/{brand}/g, name ?? '')
-      .replace(/{player_name}/g, 'Victor Wembanyama')
-      .replace(/{card_number}/g, '298')
-      .replace(/{parallel}/g, 'Silver')
-      .replace(/{set}/g, '')
-      .replace(/{auto}/g, '')
-      .replace(/{patch}/g, '')
-      .replace(/{serial_max}/g, '99')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    this.templatePreview.set(preview);
   }
 
   private async loadReleases() {
@@ -169,7 +147,6 @@ export class ReleaseBuilder implements OnInit {
       year: year!,
       sport: sport!,
       release_type: this.form.value.release_type!,
-      ebay_search_template: this.form.value.ebay_search_template ?? null,
       set_slug: this.generateSlug(),
       cardsight_id: null,
       source: 'manual',
@@ -211,7 +188,6 @@ export class ReleaseBuilder implements OnInit {
         year: new Date().getFullYear(),
         sport: 'Basketball',
         release_type: 'Hobby',
-        ebay_search_template: '{year} {brand} {player_name} #{card_number} {parallel} {set} {auto} {patch} /{serial_max}',
       });
       this.bulkParallels = '';
       this.bulkSets = '';
@@ -280,10 +256,7 @@ export class ReleaseBuilder implements OnInit {
 
   expandImportOptions(result: CardsightReleaseResult) {
     if (!this.csOptionsByResult[result.id]) {
-      this.csOptionsByResult[result.id] = {
-        releaseType: 'Hobby',
-        ebayTemplate: '{year} {brand} {player_name} #{card_number} {parallel} {set} {auto} {patch} /{serial_max}',
-      };
+      this.csOptionsByResult[result.id] = { releaseType: 'Hobby' };
     }
     this.csExpandedId.set(result.id);
   }
@@ -293,7 +266,7 @@ export class ReleaseBuilder implements OnInit {
   }
 
   async importFromCardSight(result: CardsightReleaseResult) {
-    const opts = this.csOptionsByResult[result.id] ?? { releaseType: 'Hobby', ebayTemplate: '{year} {brand} #{card_number} {player_name}' };
+    const opts = this.csOptionsByResult[result.id] ?? { releaseType: 'Hobby' };
     this.csExpandedId.set(null);
     this.csImportingId.set(result.id);
     this.csImportProgress.set(0);
@@ -310,7 +283,7 @@ export class ReleaseBuilder implements OnInit {
 
     try {
       const sport = this.csSegment || null;
-      const imported = await this.cardsightService.importRelease(result.id, sport, opts.releaseType, opts.ebayTemplate);
+      const imported = await this.cardsightService.importRelease(result.id, sport, opts.releaseType);
       clearInterval(this.progressTimer);
       this.progressTimer = undefined;
       this.csImportProgress.set(100);
