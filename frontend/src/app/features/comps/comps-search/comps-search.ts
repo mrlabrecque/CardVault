@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -48,6 +48,16 @@ export class CompsSearch implements OnInit {
   items = signal<SoldItem[]>([]);
   stats = signal<CompsStats | null>(null);
 
+  readonly PAGE_SIZE = 10;
+  page = signal(1);
+
+  pagedItems = computed(() => {
+    const start = (this.page() - 1) * this.PAGE_SIZE;
+    return this.items().slice(start, start + this.PAGE_SIZE);
+  });
+
+  totalPages = computed(() => Math.max(1, Math.ceil(this.items().length / this.PAGE_SIZE)));
+
   history       = signal<HistoryEntry[]>([]);
   historyLoading = signal(false);
 
@@ -62,6 +72,7 @@ export class CompsSearch implements OnInit {
     this.searching.set(true);
     this.error.set(null);
     this.searched.set(false);
+    this.page.set(1);
 
     try {
       const session = await this.auth.getSession();

@@ -148,8 +148,8 @@ function parseAndFilter(raw: any[], query: string, strictWords = false): any[] {
   return raw.filter(item => {
     const title = (item.title ?? '').toLowerCase();
 
-    // Player — every word must appear
-    if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) return reject(item, `missing player word`);
+    // Player — every word must appear (strict mode only; free-text queries rely on eBay's own relevance)
+    if (strictWords && playerWords.length && playerWords.some((w: string) => !title.includes(w))) return reject(item, `missing player word`);
 
     // Year
     if (year && !title.includes(String(year))) return reject(item, `missing year ${year}`);
@@ -163,9 +163,10 @@ function parseAndFilter(raw: any[], query: string, strictWords = false): any[] {
     // Reject lots
     if (/\blot\b/i.test(title)) return reject(item, 'lot listing');
 
-    // Serial — reject numbered cards if none requested, reject wrong serial if specified
+    // Serial — in strict mode, reject numbered cards if none requested or wrong serial.
+    // In free-text mode, only enforce if the user actually specified a serial in their query.
     const hasSerial = /\/\d{1,4}\b/.test(title);
-    if (!serial_max && hasSerial) return reject(item, 'unexpected serial number');
+    if (strictWords && !serial_max && hasSerial) return reject(item, 'unexpected serial number');
     if (serial_max  && !new RegExp(`\\/${serial_max}\\b`).test(title)) return reject(item, `wrong serial (want /${serial_max})`);
 
     // Graded — only enforce if grader was in query
@@ -207,6 +208,32 @@ function parseAndFilter(raw: any[], query: string, strictWords = false): any[] {
   });
 }
 
+function computeStats(items: any[]): CompsStats {
+  const prices = items
+    .map((item: any) => parseFloat(item?.price?.value ?? '0'))
+    .filter((p: number) => p > 0)
+    .sort((a: number, b: number) => a - b);
+
+  if (!prices.length) return { average_price: 0, median_price: 0, min_price: 0, max_price: 0, total_results: 0 };
+
+  const sum = prices.reduce((s: number, p: number) => s + p, 0);
+  const mid = Math.floor(prices.length / 2);
+  const median = prices.length % 2 === 0
+    ? (prices[mid - 1] + prices[mid]) / 2
+    : prices[mid];
+
+  return {
+    average_price: sum / prices.length,
+    median_price:  median,
+    min_price:     prices[0],
+    max_price:     prices[prices.length - 1],
+    total_results: items.length,
+  };
+}
+
+// Re-export for type reference
+type CompsStats = { average_price: number; median_price: number; min_price: number; max_price: number; total_results: number };
+
 // Maps eBay buyingOptions array to our 3-value enum.
 // best_offer wins if present because price is the ask, not the final amount.
 function resolveSaleType(options: string[]): 'auction' | 'fixed_price' | 'best_offer' {
@@ -220,14 +247,22 @@ router.use(requireAuth);
 
 const HISTORY_LIMIT = 50;
 
+// Simple filter for free-text comps search: drop lot listings only.
+// eBay's search engine already matched the keywords — re-checking words here causes false rejections
+// for common spelling variants (e.g. "Otani" vs "Ohtani").
+function filterByQueryWords(raw: any[]): any[] {
+  return raw.filter(item => !/\blot\b/i.test(item.title ?? ''));
+}
+
 // POST /api/comps/search
 router.post('/search', async (req: AuthRequest, res) => {
   const { query } = req.body;
   if (!query) return res.status(400).json({ error: 'query is required' });
 
   try {
-    const { items: raw, stats } = await searchSoldListings(query);
-    const items = parseAndFilter(raw, query);
+    const { items: raw } = await searchSoldListings(query);
+    const items = filterByQueryWords(raw);
+    const stats = computeStats(items);
     const userId = req.userId!;
 
     // Rolling history: delete oldest if at limit

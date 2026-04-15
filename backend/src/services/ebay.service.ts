@@ -38,10 +38,11 @@ function resolveBuyingOptions(buying_format: string | null): string[] {
 const LOOKBACK_DAYS = 90;
 
 export async function searchSoldListings(query: string): Promise<SearchResult> {
+  // eBay category 261328 = Sports Trading Cards — scopes results away from memorabilia, lots, etc.
   const res = await fetch(SCRAPECHAIN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keywords: query, max_search_results: 60, remove_outliers: false }),
+    body: JSON.stringify({ keywords: query, max_search_results: 60, remove_outliers: false, category_id: '261328' }),
   });
 
   if (!res.ok) throw new Error(`scrapechain error ${res.status}: ${await res.text()}`);
