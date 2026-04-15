@@ -1,0 +1,31 @@
+<div class="flex flex-col pb-6">
+
+  <!-- View toggle -->
+  <div class="flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5 gap-0.5 mx-4 mt-4 mb-1">
+    <button
+      class="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+      [class]="view() === 'picker' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"
+      (click)="view.set('picker')">
+      Browse
+    </button>
+    <button
+      class="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+      [class]="view() === 'basket' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"
+      (click)="view.set('basket')">
+      Basket
+      @if (lot.lotItems().length > 0) {
+        <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+          {{ lot.lotItems().length }}
+        </span>
+      }
+    </button>
+  </div>
+
+  @if (view() === 'picker') {
+    <app-lot-card-picker />
+  }
+  @if (view() === 'basket') {
+    <app-lot-basket />
+  }
+
+</div>

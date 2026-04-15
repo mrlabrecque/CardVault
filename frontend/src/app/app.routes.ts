@@ -13,6 +13,7 @@ import { ParallelManager } from './features/admin/parallel-manager/parallel-mana
 import { SetManager } from './features/admin/checklist-manager/checklist-manager';
 import { PendingParallels } from './features/admin/pending-parallels/pending-parallels';
 import { Tools } from './features/tools/tools';
+import { LotCreator } from './features/lot-creator/lot-creator/lot-creator';
 import { authGuard } from './core/guards/auth-guard';
 import { adminGuard } from './core/guards/admin-guard';
 
@@ -28,6 +29,7 @@ export const routes: Routes = [
   { path: 'tools',         component: Tools,         canActivate: [authGuard] },
   { path: 'scanner',       component: Scanner,       canActivate: [authGuard] },
   { path: 'bulk-add',      component: BulkAdd,       canActivate: [authGuard] },
+  { path: 'lot-creator',   component: LotCreator,    canActivate: [authGuard] },
   { path: 'admin/releases',    component: ReleaseBuilder, canActivate: [adminGuard] },
   { path: 'admin/releases/:releaseId/sets/:setId/parallels', component: ParallelManager, canActivate: [adminGuard] },
   { path: 'admin/releases/:releaseId/sets', component: SetManager, canActivate: [adminGuard] },

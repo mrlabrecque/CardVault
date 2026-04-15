@@ -15,8 +15,9 @@ const PAGE_TITLES: Record<string, string> = {
   wishlist:   'Wishlist',
   tools:      'Tools',
   scanner:    'Scan Cards',
-  'bulk-add': 'Bulk Add',
-  admin:      'Manage Releases',
+  'bulk-add':    'Bulk Add',
+  'lot-creator': 'Lot Creator',
+  admin:         'Manage Releases',
 };
 
 @Component({

@@ -27,7 +27,7 @@ export class Tools {
       label: 'Lot Creator',
       desc: 'Bundle cards into lots for bulk eBay listings.',
       route: '/lot-creator',
-      available: false,
+      available: true,
     },
     {
       label: 'Grading',

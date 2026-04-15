@@ -1,0 +1,128 @@
+<div class="flex flex-col gap-3 px-4 pt-4 pb-6">
+
+  <!-- Search -->
+  <div class="relative">
+    <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+    <input
+      type="text"
+      placeholder="Search player, set, sport…"
+      class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#800020]"
+      [value]="searchQuery()"
+      (input)="onSearchInput($event)"
+    />
+  </div>
+
+  <!-- Active filter chips (only when filters are on) -->
+  @if (activeFilters().size > 0) {
+    <div class="flex flex-wrap gap-2">
+      @for (f of filterConfig; track f.key) {
+        @if (isFilterActive(f.key)) {
+          <button
+            class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#800020] text-white"
+            (click)="toggleFilter(f.key)">
+            {{ f.label }}
+            <i class="pi pi-times text-[10px]"></i>
+          </button>
+        }
+      }
+    </div>
+  }
+
+  <!-- Card count -->
+  <p class="text-xs text-gray-400">{{ filtered().length }} cards</p>
+
+  <!-- Empty state -->
+  @if (cardsService.cards().length === 0) {
+    <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
+      <div class="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">🃏</div>
+      <p class="text-sm font-semibold text-gray-400">No cards in collection</p>
+      <p class="text-xs text-gray-300">Add cards to your collection first.</p>
+    </div>
+  }
+
+  @if (cardsService.cards().length > 0 && filtered().length === 0) {
+    <div class="flex flex-col items-center justify-center py-16 text-center gap-3">
+      <p class="text-sm font-semibold text-gray-400">No cards match</p>
+      <p class="text-xs text-gray-300">Try a different search or clear the filters.</p>
+    </div>
+  }
+
+  <!-- Card list -->
+  <div class="flex flex-col gap-2">
+    @for (card of filtered(); track card.id) {
+      <div
+        class="flex items-stretch rounded-2xl border overflow-hidden transition-colors cursor-pointer"
+        [class]="lot.isInLot(card.id)
+          ? 'bg-green-50 border-green-300'
+          : 'bg-white border-gray-100 shadow-sm'"
+        (click)="lot.toggle(card)">
+
+        <!-- Thumbnail -->
+        <div class="relative w-16 shrink-0 self-stretch bg-gray-50">
+          <span class="absolute inset-0 flex items-center justify-start -translate-x-2 text-5xl opacity-10 pointer-events-none select-none">
+            {{ sportIcon(card.sport) }}
+          </span>
+          @if (card.imageUrl) {
+            <img [src]="card.imageUrl" [alt]="card.player"
+                 class="absolute inset-0 w-full h-full object-cover" />
+          }
+        </div>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0 py-3 pl-3"
+             (click)="$event.stopPropagation()">
+          <p class="text-sm font-bold text-gray-900 truncate" (click)="lot.toggle(card)">
+            {{ card.player }}
+            @if (card.cardNumber) {
+              <span class="font-normal text-gray-400"> #{{ card.cardNumber }}</span>
+            }
+          </p>
+          <p class="text-xs text-gray-400 truncate" (click)="lot.toggle(card)">
+            {{ card.year }} {{ card.set }} · {{ card.parallel }}
+          </p>
+          <div class="flex flex-wrap items-center gap-1 mt-1">
+            @if (card.isGraded) {
+              <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
+            }
+            @if (card.rookie) {
+              <p-tag value="RC" severity="info" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isFilterActive('rookie') }"
+                (click)="toggleFilter('rookie')" />
+            }
+            @if (card.autograph) {
+              <p-tag value="AUTO" severity="warn" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isFilterActive('autograph') }"
+                (click)="toggleFilter('autograph')" />
+            }
+            @if (card.memorabilia) {
+              <p-tag value="PATCH" severity="success" styleClass="text-[10px]! cursor-pointer!"
+                [ngClass]="{ 'opacity-40': isFilterActive('memorabilia') }"
+                (click)="toggleFilter('memorabilia')" />
+            }
+            @if (card.serialNumber || card.serialMax) {
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                    [class]="serialTagClass(card.serialMax)">
+                {{ serialLabel(card.serialNumber, card.serialMax) }}
+              </span>
+            }
+          </div>
+        </div>
+
+        <!-- Value + action -->
+        <div class="flex flex-col items-end justify-center gap-2 pr-3 shrink-0">
+          <span class="text-sm font-bold text-gray-900">${{ card.currentValue.toFixed(2) }}</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center"
+                [class]="lot.isInLot(card.id) ? 'bg-green-500' : 'bg-[#800020]'">
+            @if (lot.isInLot(card.id)) {
+              <i class="pi pi-check text-white" style="font-size:9px"></i>
+            } @else {
+              <i class="pi pi-plus text-white" style="font-size:9px"></i>
+            }
+          </span>
+        </div>
+
+      </div>
+    }
+  </div>
+
+</div>
