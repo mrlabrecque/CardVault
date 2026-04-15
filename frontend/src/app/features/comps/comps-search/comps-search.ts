@@ -1,10 +1,12 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { AuthService } from '../../../core/services/auth';
 import { environment } from '../../../../environments/environment';
 import { AddToWishlistDialog, WishlistSeed } from '../../wishlist/add-to-wishlist-dialog/add-to-wishlist-dialog';
+import { parseEbayTitle } from '../../../core/services/ebay-title-parser';
 
 export interface SoldItem {
   itemId:       string | null;
@@ -38,9 +40,10 @@ interface HistoryEntry {
   templateUrl: './comps-search.html',
   styleUrl: './comps-search.scss',
 })
-export class CompsSearch implements OnInit {
+export class CompsSearch implements OnInit, OnDestroy {
   private auth  = inject(AuthService);
   private route = inject(ActivatedRoute);
+  private _qSub?: Subscription;
 
   query     = signal('');
   searching = signal(false);
@@ -70,12 +73,19 @@ export class CompsSearch implements OnInit {
   async ngOnInit() {
     await this.loadHistory();
 
-    // Auto-search if ?q= param is present (e.g. navigated from wishlist)
-    const q = this.route.snapshot.queryParamMap.get('q');
-    if (q?.trim()) {
-      this.query.set(q.trim());
-      await this.search();
-    }
+    // Subscribe to query param changes so re-navigation (e.g. from wishlist)
+    // triggers a new search even when the component is already alive.
+    this._qSub = this.route.queryParamMap.subscribe(params => {
+      const q = params.get('q');
+      if (q?.trim()) {
+        this.query.set(q.trim());
+        this.search();
+      }
+    });
+  }
+
+  ngOnDestroy() {
+    this._qSub?.unsubscribe();
   }
 
   async search() {
@@ -139,10 +149,7 @@ export class CompsSearch implements OnInit {
   }
 
   openWishlist(item: SoldItem) {
-    this.wishlistSeed.set({
-      player: item.title,           // user will trim this down
-      suggested_price: this.price(item),
-    });
+    this.wishlistSeed.set(parseEbayTitle(item.title, this.query(), this.price(item)));
     this.showWishlistDialog.set(true);
   }
 }

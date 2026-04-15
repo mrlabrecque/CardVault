@@ -12,7 +12,7 @@
         <div class="w-10 h-1 rounded-full bg-gray-200"></div>
       </div>
       <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-        <h2 class="text-base font-bold text-gray-900">Add to Wishlist</h2>
+        <h2 class="text-base font-bold text-gray-900">{{ editMode() ? 'Edit Wishlist Item' : 'Add to Wishlist' }}</h2>
         <button class="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
                 (click)="close()">
           <i class="pi pi-times text-sm"></i>
@@ -157,6 +157,33 @@
         />
       </div>
 
+      <!-- Exclude Terms -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+          Exclude Terms
+          <span class="ml-1 font-normal text-gray-300 normal-case">(press Enter to add)</span>
+        </label>
+        <!-- Chips + input in a single pill container -->
+        <div class="flex flex-wrap items-center gap-1.5 min-h-[42px] px-2.5 py-2 rounded-xl border border-gray-200 focus-within:ring-2 focus-within:ring-[#800020]/20 focus-within:border-[#800020]/50">
+          @for (term of exclude_terms(); track term) {
+            <span class="flex items-center gap-1 bg-red-50 border border-red-200 text-red-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">
+              <span>{{ term }}</span>
+              <button type="button" (click)="removeExcludeTerm(term)" class="flex items-center justify-center w-3.5 h-3.5 rounded-full hover:bg-red-200 transition-colors">
+                <i class="pi pi-times" style="font-size:8px"></i>
+              </button>
+            </span>
+          }
+          <input
+            type="text"
+            placeholder="{{ exclude_terms().length === 0 ? 'e.g. draft picks' : '' }}"
+            class="flex-1 min-w-[120px] text-sm outline-none bg-transparent"
+            [ngModel]="excludeInput()"
+            (ngModelChange)="excludeInput.set($event)"
+            (keydown)="addExcludeTerm($event)"
+          />
+        </div>
+      </div>
+
       <!-- Target Price -->
       <div class="flex flex-col gap-1.5">
         <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Target Price</label>
@@ -190,7 +217,7 @@
         class="flex-1 py-3 rounded-xl bg-[#800020] text-white text-sm font-semibold disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
       >
         @if (saving()) { <i class="pi pi-spin pi-spinner text-xs"></i> }
-        {{ saving() ? 'Saving…' : 'Add to Wishlist' }}
+        {{ saving() ? 'Saving…' : editMode() ? 'Save Changes' : 'Add to Wishlist' }}
       </button>
     </div>
 

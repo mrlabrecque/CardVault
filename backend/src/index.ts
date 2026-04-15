@@ -7,7 +7,7 @@ import compsRouter from './routes/comps';
 import wishlistRouter from './routes/wishlist';
 import ebayRouter from './routes/ebay';
 import cardsightRouter from './routes/cardsight';
-import { startAlertJob } from './jobs/alertJob';
+import { startScheduler } from './jobs/scheduler';
 
 dotenv.config();
 
@@ -32,7 +32,7 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
-startAlertJob();
+startScheduler();
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 

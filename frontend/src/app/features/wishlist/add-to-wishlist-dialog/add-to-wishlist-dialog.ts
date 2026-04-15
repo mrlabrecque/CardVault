@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { WishlistService, WishlistFormData, buildEbayQuery } from '../../../core/services/wishlist';
 
-/** Seed data passed in when opening from Comps (all fields optional). */
+/** Seed data passed in when opening from Comps or for editing an existing item. */
 export interface WishlistSeed {
   player?: string;
   year?: number | null;
@@ -16,6 +16,8 @@ export interface WishlistSeed {
   is_patch?: boolean;
   serial_max?: number | null;
   grade?: string;
+  ebay_query?: string;
+  exclude_terms?: string[];
   suggested_price?: number | null;
 }
 
@@ -27,16 +29,20 @@ export interface WishlistSeed {
 export class AddToWishlistDialog {
   private wishlist = inject(WishlistService);
 
-  visible = input<boolean>(false);
-  seed    = input<WishlistSeed | null>(null);
+  visible  = input<boolean>(false);
+  seed     = input<WishlistSeed | null>(null);
+  /** When true: Save button emits `saved` with form data instead of calling add(). */
+  editMode = input<boolean>(false);
 
   visibleChange = output<boolean>();
-  added         = output<void>();
+  /** Emitted in add mode after successful save. */
+  added  = output<void>();
+  /** Emitted in edit mode — parent is responsible for calling patchAll(). */
+  saved  = output<WishlistFormData>();
 
   saving = signal(false);
   error  = signal<string | null>(null);
 
-  // Form fields
   player       = signal('');
   year         = signal<number | null>(null);
   set_name     = signal('');
@@ -47,14 +53,13 @@ export class AddToWishlistDialog {
   is_patch     = signal(false);
   serial_max   = signal<number | null>(null);
   grade        = signal('');
-  ebay_query   = signal('');
-  target_price = signal<number | null>(null);
-
+  ebay_query      = signal('');
+  exclude_terms   = signal<string[]>([]);
+  target_price    = signal<number | null>(null);
   ebayQueryEdited = signal(false);
+  excludeInput    = signal('');
 
   constructor() {
-    // When the dialog opens, populate from seed (using untracked to avoid
-    // signal-write-inside-effect warnings — same pattern as add-card-dialog).
     effect(() => {
       if (!this.visible()) return;
       const s = this.seed();
@@ -69,10 +74,19 @@ export class AddToWishlistDialog {
         this.is_patch.set(s?.is_patch ?? false);
         this.serial_max.set(s?.serial_max ?? null);
         this.grade.set(s?.grade ?? '');
+        this.exclude_terms.set(s?.exclude_terms ? [...s.exclude_terms] : []);
+        this.excludeInput.set('');
         this.target_price.set(s?.suggested_price ?? null);
-        this.ebayQueryEdited.set(false);
         this.error.set(null);
-        this.rebuildQuery();
+        // In edit mode, populate the existing query and mark it as user-edited
+        // so it doesn't get auto-rebuilt on every keystroke.
+        if (s?.ebay_query) {
+          this.ebay_query.set(s.ebay_query);
+          this.ebayQueryEdited.set(true);
+        } else {
+          this.ebayQueryEdited.set(false);
+          this.rebuildQuery();
+        }
       });
     });
   }
@@ -80,20 +94,35 @@ export class AddToWishlistDialog {
   rebuildQuery() {
     if (this.ebayQueryEdited()) return;
     this.ebay_query.set(buildEbayQuery({
-      player:    this.player(),
-      year:      this.year(),
-      set_name:  this.set_name(),
-      parallel:  this.parallel(),
-      grade:     this.grade(),
+      player:     this.player(),
+      year:       this.year(),
+      set_name:   this.set_name(),
+      parallel:   this.parallel(),
+      grade:      this.grade(),
       serial_max: this.serial_max(),
-      is_rookie: this.is_rookie(),
-      is_auto:   this.is_auto(),
+      is_rookie:  this.is_rookie(),
+      is_auto:    this.is_auto(),
     }));
   }
 
   onQueryInput(val: string) {
     this.ebay_query.set(val);
     this.ebayQueryEdited.set(true);
+  }
+
+  addExcludeTerm(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ',') return;
+    event.preventDefault();
+    const term = this.excludeInput().trim().replace(/^,+|,+$/g, '');
+    if (!term) return;
+    if (!this.exclude_terms().includes(term)) {
+      this.exclude_terms.update(list => [...list, term]);
+    }
+    this.excludeInput.set('');
+  }
+
+  removeExcludeTerm(term: string) {
+    this.exclude_terms.update(list => list.filter(t => t !== term));
   }
 
   toggleAttr(attr: 'is_rookie' | 'is_auto' | 'is_patch') {
@@ -112,27 +141,34 @@ export class AddToWishlistDialog {
       this.error.set('Player name is required.');
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
 
     const data: WishlistFormData = {
-      player:       this.player().trim(),
-      year:         this.year(),
-      set_name:     this.set_name().trim(),
-      parallel:     this.parallel().trim(),
-      card_number:  this.card_number().trim(),
-      is_rookie:    this.is_rookie(),
-      is_auto:      this.is_auto(),
-      is_patch:     this.is_patch(),
-      serial_max:   this.serial_max(),
-      grade:        this.grade().trim(),
-      ebay_query:   this.ebay_query().trim(),
-      target_price: this.target_price(),
+      player:        this.player().trim(),
+      year:          this.year(),
+      set_name:      this.set_name().trim(),
+      parallel:      this.parallel().trim(),
+      card_number:   this.card_number().trim(),
+      is_rookie:     this.is_rookie(),
+      is_auto:       this.is_auto(),
+      is_patch:      this.is_patch(),
+      serial_max:    this.serial_max(),
+      grade:         this.grade().trim(),
+      ebay_query:    this.ebay_query().trim(),
+      exclude_terms: this.exclude_terms(),
+      target_price:  this.target_price(),
     };
 
+    if (this.editMode()) {
+      // Edit mode — emit data up, parent handles the patch
+      this.saved.emit(data);
+      return;
+    }
+
+    // Add mode — call service directly
+    this.saving.set(true);
+    this.error.set(null);
     const { error } = await this.wishlist.add(data);
     this.saving.set(false);
-
     if (error) {
       this.error.set(error);
     } else {

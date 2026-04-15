@@ -24,11 +24,50 @@
     </div>
   }
 
+  <!-- Check Now bar -->
+  @if (!wishlist.loading() && wishlist.items().length > 0) {
+    <div class="flex items-center gap-3">
+      <button
+        (click)="checkNow()"
+        [disabled]="checking()"
+        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#800020] text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
+      >
+        @if (checking()) {
+          <i class="pi pi-spin pi-spinner text-xs"></i>
+          Checking eBay…
+        } @else {
+          <i class="pi pi-refresh text-xs"></i>
+          Check Now
+        }
+      </button>
+      @if (checkResult(); as r) {
+        <p class="text-xs text-gray-500">
+          @if (r.triggered > 0) {
+            <span class="text-emerald-600 font-semibold">{{ r.triggered }} deal{{ r.triggered === 1 ? '' : 's' }} found!</span>
+          } @else {
+            Checked {{ r.checked }} item{{ r.checked === 1 ? '' : 's' }} — no deals yet.
+          }
+        </p>
+      }
+    </div>
+  }
+
   <!-- Items -->
   @if (!wishlist.loading() && wishlist.items().length > 0) {
     <div class="flex flex-col gap-3">
       @for (item of wishlist.items(); track item.id) {
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div [class]="isBelowTarget(item)
+          ? 'rounded-2xl shadow-sm border border-emerald-300 bg-emerald-50 p-4'
+          : 'bg-white rounded-2xl shadow-sm border border-gray-100 p-4'">
+
+          <!-- Deal Found banner -->
+          @if (isBelowTarget(item)) {
+            <div class="flex items-center gap-2 bg-emerald-500 text-white rounded-xl px-3 py-2 mb-3">
+              <i class="pi pi-tag text-xs"></i>
+              <span class="text-xs font-bold tracking-wide">Deal Found!</span>
+              <span class="ml-auto text-xs font-semibold opacity-90">${{ savings(item) | number:'1.0-0' }} under target</span>
+            </div>
+          }
 
           <!-- Top row: name + status badge -->
           <div class="flex items-start justify-between gap-2">
@@ -40,11 +79,23 @@
                 @if (item.parallel) { · {{ item.parallel }} }
               </p>
             </div>
-            <p-tag
-              [value]="statusLabel[item.alert_status]"
-              [severity]="statusSeverity[item.alert_status]"
-              styleClass="text-[10px]! shrink-0"
-            />
+            <div class="flex items-center gap-1.5 shrink-0">
+              @if (!isBelowTarget(item)) {
+                <p-tag
+                  [value]="statusLabel[item.alert_status]"
+                  [severity]="statusSeverity[item.alert_status]"
+                  styleClass="text-[10px]!"
+                />
+              }
+              <!-- Edit button -->
+              <button
+                (click)="openEdit(item)"
+                class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                title="Edit"
+              >
+                <i class="pi pi-pencil text-[11px]"></i>
+              </button>
+            </div>
           </div>
 
           <!-- Attributes row -->
@@ -66,7 +117,9 @@
           }
 
           <!-- Price info -->
-          <div class="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50">
+          <div [class]="isBelowTarget(item)
+            ? 'flex items-center gap-4 mt-3 pt-3 border-t border-emerald-200'
+            : 'flex items-center gap-4 mt-3 pt-3 border-t border-gray-50'">
             <div class="flex-1">
               <p class="text-[10px] text-gray-400 uppercase tracking-wide">Target</p>
               @if (item.target_price) {
@@ -76,11 +129,11 @@
               }
             </div>
             <div class="flex-1">
-              <p class="text-[10px] text-gray-400 uppercase tracking-wide">Last Seen</p>
+              <p class="text-[10px] text-gray-400 uppercase tracking-wide">Best Match</p>
               @if (item.last_seen_price) {
-                <p class="text-sm font-bold"
-                   [class]="item.target_price && item.last_seen_price <= item.target_price ? 'text-emerald-500' : 'text-gray-700'">
-                  ${{ item.last_seen_price | number:'1.0-0' }}
+                <p [class]="isBelowTarget(item) ? 'text-sm font-bold text-emerald-600 flex items-center gap-1' : 'text-sm font-bold text-gray-700'">
+                  @if (isBelowTarget(item)) { <i class="pi pi-arrow-down text-[10px]"></i> }
+                  ${{ item.last_seen_price | number:'1.2-2' }}
                 </p>
               } @else {
                 <p class="text-sm text-gray-300">—</p>
@@ -91,6 +144,63 @@
               <p class="text-sm font-semibold text-gray-700">{{ item.grade || 'Any' }}</p>
             </div>
           </div>
+
+          <!-- Active listings — collapsible -->
+          @if (isBelowTarget(item) && item.matches.length > 0) {
+            <div class="mt-3 pt-3 border-t border-emerald-200">
+              <!-- Toggle header -->
+              <button
+                (click)="toggleMatches(item.id)"
+                class="flex items-center justify-between w-full"
+              >
+                <span class="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">
+                  {{ item.matches.length }} Active Listing{{ item.matches.length === 1 ? '' : 's' }}
+                </span>
+                <i [class]="isMatchesExpanded(item.id)
+                  ? 'pi pi-chevron-up text-[10px] text-emerald-600'
+                  : 'pi pi-chevron-down text-[10px] text-emerald-600'"></i>
+              </button>
+
+              @if (isMatchesExpanded(item.id)) {
+                <div class="flex flex-col gap-2 mt-2">
+                  @for (match of item.matches; track match.id) {
+                    <div class="relative">
+                      <a
+                        [href]="match.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="flex items-center gap-3 bg-white rounded-xl border border-emerald-200 px-3 py-2.5 hover:border-emerald-400 transition-colors"
+                      >
+                        @if (match.image_url) {
+                          <img [src]="match.image_url" alt="" class="w-10 h-10 rounded-lg object-cover shrink-0 bg-gray-100" />
+                        }
+                        <div class="flex-1 min-w-0">
+                          <p class="text-xs font-medium text-gray-800 line-clamp-2 leading-snug pr-4">{{ match.title }}</p>
+                          <span [class]="match.listing_type === 'AUCTION'
+                            ? 'text-[10px] font-bold text-purple-600'
+                            : 'text-[10px] font-bold text-blue-600'">
+                            {{ match.listing_type === 'AUCTION' ? 'Auction' : 'Buy Now' }}
+                          </span>
+                        </div>
+                        <div class="flex flex-col items-end shrink-0 gap-1">
+                          <span class="text-sm font-bold text-emerald-600">${{ match.price | number:'1.2-2' }}</span>
+                          <i class="pi pi-external-link text-[10px] text-gray-400"></i>
+                        </div>
+                      </a>
+                      <!-- Dismiss button -->
+                      <button
+                        (click)="dismissMatch(item, match)"
+                        class="absolute -top-2 -right-2 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors shadow-sm"
+                        title="Never show this listing again"
+                      >
+                        <i class="pi pi-times" style="font-size:8px"></i>
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
 
           <!-- Actions -->
           <div class="flex gap-2 mt-3">
@@ -125,7 +235,7 @@
       }
     </div>
 
-    <!-- FAB-style add button at bottom -->
+    <!-- Add another -->
     <button
       (click)="showAddDialog.set(true)"
       class="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-gray-400 hover:border-[#800020]/30 hover:text-[#800020]/60 transition-colors"
@@ -137,9 +247,18 @@
 
 </div>
 
-<!-- Add to Wishlist dialog -->
+<!-- Add dialog -->
 <app-add-to-wishlist-dialog
-  [visible]="showAddDialog()"
+  [visible]="showAddDialog() && !editingItem()"
   (visibleChange)="showAddDialog.set($event)"
   (added)="wishlist.load()"
+/>
+
+<!-- Edit dialog -->
+<app-add-to-wishlist-dialog
+  [visible]="showAddDialog() && !!editingItem()"
+  [seed]="editSeed()"
+  [editMode]="true"
+  (visibleChange)="closeDialog()"
+  (saved)="onDialogSaved($event)"
 />

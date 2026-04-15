@@ -4,6 +4,18 @@ import { environment } from '../../../environments/environment';
 
 export type AlertStatus = 'active' | 'paused' | 'triggered';
 
+export interface WishlistMatch {
+  id: string;
+  wishlist_id: string;
+  ebay_item_id: string | null;
+  title: string;
+  price: number;
+  listing_type: 'AUCTION' | 'FIXED_PRICE';
+  url: string | null;
+  image_url: string | null;
+  found_at: string;
+}
+
 export interface WishlistItem {
   id: string;
   player: string | null;
@@ -17,11 +29,14 @@ export interface WishlistItem {
   serial_max: number | null;
   grade: string | null;
   ebay_query: string | null;
+  exclude_terms: string[];
+  dismissed_ebay_ids: string[];
   target_price: number | null;
   alert_status: AlertStatus;
   last_seen_price: number | null;
   last_checked_at: string | null;
   created_at: string;
+  matches: WishlistMatch[];
 }
 
 export interface WishlistFormData {
@@ -36,6 +51,7 @@ export interface WishlistFormData {
   serial_max: number | null;
   grade: string;
   ebay_query: string;
+  exclude_terms: string[];
   target_price: number | null;
 }
 
@@ -59,6 +75,7 @@ export class WishlistService {
 
   items = signal<WishlistItem[]>([]);
   loading = signal(false);
+  triggeredCount = signal(0);
 
   private get apiUrl() { return environment.apiUrl; }
 
@@ -74,12 +91,49 @@ export class WishlistService {
     this.loading.set(true);
     try {
       const res = await fetch(`${this.apiUrl}/api/wishlist`, { headers: await this.headers() });
-      if (res.ok) this.items.set(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        this.items.set(data.map((i: any) => ({
+          ...i,
+          matches:             i.matches             ?? [],
+          exclude_terms:       i.exclude_terms       ?? [],
+          dismissed_ebay_ids:  i.dismissed_ebay_ids  ?? [],
+        })));
+      }
     } catch (e) {
       console.error('[WishlistService] load error:', e);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async checkNow(): Promise<{ checked: number; triggered: number; error?: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/wishlist/check-now`, {
+        method: 'POST',
+        headers: await this.headers(),
+      });
+      if (!res.ok) {
+        const { error } = await res.json();
+        return { checked: 0, triggered: 0, error };
+      }
+      const result = await res.json();
+      // Reload items + count so UI reflects any newly triggered items
+      await Promise.all([this.load(), this.loadTriggeredCount()]);
+      return result;
+    } catch (e: any) {
+      return { checked: 0, triggered: 0, error: e.message };
+    }
+  }
+
+  async loadTriggeredCount() {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/wishlist/triggered-count`, { headers: await this.headers() });
+      if (res.ok) {
+        const { count } = await res.json();
+        this.triggeredCount.set(count ?? 0);
+      }
+    } catch {}
   }
 
   async add(data: WishlistFormData): Promise<{ error: string | null; item: WishlistItem | null }> {
@@ -88,18 +142,19 @@ export class WishlistService {
         method: 'POST',
         headers: await this.headers(),
         body: JSON.stringify({
-          player:      data.player || null,
-          year:        data.year || null,
-          set_name:    data.set_name || null,
-          parallel:    data.parallel || null,
-          card_number: data.card_number || null,
-          is_rookie:   data.is_rookie,
-          is_auto:     data.is_auto,
-          is_patch:    data.is_patch,
-          serial_max:  data.serial_max || null,
-          grade:       data.grade || null,
-          ebay_query:  data.ebay_query || null,
-          target_price: data.target_price || null,
+          player:        data.player || null,
+          year:          data.year || null,
+          set_name:      data.set_name || null,
+          parallel:      data.parallel || null,
+          card_number:   data.card_number || null,
+          is_rookie:     data.is_rookie,
+          is_auto:       data.is_auto,
+          is_patch:      data.is_patch,
+          serial_max:    data.serial_max || null,
+          grade:         data.grade || null,
+          ebay_query:    data.ebay_query || null,
+          exclude_terms: data.exclude_terms ?? [],
+          target_price:  data.target_price || null,
         }),
       });
       if (!res.ok) {
@@ -114,7 +169,26 @@ export class WishlistService {
     }
   }
 
-  async patch(id: string, patch: Partial<Pick<WishlistItem, 'target_price' | 'ebay_query' | 'alert_status'>>): Promise<{ error: string | null }> {
+  /** Full update for the edit flow — sends all form fields. */
+  async patchAll(id: string, data: WishlistFormData): Promise<{ error: string | null }> {
+    return this.patch(id, {
+      player:        data.player || null,
+      year:          data.year || null,
+      set_name:      data.set_name || null,
+      parallel:      data.parallel || null,
+      card_number:   data.card_number || null,
+      is_rookie:     data.is_rookie,
+      is_auto:       data.is_auto,
+      is_patch:      data.is_patch,
+      serial_max:    data.serial_max || null,
+      grade:         data.grade || null,
+      ebay_query:    data.ebay_query || null,
+      exclude_terms: data.exclude_terms ?? [],
+      target_price:  data.target_price || null,
+    } as any);
+  }
+
+  async patch(id: string, patch: Partial<Omit<WishlistItem, 'id' | 'created_at' | 'matches'>>): Promise<{ error: string | null }> {
     try {
       const res = await fetch(`${this.apiUrl}/api/wishlist/${id}`, {
         method: 'PATCH',
@@ -127,6 +201,30 @@ export class WishlistService {
       }
       const updated: WishlistItem = await res.json();
       this.items.update(list => list.map(i => i.id === id ? updated : i));
+      return { error: null };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
+  async dismissMatch(wishlistId: string, matchId: string): Promise<{ error: string | null }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/wishlist/${wishlistId}/matches/${matchId}`, {
+        method: 'DELETE',
+        headers: await this.headers(),
+      });
+      if (!res.ok) return { error: 'Dismiss failed' };
+      // Update local state: remove the match; if none left, reset status + price
+      this.items.update(list => list.map(item => {
+        if (item.id !== wishlistId) return item;
+        const matches = item.matches.filter(m => m.id !== matchId);
+        return {
+          ...item,
+          matches,
+          alert_status:    matches.length === 0 ? 'active'     : item.alert_status,
+          last_seen_price: matches.length === 0 ? null         : Math.min(...matches.map(m => m.price)),
+        } as typeof item;
+      }));
       return { error: null };
     } catch (e: any) {
       return { error: e.message };

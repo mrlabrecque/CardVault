@@ -5,6 +5,7 @@ import { filter, map, startWith } from 'rxjs';
 import { AuthService } from './core/services/auth';
 import { UiService } from './core/services/ui';
 import { ReleasesService } from './core/services/releases';
+import { WishlistService } from './core/services/wishlist';
 import { AddCardDialog } from './features/collection/add-card-dialog/add-card-dialog';
 
 const PAGE_TITLES: Record<string, string> = {
@@ -29,6 +30,7 @@ export class App {
   pendingParallelCount = signal(0);
   isNavigating = signal(false);
   readonly ui = inject(UiService);
+  readonly wishlistService = inject(WishlistService);
   private releasesService = inject(ReleasesService);
 
   initials = computed(() => (this.auth.user()?.email ?? '').charAt(0).toUpperCase());
@@ -58,6 +60,14 @@ export class App {
         this.releasesService.getPendingCount().then(n => this.pendingParallelCount.set(n));
       } else {
         this.pendingParallelCount.set(0);
+      }
+    });
+
+    effect(() => {
+      if (this.auth.isAuthenticated()) {
+        this.wishlistService.loadTriggeredCount();
+      } else {
+        this.wishlistService.triggeredCount.set(0);
       }
     });
   }
