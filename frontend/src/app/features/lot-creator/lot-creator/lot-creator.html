@@ -1,7 +1,14 @@
 <div class="flex flex-col pb-6">
 
+  <!-- Breadcrumb -->
+  <nav class="flex items-center gap-1.5 text-xs px-4 pt-5 mb-4 flex-wrap">
+    <a routerLink="/tools" class="text-gray-400 hover:text-gray-700 font-medium transition-colors no-underline">Tools</a>
+    <svg class="w-3 h-3 text-gray-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    <span class="text-gray-700 font-semibold">Lot Creator</span>
+  </nav>
+
   <!-- View toggle -->
-  <div class="flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5 gap-0.5 mx-4 mt-4 mb-1">
+  <div class="flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5 gap-0.5 mx-4 mb-1">
     <button
       class="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors"
       [class]="view() === 'picker' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"

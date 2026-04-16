@@ -31,9 +31,9 @@ export class Tools {
     },
     {
       label: 'Grading',
-      desc: 'Grading recommendations based on estimated PSA 10 premiums.',
+      desc: 'Grading recommendations based on estimated PSA 9 / PSA 10 premiums.',
       route: '/grading',
-      available: false,
+      available: true,
     },
     {
       label: 'Market Movers',
