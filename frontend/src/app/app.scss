@@ -62,7 +62,7 @@ body {
 }
 
 .app-content--authenticated {
-  padding-bottom: var(--tab-bar-height);
+  padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 1024px) {
@@ -79,7 +79,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 16px;
   z-index: 100;
 
   &__eyebrow {
@@ -217,13 +217,13 @@ body {
   transform: translateX(-50%);
   width: 100%;
   max-width: 480px;
-  height: var(--tab-bar-height);
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
   background: var(--color-primary);
   border-top: none;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-around;
-  padding: 0 8px env(safe-area-inset-bottom, 0);
+  padding: 0 8px env(safe-area-inset-bottom, 0px);
   z-index: 100;
 }
 
@@ -249,7 +249,7 @@ body {
   align-items: center;
   gap: 4px;
   flex: 1;
-  padding: 8px 4px;
+  padding: 12px 4px 0;
   text-decoration: none;
   color: var(--color-tab-inactive);
   transition: color 0.15s ease;
