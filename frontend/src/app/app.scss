@@ -217,13 +217,13 @@ body {
   transform: translateX(-50%);
   width: 100%;
   max-width: 480px;
-  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  height: var(--tab-bar-height);
   background: var(--color-primary);
   border-top: none;
   display: flex;
   align-items: center;
   justify-content: space-around;
-  padding: 0 8px env(safe-area-inset-bottom, 0px);
+  padding: 0 8px;
   z-index: 100;
 }
 
