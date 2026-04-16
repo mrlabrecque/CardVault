@@ -28,7 +28,8 @@
       "WebFetch(domain:api.github.com)",
       "Bash(curl -s https://raw.githubusercontent.com/colindaniels/eBay-sold-items-documentation/main/README.md)",
       "mcp__claude_ai_Supabase__list_projects",
-      "mcp__claude_ai_Supabase__apply_migration"
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(node -e ':*)"
     ]
   }
 }
