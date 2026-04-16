@@ -68,10 +68,48 @@
       </div>
     </div>
 
-    <!-- Edit form -->
+    <!-- Card Identity (always visible) -->
+    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Card</span>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-white rounded-2xl border border-gray-100 p-3">
+        <p class="text-[10px] text-gray-400 uppercase tracking-wide">Sport</p>
+        <p class="text-sm font-semibold text-gray-800 mt-0.5 truncate">{{ card.sport }}</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-3">
+        <p class="text-[10px] text-gray-400 uppercase tracking-wide">Year</p>
+        <p class="text-sm font-semibold text-gray-800 mt-0.5">{{ card.year }}</p>
+      </div>
+      <div class="col-span-2 bg-white rounded-2xl border border-gray-100 p-3">
+        <p class="text-[10px] text-gray-400 uppercase tracking-wide">Release</p>
+        <p class="text-sm font-semibold text-gray-800 mt-0.5 line-clamp-1">{{ card.set }}</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-3" [class.col-span-2]="!card.cardNumber">
+        <p class="text-[10px] text-gray-400 uppercase tracking-wide">Set</p>
+        <p class="text-sm font-semibold text-gray-800 mt-0.5 truncate">{{ card.checklist }}</p>
+      </div>
+      @if (card.cardNumber) {
+        <div class="bg-white rounded-2xl border border-gray-100 p-3">
+          <p class="text-[10px] text-gray-400 uppercase tracking-wide">Card #</p>
+          <p class="text-sm font-semibold text-gray-800 mt-0.5">{{ card.cardNumber }}</p>
+        </div>
+      }
+    </div>
+
+    <!-- Your Copy -->
+    <div class="flex items-center justify-between px-1">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Your Copy</span>
+      @if (!editing()) {
+        <button class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                (click)="startEdit()">
+          <i class="pi pi-pencil text-[11px]"></i>
+          Edit
+        </button>
+      }
+    </div>
+
     @if (editing()) {
+      <!-- Edit form -->
       <div class="bg-white rounded-2xl border border-gray-100 flex flex-col gap-4 p-4">
-        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Edit Your Copy</p>
 
         <!-- Parallel -->
         <div class="flex flex-col gap-1">
@@ -163,29 +201,27 @@
         </div>
       </div>
     } @else {
-      <!-- Details -->
-      <div class="flex items-center justify-between px-1">
-        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Details</span>
-        <button class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
-                (click)="startEdit()">
-          <i class="pi pi-pencil text-[11px]"></i>
-          Edit
-        </button>
-      </div>
-      <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-        @for (row of [
-          ['Sport', card.sport],
-          ['Release', card.set],
-          ['Set', card.checklist],
-          ['Year', card.year],
-          ['Parallel', card.parallel],
-          ...((card.serialNumber || card.serialMax) ? [['Serial #', serialLabel(card)]] : []),
-          ['Grade', card.grade],
-          ['Price Paid', '$' + card.pricePaid]
-        ]; track row[0]) {
-          <div class="flex items-center justify-between px-4 py-3">
-            <span class="text-xs text-gray-400">{{ row[0] }}</span>
-            <span class="text-sm font-semibold text-gray-800">{{ row[1] }}</span>
+      <!-- Your Copy tiles -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 bg-white rounded-2xl border border-gray-100 p-3">
+          <p class="text-[10px] text-gray-400 uppercase tracking-wide">Parallel</p>
+          <p class="text-sm font-semibold text-gray-800 mt-0.5 truncate">{{ card.parallel }}</p>
+        </div>
+        @if (card.serialNumber || card.serialMax) {
+          <div class="bg-white rounded-2xl border border-gray-100 p-3">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wide">Serial #</p>
+            <p class="text-sm font-semibold text-gray-800 mt-0.5">{{ serialLabel(card) }}</p>
+          </div>
+        }
+        <div class="bg-white rounded-2xl border border-gray-100 p-3"
+             [class.col-span-2]="!(card.serialNumber || card.serialMax)">
+          <p class="text-[10px] text-gray-400 uppercase tracking-wide">Price Paid</p>
+          <p class="text-sm font-semibold text-gray-800 mt-0.5">${{ card.pricePaid | number:'1.2-2' }}</p>
+        </div>
+        @if (card.grade) {
+          <div class="col-span-2 bg-white rounded-2xl border border-gray-100 p-3">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wide">Grade</p>
+            <p class="text-sm font-semibold text-gray-800 mt-0.5">{{ card.grade }}</p>
           </div>
         }
       </div>
