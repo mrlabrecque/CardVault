@@ -119,7 +119,7 @@ export class CardsService {
     return this.cards().find(c => c.id === id);
   }
 
-  async loadUserCards() {
+  async loadUserCards(fetchMissingImages = true) {
     const { data, error } = await this.supabase
       .from('user_cards')
       .select(`
@@ -205,6 +205,20 @@ export class CardsService {
     });
 
     this.cards.set(cards);
+
+    if (fetchMissingImages) {
+      const missingIds = [...new Set(
+        cards.filter(c => !c.imageUrl && c.masterCardId).map(c => c.masterCardId!)
+      )];
+      for (const masterCardId of missingIds) {
+        this.fetchCardImage(masterCardId).then(url => {
+          if (!url) return;
+          this.cards.update(all =>
+            all.map(c => c.masterCardId === masterCardId ? { ...c, imageUrl: url } : c)
+          );
+        });
+      }
+    }
   }
 
   async searchMasterCards(setId: string | null, query: string): Promise<MasterCard[]> {
