@@ -74,8 +74,8 @@
           }
         </div>
         <button (click)="remove(s.id)" [disabled]="deleting() === s.id"
-          class="w-7 h-7 flex items-center justify-center rounded-full text-gray-300
-                 hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40">
+          class="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 text-gray-300
+                 hover:text-red-400 hover:bg-red-50 hover:border-red-100 transition-colors disabled:opacity-40">
           @if (deleting() === s.id) {
             <i class="pi pi-spin pi-spinner text-xs"></i>
           } @else {

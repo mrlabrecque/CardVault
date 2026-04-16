@@ -78,12 +78,10 @@
             }
           </p>
           <p class="text-xs text-gray-400 truncate" (click)="lot.toggle(card)">
-            {{ card.year }} {{ card.set }} · {{ card.parallel }}
+            {{ card.year }} {{ card.set }}{{ card.checklist ? ' · ' + card.checklist : '' }} · {{ card.parallel }}
           </p>
           <div class="flex flex-wrap items-center gap-1 mt-1">
-            @if (card.isGraded) {
-              <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
-            }
+            <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
             @if (card.rookie) {
               <p-tag value="RC" severity="info" styleClass="text-[10px]! cursor-pointer!"
                 [ngClass]="{ 'opacity-40': isFilterActive('rookie') }"

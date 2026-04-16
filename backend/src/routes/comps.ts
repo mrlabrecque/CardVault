@@ -1,212 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { searchSoldListings } from '../services/ebay.service';
+import { buildCardEbayQuery, parseAndFilter, resolveSaleType } from '../services/comps.service';
 import sql from '../db/db';
-
-// Grading company keywords — if any appear in a title for an ungraded card, reject it
-const GRADER_KEYWORDS = ['psa', 'bgs', 'sgc', 'cgc', 'csg', 'beckett'];
-
-// Parallel/variation keywords. Any keyword found in a result title but NOT in the
-// query string is treated as an unexpected parallel and the result is rejected.
-// This handles both base-card searches (reject all parallels) and specific-parallel
-// searches (reject other parallels — e.g. searching Silver shouldn't return Gold).
-const PARALLEL_KEYWORDS = [
-  'refractor', 'holo', 'silver', 'gold', 'red', 'blue', 'green', 'orange',
-  'purple', 'pink', 'black', 'white', 'teal', 'yellow', 'brown', 'gray', 'grey',
-  'hyper', 'neon', 'aqua', 'mojo', 'wave', 'velocity', 'stars', 'scope',
-  'cracked ice', 'disco', 'tiger', 'nebula', 'shimmer', 'choice', 'lava',
-  'sp', 'ssp', 'foil', 'logo',
-];
-
-// Generic words that appear in eBay card titles without indicating a specific insert/parallel.
-// Words in this list are allowed in result titles even if they weren't in the search query.
-const LISTING_NOISE = new Set([
-  // Card attributes / grading language
-  'rookie', 'rated', 'serial', 'numbered', 'graded', 'limited', 'edition',
-  'insert', 'parallel', 'short', 'print', 'chrome', 'refractor', 'invest',
-  // Sports
-  'basketball', 'football', 'baseball', 'hockey', 'soccer',
-  // NFL teams
-  'ravens', 'steelers', 'browns', 'bengals', 'patriots', 'bills', 'dolphins', 'jets',
-  'ravens', 'texans', 'colts', 'jaguars', 'titans', 'broncos', 'raiders', 'chiefs',
-  'chargers', 'cowboys', 'giants', 'eagles', 'commanders', 'bears', 'packers',
-  'vikings', 'lions', 'falcons', 'panthers', 'saints', 'buccaneers', 'seahawks',
-  'rams', 'cardinals', 'niners', 'falcons', 'broncos',
-  // NBA teams
-  'lakers', 'warriors', 'celtics', 'knicks', 'bulls', 'heat', 'spurs', 'rockets',
-  'nuggets', 'suns', 'maverick', 'mavericks', 'clippers', 'blazers', 'thunder',
-  'pacers', 'bucks', 'raptors', 'pistons', 'cavaliers', 'hornets', 'hawks',
-  'pelicans', 'grizzlies', 'timberwolves', 'jazz', 'kings', 'magic', 'wizards',
-  'nets', 'sixers',
-  // MLB teams
-  'yankees', 'redsox', 'dodgers', 'giants', 'cubs', 'cardinals', 'braves',
-  'astros', 'mets', 'phillies', 'nationals', 'marlins', 'brewers', 'pirates',
-  'reds', 'padres', 'rockies', 'diamondbacks', 'giants', 'rangers', 'angels',
-  'athletics', 'mariners', 'tigers', 'indians', 'guardians', 'twins', 'whitesox',
-  'royals', 'orioles', 'bluejays', 'rays',
-  // Brands / manufacturers
-  'panini', 'topps', 'donruss', 'fleer', 'score', 'ultra', 'select', 'optic',
-  'mosaic', 'chronicles', 'certified', 'absolute', 'contenders', 'playoff',
-  'treasures', 'prestige', 'titanium', 'spectra', 'bowman', 'stadium',
-  'heritage', 'update', 'series', 'national', 'upper', 'deck', 'illusions',
-  'revolution', 'majestic', 'lightning', 'genesis', 'zenith', 'phoenix', 'prizm',
-  // Common eBay listing filler
-  'trading', 'sports', 'card', 'cards', 'single', 'color', 'colour',
-]);
-
-// Reject if the title contains a significant word (>5 chars) that is not present
-// in the reference query and is not a known generic listing word.
-// This catches unexpected insert set names like "Confetti", "Fireworks", "Downtown"
-// that PARALLEL_KEYWORDS doesn't cover.
-function noUnexpectedWords(title: string, query: string): boolean {
-  const t = title.toLowerCase();
-  const q = query.toLowerCase();
-  const titleWords = t.match(/\b[a-z]{6,}\b/g) ?? [];
-  return titleWords.every(word => q.includes(word) || LISTING_NOISE.has(word));
-}
-
-// Returns false if the title contains a parallel keyword that the query didn't ask for.
-function noUnexpectedParallels(title: string, query: string): boolean {
-  const t = title.toLowerCase();
-  const q = query.toLowerCase();
-  return !PARALLEL_KEYWORDS.some(k => {
-    const re = new RegExp(`\\b${k.replace(/\s+/g, '\\s+')}\\b`);
-    return re.test(t) && !q.includes(k);
-  });
-}
-
-function buildEbayQuery(card: any): string {
-  const {
-    year, release_name, set_name, player, card_number,
-    parallel_type, is_auto, is_patch, is_rookie, serial_max,
-    is_graded, grader, grade_value,
-  } = card;
-
-  const parts: string[] = [String(year ?? ''), release_name ?? '', player ?? ''];
-  if (card_number) parts.push(`#${card_number}`);
-
-  // Strip serial suffix from parallel_name (e.g. "Blue Hyper /49" → "Blue Hyper")
-  const parallelLabel = (parallel_type ?? '').replace(/\s*\/\d+$/, '').trim();
-
-  const attrs: string[] = [];
-  if (parallelLabel && parallelLabel !== 'Base') attrs.push(parallelLabel);
-  if (is_auto)    attrs.push('Auto');
-  if (is_patch)   attrs.push('Patch');
-  if (serial_max) attrs.push(`/${serial_max}`);
-  if (is_rookie)  attrs.push('RC');
-  if (is_graded && grader && grade_value) attrs.push(`${grader} ${grade_value}`);
-
-  return [...parts, ...attrs].filter(Boolean).join(' ');
-}
-
-
-
-// Parse a free-text eBay query string into structured filter fields,
-// then filter raw results. Used by both the comps search and card-value endpoints.
-// strictWords=true: also rejects titles with unexpected 6+ char words not in query or LISTING_NOISE.
-//   Use for card-value where the query was machine-built from structured card data.
-//   Skip for free-text comps search where the user controls the query.
-function parseAndFilter(raw: any[], query: string, strictWords = false): any[] {
-  const yearMatch    = query.match(/\b(19|20)\d{2}\b/);
-  const cardNumMatch = query.match(/(?:^|\s)#?(\d{1,4})(?:\s|$)/);
-  const serialMatch  = query.match(/\/(\d{1,4})\b/);
-  const graderFound  = GRADER_KEYWORDS.find(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
-  const gradeNumMatch = query.match(/\b(\d+(?:\.\d+)?)\s*(?:gem\s*mint)?$/i);
-
-  const parallelsInQuery = PARALLEL_KEYWORDS.filter(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
-  const parallelFromQuery = parallelsInQuery.length ? parallelsInQuery.join(' ') : null;
-
-  // Strip structured tokens and known noise words to isolate the player name
-  const noisePattern = new RegExp(`\\b(${[...LISTING_NOISE].join('|')})\\b`, 'gi');
-  const playerGuess = query
-    .replace(/\b(19|20)\d{2}\b/, '')
-    .replace(/(?:^|\s)#?\d{1,4}(?:\s|$)/, ' ')
-    .replace(/\/\d{1,4}\b/, '')
-    .replace(new RegExp(`\\b(${PARALLEL_KEYWORDS.join('|')})\\b`, 'gi'), '')
-    .replace(new RegExp(`\\b(${GRADER_KEYWORDS.join('|')})\\b`, 'gi'), '')
-    .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
-    .replace(noisePattern, '')
-    .replace(/\s{2,}/g, ' ').trim();
-
-  const year       = yearMatch ? parseInt(yearMatch[0]) : null;
-  const serial_max = serialMatch ? parseInt(serialMatch[1]) : null;
-  const playerWords = playerGuess.toLowerCase().split(/\s+/).filter(Boolean);
-  const parallelStr = parallelFromQuery ?? '';
-  const is_auto    = /\bauto(graph)?\b/i.test(query);
-  const is_patch   = /\b(patch|relic|jersey)\b/i.test(query);
-  const is_graded  = !!graderFound;
-  const grader     = graderFound ?? null;
-  const grade_value = gradeNumMatch ? gradeNumMatch[1] : null;
-
-  console.log(`[comps/filter] player="${playerGuess}" year=${year} serial=${serial_max} parallel="${parallelStr}" auto=${is_auto} patch=${is_patch} graded=${is_graded}${grader ? ` grader=${grader} grade=${grade_value}` : ''} strictWords=${strictWords}`);
-
-  const reject = (item: any, reason: string) => {
-    console.log(`[comps/reject] "${item.title}" — ${reason}`);
-    return false;
-  };
-
-  return raw.filter(item => {
-    const title = (item.title ?? '').toLowerCase();
-
-    // Player — every word must appear (strict mode only; free-text queries rely on eBay's own relevance)
-    if (strictWords && playerWords.length && playerWords.some((w: string) => !title.includes(w))) return reject(item, `missing player word`);
-
-    // Year
-    if (year && !title.includes(String(year))) return reject(item, `missing year ${year}`);
-
-    // Card number
-    if (cardNumMatch) {
-      const num = cardNumMatch[1];
-      if (!new RegExp(`\\b${num}\\b`).test(title)) return reject(item, `missing card number ${num}`);
-    }
-
-    // Reject lots
-    if (/\blot\b/i.test(title)) return reject(item, 'lot listing');
-
-    // Serial — in strict mode, reject numbered cards if none requested or wrong serial.
-    // In free-text mode, only enforce if the user actually specified a serial in their query.
-    const hasSerial = /\/\d{1,4}\b/.test(title);
-    if (strictWords && !serial_max && hasSerial) return reject(item, 'unexpected serial number');
-    if (serial_max  && !new RegExp(`\\/${serial_max}\\b`).test(title)) return reject(item, `wrong serial (want /${serial_max})`);
-
-    // Graded — only enforce if grader was in query
-    if (is_graded && grader     && !title.includes(grader.toLowerCase())) return reject(item, `missing grader ${grader}`);
-    if (is_graded && grade_value && !title.includes(grade_value)) return reject(item, `missing grade ${grade_value}`);
-
-    // Auto
-    const hasAuto = /\bauto(graph)?\b/.test(title);
-    if (is_auto && !hasAuto) return reject(item, 'missing auto');
-    if (strictWords && !is_auto && hasAuto) return reject(item, 'unexpected auto');
-
-    // Patch
-    const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
-    if (is_patch && !hasPatch) return reject(item, 'missing patch');
-    if (strictWords && !is_patch && hasPatch) return reject(item, 'unexpected patch');
-
-    // SSP / SP / Variation — reject unless query asked for them
-    if (/\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) return reject(item, 'unexpected SSP');
-    if (/\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) return reject(item, 'unexpected variation');
-
-    // Parallel — if parallel keywords were in query, every one must be in title
-    if (parallelStr) {
-      const parallelWords = parallelStr.toLowerCase().split(/\s+/).filter(Boolean);
-      const missing = parallelWords.find(w => !title.includes(w));
-      if (missing) return reject(item, `missing parallel word "${missing}"`);
-    }
-    // Reject titles with unexpected parallel color keywords
-    if (!noUnexpectedParallels(item.title, query)) return reject(item, 'unexpected parallel keyword');
-
-    // Strict mode: reject titles with any 4+ char word not in query or LISTING_NOISE.
-    if (strictWords && !noUnexpectedWords(item.title, query)) {
-      const t = title;
-      const q = query.toLowerCase();
-      const unexpected = (t.match(/\b[a-z]{6,}\b/g) ?? []).find((w: string) => !q.includes(w) && !LISTING_NOISE.has(w));
-      return reject(item, `unexpected word "${unexpected}"`);
-    }
-
-    return true;
-  });
-}
 
 function computeStats(items: any[]): CompsStats {
   const prices = items
@@ -234,13 +30,6 @@ function computeStats(items: any[]): CompsStats {
 // Re-export for type reference
 type CompsStats = { average_price: number; median_price: number; min_price: number; max_price: number; total_results: number };
 
-// Maps eBay buyingOptions array to our 3-value enum.
-// best_offer wins if present because price is the ask, not the final amount.
-function resolveSaleType(options: string[]): 'auction' | 'fixed_price' | 'best_offer' {
-  if (options.includes('BEST_OFFER')) return 'best_offer';
-  if (options.includes('AUCTION'))    return 'auction';
-  return 'fixed_price';
-}
 
 const router = Router();
 router.use(requireAuth);
@@ -329,7 +118,7 @@ router.post('/card-value', async (req: AuthRequest, res) => {
 
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    const query = buildEbayQuery(card);
+    const query = buildCardEbayQuery(card);
     console.log(`[comps] eBay query: "${query}"`);
 
     const { items: raw } = await searchSoldListings(query);

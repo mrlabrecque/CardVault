@@ -78,15 +78,11 @@ export class AddToWishlistDialog {
         this.excludeInput.set('');
         this.target_price.set(s?.suggested_price ?? null);
         this.error.set(null);
-        // In edit mode, populate the existing query and mark it as user-edited
-        // so it doesn't get auto-rebuilt on every keystroke.
-        if (s?.ebay_query) {
-          this.ebay_query.set(s.ebay_query);
-          this.ebayQueryEdited.set(true);
-        } else {
-          this.ebayQueryEdited.set(false);
-          this.rebuildQuery();
-        }
+        // Always rebuild from current field values on open.
+        // ebayQueryEdited stays false so field changes will keep updating the query.
+        // It only becomes true if the user manually types in the query field.
+        this.ebayQueryEdited.set(false);
+        this.rebuildQuery();
       });
     });
   }
@@ -94,14 +90,15 @@ export class AddToWishlistDialog {
   rebuildQuery() {
     if (this.ebayQueryEdited()) return;
     this.ebay_query.set(buildEbayQuery({
-      player:     this.player(),
-      year:       this.year(),
-      set_name:   this.set_name(),
-      parallel:   this.parallel(),
-      grade:      this.grade(),
-      serial_max: this.serial_max(),
-      is_rookie:  this.is_rookie(),
-      is_auto:    this.is_auto(),
+      player:      this.player(),
+      year:        this.year(),
+      set_name:    this.set_name(),
+      parallel:    this.parallel(),
+      card_number: this.card_number(),
+      grade:       this.grade(),
+      serial_max:  this.serial_max(),
+      is_rookie:   this.is_rookie(),
+      is_auto:     this.is_auto(),
     }));
   }
 

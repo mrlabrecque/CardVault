@@ -193,7 +193,7 @@
             <div class="flex items-center gap-1">
               @if (!isStackValuing(stack)) {
                 <button
-                  class="p-1 rounded-lg text-gray-300 hover:text-[#800020] hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  class="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 text-gray-300 hover:text-[#800020] hover:bg-gray-50 hover:border-gray-300 active:bg-gray-100 transition-colors"
                   title="Refresh market value"
                   (click)="refetchStack(stack, $event)">
                   <i class="pi pi-refresh text-[11px]"></i>
@@ -266,7 +266,7 @@
                     </div>
                     <i class="pi pi-chevron-right text-gray-300 text-xs shrink-0"></i>
                   </a>
-                  <button class="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors shrink-0"
+                  <button class="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 text-gray-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100 active:bg-red-100 transition-colors shrink-0"
                           (click)="requestDelete(card.id, $event)">
                     <i class="pi pi-trash text-[11px]"></i>
                   </button>

@@ -79,12 +79,10 @@
               }
             </p>
             <p class="text-xs text-gray-400 truncate">
-              {{ card.year }} {{ card.set }} · {{ card.parallel }}
+              {{ card.year }} {{ card.set }}{{ card.checklist ? ' · ' + card.checklist : '' }} · {{ card.parallel }}
             </p>
             <div class="flex flex-wrap items-center gap-1 mt-0.5">
-              @if (card.isGraded) {
-                <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
-              }
+              <p-tag [value]="card.grade" severity="secondary" styleClass="text-[10px]!" />
               @if (card.rookie)      { <p-tag value="RC"    severity="info"    styleClass="text-[10px]!" /> }
               @if (card.autograph)   { <p-tag value="AUTO"  severity="warn"    styleClass="text-[10px]!" /> }
               @if (card.memorabilia) { <p-tag value="PATCH" severity="success" styleClass="text-[10px]!" /> }
@@ -101,9 +99,9 @@
           <div class="flex flex-col items-end justify-center gap-2 pr-3 shrink-0">
             <span class="text-sm font-bold text-gray-900">${{ card.currentValue.toFixed(2) }}</span>
             <button
-              class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"
+              class="w-7 h-7 flex items-center justify-center rounded-xl border border-red-100 text-red-400 hover:bg-red-50 transition-colors"
               (click)="lot.remove(card.id)">
-              <i class="pi pi-times text-white" style="font-size:9px"></i>
+              <i class="pi pi-times text-xs"></i>
             </button>
           </div>
 

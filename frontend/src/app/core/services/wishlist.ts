@@ -56,16 +56,17 @@ export interface WishlistFormData {
 }
 
 /** Build a sensible eBay search query from form fields. */
-export function buildEbayQuery(f: Pick<WishlistFormData, 'player' | 'year' | 'set_name' | 'parallel' | 'grade' | 'serial_max' | 'is_rookie' | 'is_auto'>): string {
+export function buildEbayQuery(f: Pick<WishlistFormData, 'player' | 'year' | 'set_name' | 'parallel' | 'card_number' | 'grade' | 'serial_max' | 'is_rookie' | 'is_auto'>): string {
   const parts: string[] = [];
-  if (f.player)    parts.push(f.player);
-  if (f.year)      parts.push(String(f.year));
-  if (f.set_name)  parts.push(f.set_name);
+  if (f.player)     parts.push(f.player);
+  if (f.year)       parts.push(String(f.year));
+  if (f.set_name)   parts.push(f.set_name);
   if (f.parallel && f.parallel.toLowerCase() !== 'base') parts.push(f.parallel);
-  if (f.is_rookie) parts.push('RC');
-  if (f.is_auto)   parts.push('Auto');
+  if (f.card_number) parts.push(`#${f.card_number}`);
+  if (f.is_rookie)  parts.push('RC');
+  if (f.is_auto)    parts.push('Auto');
   if (f.serial_max) parts.push(`/${f.serial_max}`);
-  if (f.grade)     parts.push(f.grade);
+  if (f.grade)      parts.push(f.grade);
   return parts.join(' ');
 }
 
