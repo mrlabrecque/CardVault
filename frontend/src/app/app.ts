@@ -30,6 +30,8 @@ export class App {
   menuOpen = signal(false);
   pendingParallelCount = signal(0);
   isNavigating = signal(false);
+  showNavigatingSpinner = signal(false);
+  private _navSpinnerTimer: ReturnType<typeof setTimeout> | null = null;
   readonly ui = inject(UiService);
   readonly wishlistService = inject(WishlistService);
   private releasesService = inject(ReleasesService);
@@ -52,8 +54,17 @@ export class App {
     );
 
     this.router.events.subscribe(e => {
-      if (e instanceof NavigationStart)                                          this.isNavigating.set(true);
-      if (e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError) this.isNavigating.set(false);
+      if (e instanceof NavigationStart) {
+        this.isNavigating.set(true);
+        this._navSpinnerTimer = setTimeout(() => {
+          if (this.isNavigating()) this.showNavigatingSpinner.set(true);
+        }, 150);
+      }
+      if (e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError) {
+        this.isNavigating.set(false);
+        this.showNavigatingSpinner.set(false);
+        if (this._navSpinnerTimer) { clearTimeout(this._navSpinnerTimer); this._navSpinnerTimer = null; }
+      }
     });
 
     effect(() => {

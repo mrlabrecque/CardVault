@@ -10,10 +10,12 @@ export class AuthService {
   private _user = signal<User | null>(null);
   private _session = signal<Session | null>(null);
   private _isAppAdmin = signal(false);
+  private _isInitialized = signal(false);
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => this._user() !== null);
   readonly isAppAdmin = this._isAppAdmin.asReadonly();
+  readonly isInitialized = this._isInitialized.asReadonly();
 
   constructor(private router: Router) {
     this.supabase = createClient(environment.supabaseUrl, environment.supabaseAnonKey);
@@ -23,6 +25,7 @@ export class AuthService {
       this._session.set(data.session);
       this._user.set(data.session?.user ?? null);
       if (data.session?.user) this.fetchProfile(data.session.user.id);
+      this._isInitialized.set(true);
     });
 
     // React to all future auth state changes (login, logout, token refresh)
