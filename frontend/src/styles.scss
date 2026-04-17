@@ -20,6 +20,11 @@
   100% { width: 0%;   margin-left: 100%; }
 }
 
+/* Prevent iOS auto-zoom on input focus — Safari zooms when font-size < 16px */
+input, textarea, select {
+  font-size: max(16px, 1em);
+}
+
 .p-tag {
   padding: 0.25rem 0.6rem;
   border-radius: 6px;

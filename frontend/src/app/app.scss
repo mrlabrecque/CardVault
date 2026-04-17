@@ -62,13 +62,7 @@ body {
 }
 
 .app-content--authenticated {
-  padding-bottom: var(--tab-bar-height);
-}
-
-@media (min-width: 1024px) {
-  .app-content--authenticated {
-    padding-bottom: 0;
-  }
+  /* Tab bar is in normal flow — no padding-bottom needed */
 }
 
 /* ── App Header ──────────────────────────────────── */
@@ -211,29 +205,16 @@ body {
 
 /* ── Bottom Tab Bar ─────────────────────────────── */
 .tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  flex-shrink: 0;
   width: 100%;
-  max-width: 480px;
   height: var(--tab-bar-height);
   background: var(--color-primary);
   border-top: none;
   display: flex;
   align-items: center;
   justify-content: space-around;
-  padding: 0 8px;
+  padding: 0 8px env(safe-area-inset-bottom, 0px);
   z-index: 100;
-}
-
-/* Tablet — tab bar spans full width */
-@media (min-width: 640px) {
-  .tab-bar {
-    max-width: 100%;
-    left: 0;
-    transform: none;
-  }
 }
 
 /* Desktop — hide tab bar, sidebar takes over */

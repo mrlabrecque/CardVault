@@ -113,34 +113,34 @@
         </div>
 
         <!-- Right side: results or analyze button -->
-        <div class="shrink-0 flex flex-col items-end gap-1.5">
+        <div class="shrink-0 flex items-center gap-1.5">
 
           @if (gc.loading) {
-            <div class="flex flex-col items-end gap-1.5">
-              <div class="w-20 h-3 bg-gray-200 rounded animate-pulse"></div>
-              <div class="w-16 h-3 bg-gray-100 rounded animate-pulse"></div>
+            <div class="flex gap-1.5">
+              <div class="w-14 h-14 bg-gray-100 rounded-xl animate-pulse"></div>
+              <div class="w-14 h-14 bg-gray-100 rounded-xl animate-pulse"></div>
             </div>
           } @else if (gc.error) {
             <button (click)="analyze(gc.id)" class="text-xs text-red-400 underline">Retry</button>
           } @else if (gc.result) {
-            <!-- PSA 9 -->
-            <div class="flex items-center gap-1.5">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 w-10 text-right">PSA 9</span>
-              @if (gc.result.psa9Count > 0) {
-                <span class="text-xs text-gray-600">${{ gc.result.psa9Avg.toFixed(2) }}</span>
-                <span class="text-xs min-w-[3rem] text-right" [class]="profitClass(psa9Profit(gc))">{{ formatProfit(psa9Profit(gc)) }}</span>
+            <!-- PSA 10 box -->
+            <div class="flex flex-col items-center bg-gray-50 rounded-xl px-2 py-1.5 min-w-[58px]">
+              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">PSA 10</span>
+              @if (gc.result.psa10Count > 0) {
+                <span class="text-xs font-semibold text-gray-800">${{ gc.result.psa10Avg.toFixed(0) }}</span>
+                <span class="text-[10px] font-semibold" [class]="profitClass(psa10Profit(gc))">{{ formatProfit(psa10Profit(gc)) }}</span>
               } @else {
-                <span class="text-xs text-gray-300">No data</span>
+                <span class="text-[10px] text-gray-300 mt-0.5">No data</span>
               }
             </div>
-            <!-- PSA 10 -->
-            <div class="flex items-center gap-1.5">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 w-10 text-right">PSA 10</span>
-              @if (gc.result.psa10Count > 0) {
-                <span class="text-xs text-gray-600">${{ gc.result.psa10Avg.toFixed(2) }}</span>
-                <span class="text-xs min-w-[3rem] text-right" [class]="profitClass(psa10Profit(gc))">{{ formatProfit(psa10Profit(gc)) }}</span>
+            <!-- PSA 9 box -->
+            <div class="flex flex-col items-center bg-gray-50 rounded-xl px-2 py-1.5 min-w-[58px]">
+              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">PSA 9</span>
+              @if (gc.result.psa9Count > 0) {
+                <span class="text-xs font-semibold text-gray-800">${{ gc.result.psa9Avg.toFixed(0) }}</span>
+                <span class="text-[10px] font-semibold" [class]="profitClass(psa9Profit(gc))">{{ formatProfit(psa9Profit(gc)) }}</span>
               } @else {
-                <span class="text-xs text-gray-300">No data</span>
+                <span class="text-[10px] text-gray-300 mt-0.5">No data</span>
               }
             </div>
           } @else {

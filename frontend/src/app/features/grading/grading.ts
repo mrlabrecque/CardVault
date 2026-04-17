@@ -1,5 +1,5 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
-import { CommonModule, NgTemplateOutlet } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { CardsService } from '../../core/services/cards';
@@ -40,7 +40,7 @@ type TierFilter = 'all' | Tier;
 @Component({
   selector: 'app-grading',
   standalone: true,
-  imports: [CommonModule, NgTemplateOutlet, RouterLink, FormsModule],
+  imports: [CommonModule, RouterLink, FormsModule],
   templateUrl: './grading.html',
   styleUrl: './grading.scss',
 })

@@ -12,6 +12,12 @@ import { startScheduler } from './jobs/scheduler';
 
 dotenv.config();
 
+// Warn on startup if required env vars are missing
+const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'CARDSIGHT_API_KEY'];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) console.warn(`[startup] WARNING: environment variable ${key} is not set`);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 

@@ -1,7 +1,9 @@
 const CARDSIGHT_BASE = 'https://api.cardsight.ai';
 
 function getHeaders(): Record<string, string> {
-  return { 'X-API-Key': process.env.CARDSIGHT_API_KEY! };
+  const key = process.env.CARDSIGHT_API_KEY;
+  if (!key) throw new Error('CARDSIGHT_API_KEY environment variable is not set');
+  return { 'X-API-Key': key };
 }
 
 export interface CardsightRelease {
