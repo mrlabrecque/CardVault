@@ -51,6 +51,26 @@ export class Wishlist implements OnInit {
     if (!result.error) this.checkResult.set(result);
   }
 
+  /** Most recent last_checked_at across all items — reflects cron job runs too. */
+  lastCheckedAt(): string | null {
+    const timestamps = this.wishlist.items()
+      .map(i => i.last_checked_at)
+      .filter(Boolean) as string[];
+    if (!timestamps.length) return null;
+    return timestamps.reduce((latest, t) => (t > latest ? t : latest));
+  }
+
+  formatLastChecked(): string | null {
+    const iso = this.lastCheckedAt();
+    if (!iso) return null;
+    const date = new Date(iso);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (isToday) return time;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' at ' + time;
+  }
+
   searchComps(item: WishlistItem) {
     const base = item.ebay_query || item.player || '';
     const exclusions = (item.exclude_terms ?? []).map(t => `-"${t}"`).join(' ');

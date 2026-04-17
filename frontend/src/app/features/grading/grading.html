@@ -82,21 +82,22 @@
   <!-- Card list -->
   @for (gc of displayCards(); track gc.id) {
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div class="flex items-center gap-3 px-4 py-3">
+      <div class="flex items-stretch">
 
-        <!-- Thumbnail -->
-        <div class="w-10 h-14 rounded-md bg-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
+        <!-- Bleeding image column (matches collection-list style) -->
+        <div class="relative w-16 shrink-0 self-stretch bg-gray-50">
+          <span class="absolute inset-0 flex items-center justify-start -translate-x-2 text-5xl opacity-10 pointer-events-none select-none">
+            {{ sportIcon(gc.sport) }}
+          </span>
           @if (gc.imageUrl) {
-            <img [src]="gc.imageUrl" [alt]="gc.player" class="w-full h-full object-cover" />
-          } @else {
-            <span class="text-lg leading-none">{{ sportIcon(gc.sport) }}</span>
+            <img [src]="gc.imageUrl" [alt]="gc.player" class="absolute inset-0 w-full h-full object-cover" />
           }
         </div>
 
         <!-- Card info -->
-        <div class="flex-1 min-w-0">
+        <div class="flex-1 min-w-0 py-3 pl-3 pr-2">
           <div class="flex items-center gap-2 flex-wrap">
-            <p class="text-[15px] font-semibold text-gray-900 truncate">{{ gc.player }}</p>
+            <p class="text-[14px] font-semibold text-gray-900 truncate">{{ gc.player }}</p>
             @if (tier(gc) !== 'pending') {
               <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md shrink-0" [class]="tierBadgeClass(tier(gc))">
                 {{ tierLabel(tier(gc)) }}
@@ -105,42 +106,44 @@
           </div>
           <p class="text-xs text-gray-500 truncate">{{ gc.year }} {{ gc.set }}{{ gc.parallel !== 'Base' ? ' · ' + gc.parallel : '' }}</p>
           <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-            <p class="text-xs text-gray-400">Cost ${{ gc.pricePaid.toFixed(2) }} · Raw ${{ gc.currentValue.toFixed(2) }}</p>
+            <p class="text-xs text-gray-400">${{ gc.pricePaid.toFixed(2) }} paid · ${{ gc.currentValue.toFixed(2) }} raw</p>
+          </div>
+          <div class="flex items-center gap-1.5 mt-0.5">
             @if (gc.rookie)      { <span class="text-[10px] font-bold text-blue-500">RC</span> }
             @if (gc.autograph)   { <span class="text-[10px] font-bold text-amber-500">AUTO</span> }
             @if (gc.memorabilia) { <span class="text-[10px] font-bold text-emerald-500">PATCH</span> }
           </div>
         </div>
 
-        <!-- Right side: results or analyze button -->
-        <div class="shrink-0 flex items-center gap-1.5">
+        <!-- Right side: stacked PSA boxes or analyze button -->
+        <div class="shrink-0 flex flex-col items-stretch justify-center gap-1 py-3 pr-3">
 
           @if (gc.loading) {
-            <div class="flex gap-1.5">
-              <div class="w-14 h-14 bg-gray-100 rounded-xl animate-pulse"></div>
-              <div class="w-14 h-14 bg-gray-100 rounded-xl animate-pulse"></div>
+            <div class="flex flex-col gap-1">
+              <div class="w-[88px] h-[30px] bg-gray-100 rounded-lg animate-pulse"></div>
+              <div class="w-[88px] h-[30px] bg-gray-100 rounded-lg animate-pulse"></div>
             </div>
           } @else if (gc.error) {
             <button (click)="analyze(gc.id)" class="text-xs text-red-400 underline">Retry</button>
           } @else if (gc.result) {
-            <!-- PSA 10 box -->
-            <div class="flex flex-col items-center bg-gray-50 rounded-xl px-2 py-1.5 min-w-[58px]">
-              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">PSA 10</span>
+            <!-- PSA 10 row -->
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5">
+              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 w-[36px] shrink-0">PSA 10</span>
               @if (gc.result.psa10Count > 0) {
-                <span class="text-xs font-semibold text-gray-800">${{ gc.result.psa10Avg.toFixed(0) }}</span>
-                <span class="text-[10px] font-semibold" [class]="profitClass(psa10Profit(gc))">{{ formatProfit(psa10Profit(gc)) }}</span>
+                <span class="text-[11px] font-semibold text-gray-800">${{ gc.result.psa10Avg.toFixed(0) }}</span>
+                <span class="text-[10px] font-semibold ml-auto" [class]="profitClass(psa10Profit(gc))">{{ formatProfit(psa10Profit(gc)) }}</span>
               } @else {
-                <span class="text-[10px] text-gray-300 mt-0.5">No data</span>
+                <span class="text-[10px] text-gray-300">No data</span>
               }
             </div>
-            <!-- PSA 9 box -->
-            <div class="flex flex-col items-center bg-gray-50 rounded-xl px-2 py-1.5 min-w-[58px]">
-              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">PSA 9</span>
+            <!-- PSA 9 row -->
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5">
+              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 w-[36px] shrink-0">PSA 9</span>
               @if (gc.result.psa9Count > 0) {
-                <span class="text-xs font-semibold text-gray-800">${{ gc.result.psa9Avg.toFixed(0) }}</span>
-                <span class="text-[10px] font-semibold" [class]="profitClass(psa9Profit(gc))">{{ formatProfit(psa9Profit(gc)) }}</span>
+                <span class="text-[11px] font-semibold text-gray-800">${{ gc.result.psa9Avg.toFixed(0) }}</span>
+                <span class="text-[10px] font-semibold ml-auto" [class]="profitClass(psa9Profit(gc))">{{ formatProfit(psa9Profit(gc)) }}</span>
               } @else {
-                <span class="text-[10px] text-gray-300 mt-0.5">No data</span>
+                <span class="text-[10px] text-gray-300">No data</span>
               }
             </div>
           } @else {

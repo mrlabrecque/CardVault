@@ -207,12 +207,15 @@ body {
 .tab-bar {
   flex-shrink: 0;
   width: 100%;
-  height: var(--tab-bar-height);
+  /* Height = visual 72px content area + safe area below it */
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
   background: var(--color-primary);
   border-top: none;
   display: flex;
   align-items: center;
   justify-content: space-around;
+  /* Padding-bottom pushes items up above home indicator; box-sizing: border-box
+     means the 72px content area is always fully available for centering */
   padding: 0 8px env(safe-area-inset-bottom, 0px);
   z-index: 100;
 }

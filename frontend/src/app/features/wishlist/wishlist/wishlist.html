@@ -26,28 +26,33 @@
 
   <!-- Check Now bar -->
   @if (!wishlist.loading() && wishlist.items().length > 0) {
-    <div class="flex items-center gap-3">
-      <button
-        (click)="checkNow()"
-        [disabled]="checking()"
-        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#800020] text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
-      >
-        @if (checking()) {
-          <i class="pi pi-spin pi-spinner text-xs"></i>
-          Checking eBay…
-        } @else {
-          <i class="pi pi-refresh text-xs"></i>
-          Check Now
-        }
-      </button>
-      @if (checkResult(); as r) {
-        <p class="text-xs text-gray-500">
-          @if (r.triggered > 0) {
-            <span class="text-emerald-600 font-semibold">{{ r.triggered }} deal{{ r.triggered === 1 ? '' : 's' }} found!</span>
+    <div class="flex flex-col gap-1">
+      <div class="flex items-center gap-3">
+        <button
+          (click)="checkNow()"
+          [disabled]="checking()"
+          class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#800020] text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
+        >
+          @if (checking()) {
+            <i class="pi pi-spin pi-spinner text-xs"></i>
+            Checking eBay…
           } @else {
-            Checked {{ r.checked }} item{{ r.checked === 1 ? '' : 's' }} — no deals yet.
+            <i class="pi pi-refresh text-xs"></i>
+            Check Now
           }
-        </p>
+        </button>
+        @if (checkResult(); as r) {
+          <p class="text-xs text-gray-500">
+            @if (r.triggered > 0) {
+              <span class="text-emerald-600 font-semibold">{{ r.triggered }} deal{{ r.triggered === 1 ? '' : 's' }} found!</span>
+            } @else {
+              Checked {{ r.checked }} item{{ r.checked === 1 ? '' : 's' }} — no deals yet.
+            }
+          </p>
+        }
+      </div>
+      @if (lastCheckedAt()) {
+        <p class="text-xs text-gray-400 pl-1">Last checked at {{ formatLastChecked() }}</p>
       }
     </div>
   }
