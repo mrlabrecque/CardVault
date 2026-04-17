@@ -131,3 +131,65 @@ export async function getCardImage(cardsightCardId: string): Promise<ArrayBuffer
   if (!res.ok) throw new Error(`CardSight image failed: ${res.status} ${res.statusText}`);
   return res.arrayBuffer();
 }
+
+export interface CardsightIdentifyParallel {
+  id: string;
+  name: string;
+  description?: string;
+  numberedTo?: number;
+  isPartial?: boolean;
+}
+
+export interface CardsightIdentifyCard {
+  id?: string;
+  segmentId?: string;
+  releaseId?: string;
+  setId?: string;
+  name?: string;
+  number?: string;
+  year?: string;
+  manufacturer?: string;
+  releaseName?: string;
+  setName?: string;
+  parallel?: CardsightIdentifyParallel;
+}
+
+export interface CardsightIdentifyGrading {
+  confidence: string;
+  company: { id?: string; name: string };
+}
+
+export interface CardsightDetection {
+  confidence: string;
+  card: CardsightIdentifyCard;
+  grading?: CardsightIdentifyGrading;
+}
+
+export interface CardsightIdentifyResponse {
+  success: boolean;
+  requestId: string;
+  detections?: CardsightDetection[];
+  processingTime?: number;
+}
+
+export async function identifyCard(
+  imageBuffer: ArrayBuffer,
+  mimeType: string,
+  segment?: string,
+): Promise<CardsightIdentifyResponse> {
+  const path = segment ? `/v1/identify/card/${encodeURIComponent(segment)}` : '/v1/identify/card';
+  const url = `${CARDSIGHT_BASE}${path}`;
+
+  const blob = new Blob([imageBuffer], { type: mimeType });
+  const formData = new FormData();
+  formData.append('file', blob, 'card.jpg');
+
+  const { 'X-API-Key': apiKey } = getHeaders();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'X-API-Key': apiKey },
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`CardSight identify failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<CardsightIdentifyResponse>;
+}

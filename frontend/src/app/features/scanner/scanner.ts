@@ -1,20 +1,46 @@
 import {
   Component, inject, signal, computed, ViewChild, ElementRef,
-  OnDestroy, OnInit
+  OnDestroy, OnInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { ScannerService, ParsedCard } from '../../core/services/scanner';
-import { CardsService, MasterCard, StagedCardPayload } from '../../core/services/cards';
-import { ReleasesService, ReleaseRecord, SetRecord, SetParallel } from '../../core/services/releases';
+import { AuthService } from '../../core/services/auth';
+import { CardsService, StagedCardPayload } from '../../core/services/cards';
 import { UiService } from '../../core/services/ui';
+import { environment } from '../../../environments/environment';
 
-export type ScanState = 'no-session' | 'ready' | 'processing' | 'matched' | 'no-match' | 'discovery';
+export type ScanState = 'ready' | 'processing' | 'matched' | 'no-match';
+
+export interface SetParallel {
+  id: string;
+  name: string;
+  serial_max: number | null;
+  is_auto: boolean;
+  color_hex: string | null;
+  sort_order: number;
+}
+
+export interface ScanResult {
+  masterCardId: string | null;
+  player: string | null;
+  cardNumber: string | null;
+  year: string | null;
+  releaseName: string | null;
+  setName: string | null;
+  parallel: { id: string | null; name: string; numberedTo?: number } | null;
+  parallelId: string | null;
+  parallelName: string;
+  grading: { company: string; confidence: string } | null;
+  confidence: string;
+  setParallels: SetParallel[];
+}
 
 export interface StagedCard {
   tempId: string;
-  masterCard: MasterCard;
+  masterCardId: string;
+  player: string;
+  cardNumber: string | null;
   parallelId: string | null;
   parallelName: string;
 }
@@ -28,114 +54,39 @@ export interface StagedCard {
 export class Scanner implements OnInit, OnDestroy {
   @ViewChild('videoEl') videoEl!: ElementRef<HTMLVideoElement>;
 
-  private scannerService = inject(ScannerService);
-  private cardsService   = inject(CardsService);
-  private releasesService = inject(ReleasesService);
-  private router         = inject(Router);
-  readonly ui            = inject(UiService);
+  private auth         = inject(AuthService);
+  private cardsService = inject(CardsService);
+  readonly ui          = inject(UiService);
+  private router       = inject(Router);
   private stream: MediaStream | null = null;
   private audioCtx: AudioContext | null = null;
 
-  // ── Session state ────────────────────────────────────────
-  scanState = signal<ScanState>('no-session');
-  sessionSet = signal<ReleaseRecord | null>(null);
-  sessionChecklists = signal<SetRecord[]>([]);
-  sessionParallels  = signal<SetParallel[]>([]);
-  activeChecklist   = signal<SetRecord | null>(null);
+  readonly SPORTS = [
+    { label: 'Baseball',   segment: 'baseball' },
+    { label: 'Basketball', segment: 'basketball' },
+    { label: 'Football',   segment: 'football' },
+    { label: 'Hockey',     segment: 'hockey' },
+  ];
 
-  // ── Set picker (used to start a session) ─────────────────
-  setQuery   = signal('');
-  setResults = signal<ReleaseRecord[]>([]);
-  showSetDropdown = signal(false);
-  private setSearchTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // ── OCR / match results ──────────────────────────────────
-  parsedCard    = signal<ParsedCard | null>(null);
-  matchedCards  = signal<MasterCard[]>([]);
-  selectedMatch = signal<MasterCard | null>(null);
-  ocrError      = signal<string | null>(null);
-
-  // ── Discovery mode (unknown set detected) ────────────────
-  discoveryYear        = signal<number | null>(null);
-  discoveryBrand       = signal('');
-  discoverySport       = signal('Basketball');
-  discoveryReleaseType = signal('Hobby');
-  submittingDiscovery  = signal(false);
-  readonly sports       = ['Basketball', 'Baseball', 'Football', 'Soccer'];
-  readonly releaseTypes = ['Hobby', 'Retail', 'FOTL'];
-
-  // ── Staging list ─────────────────────────────────────────
-  stagingList = signal<StagedCard[]>([]);
-  stagedCount = computed(() => this.stagingList().length);
-  committing  = signal(false);
-  commitError = signal<string | null>(null);
-  commitSuccess = signal(false);
-
-  // ── Camera ───────────────────────────────────────────────
+  scanSport  = signal<string | null>(null);
+  scanState  = signal<ScanState>('ready');
   cameraError = signal<string | null>(null);
+  scanResult = signal<ScanResult | null>(null);
+  scanError  = signal<string | null>(null);
+
+  stagingList      = signal<StagedCard[]>([]);
+  stagedCount      = computed(() => this.stagingList().length);
+  committing       = signal(false);
+  commitError      = signal<string | null>(null);
+  commitSuccess    = signal(false);
+  showStagingSheet = signal(false);
 
   async ngOnInit() {
-    // Camera is started after the user picks a session set (view is rendered then)
+    await this.startCamera();
   }
 
   ngOnDestroy() {
     this.stopCamera();
-    this.scannerService.clearIndex();
-  }
-
-  // ── Session Setup ─────────────────────────────────────────
-
-  onSetQueryChange(value: string) {
-    this.setQuery.set(value);
-    if (this.setSearchTimer) clearTimeout(this.setSearchTimer);
-    if (!value.trim()) { this.setResults.set([]); this.showSetDropdown.set(false); return; }
-    this.setSearchTimer = setTimeout(() => this.doSetSearch(value), 250);
-  }
-
-  private async doSetSearch(query: string) {
-    const results = await this.releasesService.searchReleases(query);
-    this.setResults.set(results);
-    this.showSetDropdown.set(results.length > 0);
-  }
-
-  async selectSessionSet(release: ReleaseRecord) {
-    this.sessionSet.set(release);
-    this.setQuery.set('');
-    this.showSetDropdown.set(false);
-
-    const sets = await this.releasesService.getSets(release.id);
-    const baseChecklist = sets.find(s => s.prefix === null) ?? sets[0] ?? null;
-
-    const [parallels, masterCards] = await Promise.all([
-      baseChecklist ? this.releasesService.getParallels(baseChecklist.id) : Promise.resolve([]),
-      baseChecklist ? this.cardsService.getMasterCardsForSet(baseChecklist.id) : Promise.resolve([]),
-    ]);
-
-    this.sessionChecklists.set(sets);
-    this.sessionParallels.set(parallels);
-    this.activeChecklist.set(baseChecklist);
-
-    if (baseChecklist) {
-      this.scannerService.buildIndex(baseChecklist.id, masterCards);
-    }
-
-    this.scanState.set('ready');
-    // Small delay so Angular renders the video element before we start the stream
-    setTimeout(() => this.startCamera(), 50);
-  }
-
-  clearSession() {
-    this.stopCamera();
-    this.scannerService.clearIndex();
-    this.sessionSet.set(null);
-    this.sessionChecklists.set([]);
-    this.sessionParallels.set([]);
-    this.activeChecklist.set(null);
-    this.stagingList.set([]);
-    this.parsedCard.set(null);
-    this.matchedCards.set([]);
-    this.selectedMatch.set(null);
-    this.scanState.set('no-session');
   }
 
   // ── Camera ────────────────────────────────────────────────
@@ -143,8 +94,6 @@ export class Scanner implements OnInit, OnDestroy {
   private async startCamera() {
     this.cameraError.set(null);
     try {
-      // Use `ideal` so desktop browsers fall back to any available camera
-      // instead of rejecting the request outright
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       });
@@ -152,13 +101,12 @@ export class Scanner implements OnInit, OnDestroy {
       if (video) {
         video.srcObject = this.stream;
         await video.play();
-        // Wait for actual frame dimensions to be reported before allowing capture
         await new Promise<void>(resolve => {
           if (video.videoWidth > 0) { resolve(); return; }
           video.addEventListener('loadedmetadata', () => resolve(), { once: true });
         });
       }
-    } catch (e: any) {
+    } catch {
       this.cameraError.set('Camera access denied. Please allow camera permissions and try again.');
     }
   }
@@ -168,116 +116,108 @@ export class Scanner implements OnInit, OnDestroy {
     this.stream = null;
   }
 
-  // ── Capture & OCR ─────────────────────────────────────────
+  // ── Capture & Identify ────────────────────────────────────
 
   async capture() {
     if (this.scanState() !== 'ready') return;
     this.scanState.set('processing');
-    this.ocrError.set(null);
-    this.parsedCard.set(null);
-    this.matchedCards.set([]);
-    this.selectedMatch.set(null);
+    this.scanError.set(null);
+    this.scanResult.set(null);
 
     try {
-      const imageDataUrl = this.captureFrame();
-      const rawText = await this.scannerService.recognize(imageDataUrl);
-      const parsed = this.scannerService.parseCardText(rawText);
-      this.parsedCard.set(parsed);
+      const blob = this.captureFrameAsBlob();
+      const session = await this.auth.getSession();
+      const sport = this.scanSport();
+      const url = new URL(`${environment.apiUrl}/api/cardsight/identify`);
+      if (sport) url.searchParams.set('segment', sport);
 
-      // Check if OCR detected a different set (year/brand mismatch)
-      if (parsed.year && parsed.brand) {
-        const setYear = this.sessionSet()?.year;
-        if (setYear && parsed.year !== setYear) {
-          this.discoveryYear.set(parsed.year);
-          this.discoveryBrand.set(parsed.brand);
-          this.scanState.set('discovery');
-          return;
-        }
-      }
+      const res = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'image/jpeg',
+          Authorization: `Bearer ${session!.access_token}`,
+        },
+        body: blob,
+      });
 
-      // Route to correct checklist based on card number prefix
-      const targetChecklist = this.scannerService.matchChecklistFromPrefix(
-        parsed.numberPrefix,
-        this.sessionChecklists()
-      );
-      if (targetChecklist && targetChecklist.id !== this.activeChecklist()?.id) {
-        this.activeChecklist.set(targetChecklist);
-        const [cards, parallels] = await Promise.all([
-          this.cardsService.getMasterCardsForSet(targetChecklist.id),
-          this.releasesService.getParallels(targetChecklist.id),
-        ]);
-        this.scannerService.buildIndex(targetChecklist.id, cards);
-        this.sessionParallels.set(parallels);
-      }
+      if (!res.ok) throw new Error(`Scan failed (${res.status})`);
+      const data = await res.json();
 
-      // Fuzzy match player name
-      const matches = this.scannerService.fuzzyMatch(parsed.playerCandidates);
-      this.matchedCards.set(matches);
-
-      if (matches.length > 0) {
-        this.selectedMatch.set(matches[0]);
-        this.scanState.set('matched');
-        this.playBeep(800, 0.1);
-      } else {
+      if (!data.success || !data.detections?.length) {
+        this.scanError.set('Card not recognized. Try a clearer photo.');
         this.scanState.set('no-match');
-        this.playBeep(300, 0.3);
+        return;
       }
+
+      const best = data.detections[0];
+      this.scanResult.set({
+        masterCardId:  data.masterCardId ?? null,
+        player:        data.masterCardPlayer ?? best.card.name ?? null,
+        cardNumber:    data.masterCardNumber ?? best.card.number ?? null,
+        year:          best.card.year ?? null,
+        releaseName:   best.card.releaseName ?? null,
+        setName:       best.card.setName ?? null,
+        parallel:      best.card.parallel ? {
+          id:        data.parallelId ?? null,
+          name:      data.parallelName ?? best.card.parallel.name,
+          numberedTo: best.card.parallel.numberedTo,
+        } : null,
+        parallelId:   data.parallelId ?? null,
+        parallelName: data.parallelName ?? 'Base',
+        grading:      best.grading ? { company: best.grading.company.name, confidence: best.grading.confidence } : null,
+        confidence:   best.confidence,
+        setParallels: data.setParallels ?? [],
+      });
+
+      this.scanState.set(data.masterCardId ? 'matched' : 'no-match');
+      if (data.masterCardId) this.playBeep(800, 0.1);
+      else this.playBeep(300, 0.3);
     } catch (e: any) {
-      this.ocrError.set('OCR failed. Try again with better lighting.');
+      this.scanError.set('Scan failed. Please try again.');
       this.scanState.set('ready');
     }
   }
 
-  private captureFrame(): string {
+  private captureFrameAsBlob(): Blob {
     const video = this.videoEl.nativeElement;
     const w = video.videoWidth;
     const h = video.videoHeight;
-    if (w < 100 || h < 100) {
-      throw new Error('Camera not ready yet — please wait a moment and try again.');
-    }
+    if (w < 100 || h < 100) throw new Error('Camera not ready — please wait a moment.');
     const canvas = document.createElement('canvas');
     canvas.width  = w;
     canvas.height = h;
     canvas.getContext('2d')!.drawImage(video, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const binary  = atob(dataUrl.split(',')[1]);
+    const bytes   = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: 'image/jpeg' });
   }
 
   // ── Staging ───────────────────────────────────────────────
 
-  /** Called when user taps a parallel pill — stages the card and resets. */
-  stageCard(parallel: SetParallel | null) {
-    const card = this.selectedMatch();
-    if (!card) return;
+  stageCard(parallelId: string | null, parallelName: string) {
+    const result = this.scanResult();
+    if (!result?.masterCardId) return;
 
-    const parallelName = parallel?.name ?? 'Base';
-    const isInsert = this.activeChecklist()?.prefix !== null;
+    this.stagingList.update(list => [{
+      tempId:      crypto.randomUUID(),
+      masterCardId: result.masterCardId!,
+      player:      result.player ?? 'Unknown',
+      cardNumber:  result.cardNumber,
+      parallelId,
+      parallelName,
+    }, ...list]);
 
-    this.stagingList.update(list => [
-      {
-        tempId: crypto.randomUUID(),
-        masterCard: card,
-        parallelId: parallel?.id ?? null,
-        parallelName,
-      },
-      ...list,
-    ]);
-
-    // Audio: different tone for insert vs base
-    this.playBeep(isInsert ? 600 : 900, 0.08);
-    setTimeout(() => this.playBeep(isInsert ? 900 : 600, 0.06), 100);
-
-    // Auto-reset after 800ms
+    this.playBeep(900, 0.08);
     setTimeout(() => {
       this.scanState.set('ready');
-      this.parsedCard.set(null);
-      this.matchedCards.set([]);
-      this.selectedMatch.set(null);
-    }, 800);
+      this.scanResult.set(null);
+    }, 600);
   }
 
-  /** Stage with Base parallel (no FK) */
   stageAsBase() {
-    this.stageCard(null);
+    this.stageCard(null, 'Base');
   }
 
   removeStagedCard(tempId: string) {
@@ -292,11 +232,11 @@ export class Scanner implements OnInit, OnDestroy {
     this.commitError.set(null);
 
     const payloads: StagedCardPayload[] = this.stagingList().map(c => ({
-      masterCardId: c.masterCard.id,
-      parallelId: c.parallelId,
+      masterCardId: c.masterCardId,
+      parallelId:   c.parallelId,
     }));
 
-    const { error, count } = await this.cardsService.batchAddStagedCards(payloads);
+    const { error } = await this.cardsService.batchAddStagedCards(payloads);
 
     this.committing.set(false);
     if (error) {
@@ -308,56 +248,22 @@ export class Scanner implements OnInit, OnDestroy {
     }
   }
 
-  // ── Discovery Mode ────────────────────────────────────────
-
-  async submitDiscovery() {
-    const year = this.discoveryYear();
-    const brand = this.discoveryBrand().trim();
-    if (!year || !brand) return;
-
-    this.submittingDiscovery.set(true);
-    await this.scannerService.submitPendingSet({
-      name: brand,
-      year,
-      sport: this.discoverySport(),
-      release_type: this.discoveryReleaseType(),
-    });
-    this.submittingDiscovery.set(false);
-    this.scanState.set('ready');
-  }
-
-  dismissDiscovery() {
-    this.scanState.set('ready');
-  }
-
   // ── Helpers ───────────────────────────────────────────────
-
-  openManualEntry() {
-    const parsed = this.parsedCard();
-    this.ui.addCardPrefill.set({
-      player:     parsed?.playerCandidates?.[0] || undefined,
-      cardNumber: parsed?.cardNumber            || undefined,
-      set:        this.sessionSet()             || undefined,
-      checklist:  this.activeChecklist()        || undefined,
-      checklists: this.sessionChecklists().length ? this.sessionChecklists() : undefined,
-      parallels:  this.sessionParallels().length  ? this.sessionParallels()  : undefined,
-    });
-    this.ui.addCardOpen.set(true);
-  }
 
   dismiss() {
     this.scanState.set('ready');
+    this.scanResult.set(null);
+    this.scanError.set(null);
+  }
+
+  openManualEntry() {
+    const result = this.scanResult();
+    this.ui.addCardPrefill.set({ player: result?.player ?? undefined });
+    this.ui.addCardOpen.set(true);
   }
 
   goBack() {
     this.router.navigate(['/collection']);
-  }
-
-  sportIcon(sport: string): string {
-    const map: Record<string, string> = {
-      Basketball: '🏀', Baseball: '⚾', Football: '🏈', Soccer: '⚽',
-    };
-    return map[sport] ?? '🃏';
   }
 
   private playBeep(frequency: number, duration: number) {

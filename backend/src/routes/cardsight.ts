@@ -8,7 +8,10 @@ import {
   getCardImage,
   getSegment,
   mapSegmentToSport,
+  identifyCard,
+  CardsightDetection,
 } from '../services/cardsight.service';
+import express from 'express';
 import { supabaseAdmin } from '../db/supabase';
 import sql from '../db/db';
 
@@ -320,5 +323,96 @@ router.post('/cards/:masterCardId/image', async (req: AuthRequest, res) => {
     return res.status(500).json({ error: e.message });
   }
 });
+
+// POST /api/cardsight/identify
+// Body: raw image binary (image/jpeg, image/png, image/webp)
+// Query: ?segment=baseball|football|basketball|hockey (optional)
+router.post(
+  '/identify',
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/heif', 'image/heic'], limit: '20mb' }),
+  async (req: AuthRequest, res) => {
+    const mimeType = (req.headers['content-type'] ?? 'image/jpeg').split(';')[0].trim();
+    const segment = req.query['segment'] as string | undefined;
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'Image body is required' });
+    }
+
+    try {
+      const result = await identifyCard(req.body.buffer as ArrayBuffer, mimeType, segment);
+
+      if (!result.success || !result.detections?.length) {
+        return res.json({ success: false, detections: [] });
+      }
+
+      const best: CardsightDetection = result.detections[0];
+      const card = best.card;
+
+      // DB lookups for the scanner staging flow
+      let masterCardId: string | null = null;
+      let masterCardPlayer: string | null = null;
+      let masterCardNumber: string | null = null;
+      let parallelId: string | null = null;
+      let parallelName: string = best.card.parallel?.name ?? 'Base';
+      let setParallels: any[] = [];
+
+      if (card.id) {
+        const [dbCard] = await sql<{ id: string; player: string; card_number: string | null }[]>`
+          SELECT id, player, card_number FROM master_card_definitions
+          WHERE cardsight_card_id = ${card.id} LIMIT 1
+        `;
+        if (dbCard) {
+          masterCardId    = dbCard.id;
+          masterCardPlayer = dbCard.player;
+          masterCardNumber = dbCard.card_number;
+        }
+      }
+
+      if (card.parallel?.id) {
+        const [dbParallel] = await sql<{ id: string; name: string }[]>`
+          SELECT id, name FROM set_parallels WHERE cardsight_id = ${card.parallel.id} LIMIT 1
+        `;
+        if (dbParallel) {
+          parallelId   = dbParallel.id;
+          parallelName = dbParallel.name;
+        }
+      }
+
+      if (card.setId) {
+        setParallels = await sql<any[]>`
+          SELECT sp.id, sp.name, sp.serial_max, sp.is_auto, sp.color_hex, sp.sort_order
+          FROM set_parallels sp
+          JOIN sets s ON s.id = sp.set_id
+          WHERE s.cardsight_id = ${card.setId}
+          ORDER BY sp.sort_order ASC
+        `;
+      }
+
+      // Build eBay suggested query
+      const parts: string[] = [];
+      if (masterCardPlayer ?? card.name) parts.push(masterCardPlayer ?? card.name!);
+      if (card.year)        parts.push(card.year);
+      if (card.releaseName) parts.push(card.releaseName);
+      if (parallelName && parallelName.toLowerCase() !== 'base') parts.push(parallelName);
+      if (best.grading?.company?.name) parts.push(best.grading.company.name);
+
+      return res.json({
+        success: true,
+        detections: result.detections,
+        suggestedQuery: parts.join(' '),
+        processingTime: result.processingTime,
+        masterCardId,
+        masterCardPlayer,
+        masterCardNumber,
+        parallelId,
+        parallelName,
+        setParallels,
+      });
+    } catch (e: any) {
+      console.error('[cardsight/identify]', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  },
+);
 
 export default router;

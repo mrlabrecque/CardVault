@@ -8,6 +8,7 @@ import { environment } from '../../../../environments/environment';
 import { AddToWishlistDialog, WishlistSeed } from '../../wishlist/add-to-wishlist-dialog/add-to-wishlist-dialog';
 import { parseEbayTitle } from '../../../core/services/ebay-title-parser';
 
+
 export interface SoldItem {
   itemId:       string | null;
   title:        string;
@@ -49,6 +50,7 @@ export class CompsSearch implements OnInit, OnDestroy {
   searching = signal(false);
   searched  = signal(false);
   error     = signal<string | null>(null);
+
 
   items = signal<SoldItem[]>([]);
   stats = signal<CompsStats | null>(null);
