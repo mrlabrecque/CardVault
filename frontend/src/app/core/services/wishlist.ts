@@ -55,19 +55,27 @@ export interface WishlistFormData {
   target_price: number | null;
 }
 
-/** Build a sensible eBay search query from form fields. */
-export function buildEbayQuery(f: Pick<WishlistFormData, 'player' | 'year' | 'set_name' | 'parallel' | 'card_number' | 'grade' | 'serial_max' | 'is_rookie' | 'is_auto'>): string {
+/**
+ * Build an eBay search query from wishlist form fields.
+ * Mirrors buildCardEbayQuery() in backend/src/services/comps.service.ts — keep in sync.
+ */
+export function buildEbayQuery(f: Pick<WishlistFormData, 'player' | 'year' | 'set_name' | 'parallel' | 'card_number' | 'grade' | 'serial_max' | 'is_rookie' | 'is_auto' | 'is_patch'>): string {
   const parts: string[] = [];
-  if (f.player)     parts.push(f.player);
-  if (f.year)       parts.push(String(f.year));
-  if (f.set_name)   parts.push(f.set_name);
-  if (f.parallel && f.parallel.toLowerCase() !== 'base') parts.push(f.parallel);
+  if (f.year)        parts.push(String(f.year));
+  if (f.set_name)    parts.push(f.set_name);
+  if (f.player)      parts.push(f.player);
   if (f.card_number) parts.push(`#${f.card_number}`);
-  if (f.is_rookie)  parts.push('RC');
+
+  // Strip trailing /N from parallel label (e.g. "Silver /99" → "Silver")
+  const parallelLabel = (f.parallel ?? '').replace(/\s*\/\d+$/, '').trim();
+  if (parallelLabel && parallelLabel.toLowerCase() !== 'base') parts.push(parallelLabel);
+
   if (f.is_auto)    parts.push('Auto');
+  if (f.is_patch)   parts.push('Patch');
   if (f.serial_max) parts.push(`/${f.serial_max}`);
+  if (f.is_rookie)  parts.push('RC');
   if (f.grade)      parts.push(f.grade);
-  return parts.join(' ');
+  return parts.filter(Boolean).join(' ');
 }
 
 @Injectable({ providedIn: 'root' })

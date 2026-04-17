@@ -67,7 +67,7 @@ export async function runMarketValueJob(): Promise<{ processed: number; updated:
       }
 
       const { items: raw } = await searchSoldListings(query);
-      const items = parseAndFilter(raw, query, /* strictWords */ true);
+      const items = parseAndFilter(raw, query, /* strictWords */ true, variant.set_name ?? undefined);
 
       const prices = items
         .map((item: any) => parseFloat(item?.price?.value ?? '0'))

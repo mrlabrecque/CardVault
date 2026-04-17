@@ -99,6 +99,7 @@ export class AddToWishlistDialog {
       serial_max:  this.serial_max(),
       is_rookie:   this.is_rookie(),
       is_auto:     this.is_auto(),
+      is_patch:    this.is_patch(),
     }));
   }
 

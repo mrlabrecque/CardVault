@@ -1,5 +1,6 @@
 import sql from '../db/db';
 import { searchActiveListings } from '../services/ebay.service';
+import { parseAndFilter } from '../services/comps.service';
 
 const MAX_MATCHES = 5;
 
@@ -49,9 +50,12 @@ export async function runAlertJob(userId?: string): Promise<{ checked: number; t
         : item.ebay_query;
       const dismissed = (item.dismissed_ebay_ids ?? []) as string[];
       const allListings = await searchActiveListings(queryWithExclusions, item.target_price);
+      // Filter by title quality (serial, grader, auto/patch match, lot rejection, unexpected parallels).
+      // strictWords=false because ebay_query is user-editable free text.
+      const filtered = parseAndFilter(allListings, item.ebay_query, false);
       const listings = dismissed.length > 0
-        ? allListings.filter(l => !dismissed.includes(l.itemId))
-        : allListings;
+        ? filtered.filter(l => !dismissed.includes(l.itemId))
+        : filtered;
       const now = new Date().toISOString();
 
       // Always clear stale matches for this item first

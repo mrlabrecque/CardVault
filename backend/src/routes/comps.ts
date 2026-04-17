@@ -122,7 +122,7 @@ router.post('/card-value', async (req: AuthRequest, res) => {
     console.log(`[comps] eBay query: "${query}"`);
 
     const { items: raw } = await searchSoldListings(query);
-    const items = parseAndFilter(raw, query, /* strictWords */ true);
+    const items = parseAndFilter(raw, query, /* strictWords */ true, card.set_name ?? undefined);
     console.log(`[comps] ${raw.length} results → ${items.length} after filtering`);
 
     const prices = items

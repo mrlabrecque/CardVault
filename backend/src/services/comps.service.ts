@@ -59,12 +59,21 @@ function noUnexpectedParallels(title: string, query: string): boolean {
 /** Build a structured eBay search query from a user_card row + its joined data. */
 export function buildCardEbayQuery(card: any): string {
   const {
-    year, release_name, player, card_number,
+    year, release_name, set_name, player, card_number,
     parallel_type, is_auto, is_patch, is_rookie, serial_max,
     is_graded, grader, grade_value,
   } = card;
 
-  const parts: string[] = [String(year ?? ''), release_name ?? '', player ?? ''];
+  const parts: string[] = [String(year ?? ''), release_name ?? ''];
+
+  // Include set name when it's distinctive (not "Base" and not already in the release name)
+  const setLabel = (set_name ?? '').trim();
+  if (setLabel && setLabel.toLowerCase() !== 'base' &&
+      !(release_name ?? '').toLowerCase().includes(setLabel.toLowerCase())) {
+    parts.push(setLabel);
+  }
+
+  parts.push(player ?? '');
   if (card_number) parts.push(`#${card_number}`);
 
   const parallelLabel = (parallel_type ?? '').replace(/\s*\/\d+$/, '').trim();
@@ -87,7 +96,7 @@ export function buildCardEbayQuery(card: any): string {
  * query or LISTING_NOISE. Use for machine-built queries (card-value, market-value job).
  * Leave false for free-text user queries so eBay's own relevance ranking can work.
  */
-export function parseAndFilter(raw: any[], query: string, strictWords = false): any[] {
+export function parseAndFilter(raw: any[], query: string, strictWords = false, setName?: string): any[] {
   const yearMatch     = query.match(/\b(19|20)\d{2}\b/);
   const cardNumMatch  = query.match(/(?:^|\s)#?(\d{1,4})(?:\s|$)/);
   const serialMatch   = query.match(/\/(\d{1,4})\b/);
@@ -102,6 +111,8 @@ export function parseAndFilter(raw: any[], query: string, strictWords = false): 
     .replace(/\b(19|20)\d{2}\b/, '')
     .replace(/(?:^|\s)#?\d{1,4}(?:\s|$)/, ' ')
     .replace(/\/\d{1,4}\b/, '')
+    // Strip set name words so they aren't mistaken for player name words
+    .replace(setName ? new RegExp(setName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi') : /(?:)/, '')
     .replace(new RegExp(`\\b(${PARALLEL_KEYWORDS.join('|')})\\b`, 'gi'), '')
     .replace(new RegExp(`\\b(${GRADER_KEYWORDS.join('|')})\\b`, 'gi'), '')
     .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
@@ -145,6 +156,8 @@ export function parseAndFilter(raw: any[], query: string, strictWords = false): 
       return reject(item, `missing grader ${grader}`);
     if (is_graded && grade_value && !title.includes(grade_value))
       return reject(item, `missing grade ${grade_value}`);
+    const hasGrader = GRADER_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`, 'i').test(title));
+    if (!is_graded && hasGrader) return reject(item, 'unexpected grader on raw card');
 
     const hasAuto  = /\bauto(graph)?\b/.test(title);
     const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
