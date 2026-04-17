@@ -120,6 +120,11 @@ export class Scanner implements OnInit, OnDestroy {
 
   async capture() {
     if (this.scanState() !== 'ready') return;
+    const video = this.videoEl?.nativeElement;
+    if (!video || video.readyState < 2 || video.videoWidth < 100) {
+      this.scanError.set('Camera not ready — please wait a moment.');
+      return;
+    }
     this.scanState.set('processing');
     this.scanError.set(null);
     this.scanResult.set(null);
@@ -127,20 +132,24 @@ export class Scanner implements OnInit, OnDestroy {
     try {
       const blob = this.captureFrameAsBlob();
       const session = await this.auth.getSession();
+      if (!session) throw new Error('Session expired — please sign in again.');
       const sport = this.scanSport();
-      const url = new URL(`${environment.apiUrl}/api/cardsight/identify`);
-      if (sport) url.searchParams.set('segment', sport);
+      const qs = sport ? `?segment=${encodeURIComponent(sport)}` : '';
+      const url = `${environment.apiUrl}/api/cardsight/identify${qs}`;
 
-      const res = await fetch(url.toString(), {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'image/jpeg',
-          Authorization: `Bearer ${session!.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: blob,
       });
 
-      if (!res.ok) throw new Error(`Scan failed (${res.status})`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `Scan failed (${res.status})`);
+      }
       const data = await res.json();
 
       if (!data.success || !data.detections?.length) {
@@ -173,7 +182,8 @@ export class Scanner implements OnInit, OnDestroy {
       if (data.masterCardId) this.playBeep(800, 0.1);
       else this.playBeep(300, 0.3);
     } catch (e: any) {
-      this.scanError.set('Scan failed. Please try again.');
+      console.error('[scanner] capture error:', e);
+      this.scanError.set(e?.message ?? 'Scan failed. Please try again.');
       this.scanState.set('ready');
     }
   }

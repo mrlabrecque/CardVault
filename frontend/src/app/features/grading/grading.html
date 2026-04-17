@@ -126,22 +126,26 @@
           } @else if (gc.error) {
             <button (click)="analyze(gc.id)" class="text-xs text-red-400 underline">Retry</button>
           } @else if (gc.result) {
-            <!-- PSA 10 row -->
-            <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5">
-              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 w-[36px] shrink-0">PSA 10</span>
+            <!-- PSA 10 box -->
+            <div class="bg-gray-50 rounded-lg px-2 py-1.5 min-w-[76px]">
+              <p class="text-[9px] font-bold uppercase tracking-wider text-gray-400">PSA 10</p>
               @if (gc.result.psa10Count > 0) {
-                <span class="text-[11px] font-semibold text-gray-800">${{ gc.result.psa10Avg.toFixed(0) }}</span>
-                <span class="text-[10px] font-semibold ml-auto" [class]="profitClass(psa10Profit(gc))">{{ formatProfit(psa10Profit(gc)) }}</span>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <span class="text-[11px] font-semibold text-gray-800">${{ gc.result.psa10Avg.toFixed(0) }}</span>
+                  <span class="text-[10px] font-semibold" [class]="profitClass(psa10Profit(gc))">{{ formatProfit(psa10Profit(gc)) }}</span>
+                </div>
               } @else {
                 <span class="text-[10px] text-gray-300">No data</span>
               }
             </div>
-            <!-- PSA 9 row -->
-            <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5">
-              <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 w-[36px] shrink-0">PSA 9</span>
+            <!-- PSA 9 box -->
+            <div class="bg-gray-50 rounded-lg px-2 py-1.5 min-w-[76px]">
+              <p class="text-[9px] font-bold uppercase tracking-wider text-gray-400">PSA 9</p>
               @if (gc.result.psa9Count > 0) {
-                <span class="text-[11px] font-semibold text-gray-800">${{ gc.result.psa9Avg.toFixed(0) }}</span>
-                <span class="text-[10px] font-semibold ml-auto" [class]="profitClass(psa9Profit(gc))">{{ formatProfit(psa9Profit(gc)) }}</span>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <span class="text-[11px] font-semibold text-gray-800">${{ gc.result.psa9Avg.toFixed(0) }}</span>
+                  <span class="text-[10px] font-semibold" [class]="profitClass(psa9Profit(gc))">{{ formatProfit(psa9Profit(gc)) }}</span>
+                </div>
               } @else {
                 <span class="text-[10px] text-gray-300">No data</span>
               }

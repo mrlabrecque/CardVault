@@ -339,7 +339,8 @@ router.post(
     }
 
     try {
-      const result = await identifyCard(req.body.buffer as ArrayBuffer, mimeType, segment);
+      const buf = req.body as Buffer;
+      const result = await identifyCard(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer, mimeType, segment);
 
       if (!result.success || !result.detections?.length) {
         return res.json({ success: false, detections: [] });
