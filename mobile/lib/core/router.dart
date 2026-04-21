@@ -8,6 +8,7 @@ import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
 import '../features/scan/scan_screen.dart';
+import '../features/tools/tools_screen.dart';
 import '../features/collection/add_card_screen.dart';
 import '../features/collection/bulk_add_screen.dart';
 import '../features/collection/item_detail_screen.dart';
@@ -41,6 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/add-card', builder: (context, state) => const AddCardScreen()),
           GoRoute(path: '/bulk-add', builder: (context, state) => const BulkAddScreen()),
+          GoRoute(path: '/tools', builder: (context, state) => const ToolsScreen()),
           GoRoute(path: '/comps', builder: (context, state) => const CompsScreen()),
           GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
           GoRoute(path: '/scan', builder: (context, state) => const ScanScreen()),

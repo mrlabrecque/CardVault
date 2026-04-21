@@ -189,7 +189,7 @@ class CardsService {
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  Future<void> addCard(AddCardFormData form) async {
+  Future<String> addCard(AddCardFormData form) async {
     String? masterCardId = form.masterCardId;
 
     if (masterCardId == null) {
@@ -213,7 +213,7 @@ class CardsService {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
-    await _supabase.from('user_cards').insert({
+    final result = await _supabase.from('user_cards').insert({
       'master_card_id': masterCardId,
       'user_id': userId,
       'parallel_id': form.parallelId,
@@ -223,7 +223,9 @@ class CardsService {
       'is_graded': form.isGraded,
       'grader': form.isGraded ? form.grader : null,
       'grade_value': form.isGraded && form.gradeValue?.isNotEmpty == true ? form.gradeValue : null,
-    });
+    }).select('id').single();
+
+    return result['id'] as String;
   }
 }
 

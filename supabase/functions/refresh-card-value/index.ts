@@ -164,7 +164,7 @@ async function fetchSoldListings(query: string): Promise<any[]> {
       const res = await fetch(SCRAPECHAIN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'User-Agent': agent },
-        body: JSON.stringify({ keywords: query, max_search_results: 100, remove_outliers: false, category_id: '261328' }),
+        body: JSON.stringify({ keywords: query, max_search_results: 120, remove_outliers: false, category_id: '261328' }),
       });
       if (!res.ok) throw new Error(`scrapechain ${res.status}: ${await res.text()}`);
       const data = await res.json();
@@ -191,7 +191,7 @@ async function fetchSoldListings(query: string): Promise<any[]> {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' } });
+    return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' } });
   }
 
   const authHeader = req.headers.get('Authorization');
@@ -202,11 +202,50 @@ Deno.serve(async (req) => {
   const anonKey        = Deno.env.get('SUPABASE_ANON_KEY')!;
 
   // Verify caller is authenticated
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: { user }, error: authError } = await userClient.auth.getUser();
-  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  function b64urlToBytes(b64url: string): Uint8Array {
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  }
+
+  function b64urlToJson(b64url: string): any {
+    return JSON.parse(new TextDecoder().decode(b64urlToBytes(b64url)));
+  }
+
+  let cachedJwks: any[] | null = null;
+  async function getJwks(supabaseUrl: string): Promise<any[]> {
+    if (cachedJwks) return cachedJwks;
+    const res = await fetch(`${supabaseUrl}/auth/v1/.well-known/jwks.json`);
+    const data = await res.json();
+    cachedJwks = data.keys ?? [];
+    return cachedJwks!;
+  }
+
+  async function verifyJwt(token: string, supabaseUrl: string): Promise<string | null> {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const header  = b64urlToJson(parts[0]);
+      const payload = b64urlToJson(parts[1]);
+      const jwks = await getJwks(supabaseUrl);
+      const jwk  = jwks.find((k: any) => k.kid === header.kid) ?? jwks[0];
+      if (!jwk) return null;
+      const key = await crypto.subtle.importKey(
+        'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
+      );
+      const valid = await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' }, key,
+        b64urlToBytes(parts[2]),
+        new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+      );
+      if (!valid) return null;
+      return payload?.sub ?? null;
+    } catch { return null; }
+  }
+
+  const supabaseUrl2 = Deno.env.get('SUPABASE_URL')!;
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  const userId = await verifyJwt(token, supabaseUrl2);
+  if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   const { cardId } = await req.json();
   if (!cardId) return new Response(JSON.stringify({ error: 'cardId required' }), { status: 400 });
@@ -224,7 +263,7 @@ Deno.serve(async (req) => {
       )
     `)
     .eq('id', cardId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (cardError || !card) {

@@ -21,13 +21,19 @@ class Comp {
 
   factory Comp.fromJson(Map<String, dynamic> json) => Comp(
         title: json['title'] as String? ?? '',
-        price: (json['price'] as num?)?.toDouble() ?? 0,
+        price: _parsePrice(json['price']),
         currency: json['currency'] as String? ?? 'USD',
         soldAt: json['sold_at'] != null ? DateTime.tryParse(json['sold_at'] as String) : null,
         saleType: _parseSaleType(json['sale_type'] as String?),
         url: json['url'] as String?,
         imageUrl: json['image_url'] as String?,
       );
+
+  static double _parsePrice(dynamic raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is Map) return double.tryParse(raw['value']?.toString() ?? '0') ?? 0.0;
+    return 0.0;
+  }
 
   static SaleType _parseSaleType(String? raw) => switch (raw) {
     'auction'     => SaleType.auction,

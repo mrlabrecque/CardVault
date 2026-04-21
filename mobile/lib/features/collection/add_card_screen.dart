@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/services/comps_service.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -177,8 +178,12 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         grader: _isGraded ? _grader : 'PSA',
         gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
       );
-      await ref.read(cardsServiceProvider).addCard(form);
+      final newCardId = await ref.read(cardsServiceProvider).addCard(form);
       ref.invalidate(userCardsProvider);
+      // Fire-and-forget — don't block the UI on the Scrapechain call
+      ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
+        ref.invalidate(userCardsProvider);
+      }).ignore();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),

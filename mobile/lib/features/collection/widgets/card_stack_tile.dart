@@ -6,17 +6,39 @@ import '../../../core/widgets/attr_tag.dart';
 import '../item_detail_screen.dart';
 
 class CardStackTile extends StatefulWidget {
-  const CardStackTile({super.key, required this.stack, this.onDelete, this.onRefresh});
+  const CardStackTile({super.key, required this.stack, this.onDelete, this.onRefresh, this.isRefreshing = false});
   final CardStack stack;
   final void Function(String cardId)? onDelete;
   final void Function(CardStack)? onRefresh;
+  final bool isRefreshing;
 
   @override
   State<CardStackTile> createState() => _CardStackTileState();
 }
 
-class _CardStackTileState extends State<CardStackTile> {
+class _CardStackTileState extends State<CardStackTile> with SingleTickerProviderStateMixin {
   bool _expanded = false;
+  late final AnimationController _spinCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  );
+
+  @override
+  void didUpdateWidget(CardStackTile old) {
+    super.didUpdateWidget(old);
+    if (widget.isRefreshing && !_spinCtrl.isAnimating) {
+      _spinCtrl.repeat();
+    } else if (!widget.isRefreshing && _spinCtrl.isAnimating) {
+      _spinCtrl.stop();
+      _spinCtrl.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _spinCtrl.dispose();
+    super.dispose();
+  }
 
   String get _sportEmoji => switch (widget.stack.sport.toLowerCase()) {
     'basketball' => '🏀',
@@ -137,9 +159,7 @@ class _CardStackTileState extends State<CardStackTile> {
           children: [
             if (widget.onRefresh != null)
               GestureDetector(
-                onTap: () {
-                  widget.onRefresh!(stack);
-                },
+                onTap: widget.isRefreshing ? null : () => widget.onRefresh!(stack),
                 child: Container(
                   width: 26,
                   height: 26,
@@ -148,7 +168,12 @@ class _CardStackTileState extends State<CardStackTile> {
                     border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.refresh, size: 13, color: colors.onSurface.withValues(alpha: 0.4)),
+                  child: Center(
+                    child: RotationTransition(
+                      turns: _spinCtrl,
+                      child: Icon(Icons.refresh, size: 13, color: colors.onSurface.withValues(alpha: widget.isRefreshing ? 0.8 : 0.4)),
+                    ),
+                  ),
                 ),
               ),
             Text('\$${stack.totalValue.toFixed2()}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),

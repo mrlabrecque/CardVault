@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
 import 'widgets/card_stack_tile.dart';
 import 'widgets/set_row_tile.dart';
@@ -22,6 +23,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   SortOption _sort = SortOption.dateDesc;
   SetSortOption _setSort = SetSortOption.pctDesc;
   final Set<String> _activeFilters = {};
+  final Set<String> _refreshingStacks = {};
   bool _showSets = false;
 
   List<CardStack> _filter(List<CardStack> stacks) {
@@ -69,13 +71,26 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     }
   }
 
-  void _refreshStack(CardStack stack) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Market value refresh coming soon'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  String _stackKey(CardStack stack) => stack.masterCardId ?? stack.cards.first.id;
+
+  Future<void> _refreshStack(CardStack stack) async {
+    final key = _stackKey(stack);
+    setState(() => _refreshingStacks.add(key));
+    final messenger = ScaffoldMessenger.of(context);
+    final comps = ref.read(compsServiceProvider);
+    try {
+      await Future.wait(stack.cards.map((c) => comps.refreshCardValue(c.id)));
+      ref.invalidate(userCardsProvider);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Market value updated'), duration: Duration(seconds: 2)),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Refresh failed: $e'), duration: const Duration(seconds: 3)),
+      );
+    } finally {
+      if (mounted) setState(() => _refreshingStacks.remove(key));
+    }
   }
 
   String get _setSortKey => switch (_setSort) {
@@ -251,6 +266,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                               stack: filtered[i],
                               onDelete: _deleteCard,
                               onRefresh: _refreshStack,
+                              isRefreshing: _refreshingStacks.contains(_stackKey(filtered[i])),
                             ),
                           ),
                         ),

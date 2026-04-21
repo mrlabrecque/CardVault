@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/services/comps_service.dart';
 import '../../core/widgets/serial_tag.dart';
 import '../../core/widgets/attr_tag.dart';
 
@@ -283,8 +284,10 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     setState(() => _committing = true);
     try {
       final svc = ref.read(cardsServiceProvider);
+      final comps = ref.read(compsServiceProvider);
+      final newIds = <String>[];
       for (final c in _staged) {
-        await svc.addCard(AddCardFormData(
+        final id = await svc.addCard(AddCardFormData(
           masterCardId: c.masterCardId,
           setId: c.setId,
           player: c.player,
@@ -302,8 +305,13 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
           grader: c.grader ?? 'PSA',
           gradeValue: c.gradeValue,
         ));
+        newIds.add(id);
       }
       ref.invalidate(userCardsProvider);
+      // Fire-and-forget value refresh for all newly added cards
+      Future.wait(newIds.map((id) => comps.refreshCardValue(id)))
+          .then((_) => ref.invalidate(userCardsProvider))
+          .ignore();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${_staged.length} card${_staged.length == 1 ? '' : 's'} saved!'), duration: const Duration(seconds: 2)),

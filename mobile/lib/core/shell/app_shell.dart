@@ -12,7 +12,7 @@ class AppShell extends ConsumerWidget {
     (path: '/dashboard',  icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'Dashboard'),
     (path: '/collection', icon: Icons.style_outlined,    activeIcon: Icons.style,    label: 'Collection'),
     (path: '/scan',       icon: Icons.camera_alt_outlined, activeIcon: Icons.camera_alt, label: ''),
-    (path: '/comps',      icon: Icons.search_outlined,    activeIcon: Icons.search,   label: 'Comps'),
+    (path: '/tools',      icon: Icons.handyman_outlined,  activeIcon: Icons.handyman, label: 'Tools'),
     (path: '/wishlist',   icon: Icons.bookmark_outline,   activeIcon: Icons.bookmark, label: 'Wishlist'),
   ];
 
@@ -20,7 +20,7 @@ class AppShell extends ConsumerWidget {
     '/dashboard':  'Dashboard',
     '/collection': 'Collection',
     '/scan':       'Scan',
-    '/comps':      'Comps',
+    '/tools':      'Tools',
     '/wishlist':   'Wishlist',
   };
 

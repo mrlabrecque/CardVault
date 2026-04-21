@@ -617,7 +617,7 @@ class _MatchRow extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: -8, right: -8,
+            top: 4, right: 4,
             child: GestureDetector(
               onTap: onDismiss,
               child: Container(
@@ -1057,8 +1057,7 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                                 border: InputBorder.none,
                                 hintText: _excludeTerms.isEmpty ? 'e.g. draft picks' : '',
                                 hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade300),
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 4),
                               ),
                               style: const TextStyle(fontSize: 13),
                               textInputAction: TextInputAction.done,
