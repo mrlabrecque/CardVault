@@ -6,9 +6,10 @@ import '../../../core/widgets/attr_tag.dart';
 import '../item_detail_screen.dart';
 
 class CardStackTile extends StatefulWidget {
-  const CardStackTile({super.key, required this.stack, this.onDelete});
+  const CardStackTile({super.key, required this.stack, this.onDelete, this.onRefresh});
   final CardStack stack;
   final void Function(String cardId)? onDelete;
+  final void Function(CardStack)? onRefresh;
 
   @override
   State<CardStackTile> createState() => _CardStackTileState();
@@ -131,7 +132,28 @@ class _CardStackTileState extends State<CardStackTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text('\$${stack.totalValue.toFixed2()}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.onRefresh != null)
+              GestureDetector(
+                onTap: () {
+                  widget.onRefresh!(stack);
+                },
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.refresh, size: 13, color: colors.onSurface.withValues(alpha: 0.4)),
+                ),
+              ),
+            Text('\$${stack.totalValue.toFixed2()}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
+        ),
         if (stack.qty > 1) Text('\$${(stack.totalValue / stack.qty).toFixed2()}/card', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
         if (stack.totalCost > 0)
           Text('${stack.pl >= 0 ? '+' : ''}${stack.plPct.toFixed2()}%', style: TextStyle(fontSize: 12, color: _plColor, fontWeight: FontWeight.w600)),

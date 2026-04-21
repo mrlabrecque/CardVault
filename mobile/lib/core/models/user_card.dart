@@ -24,6 +24,7 @@ class UserCard {
   final bool ssp;
   final String? imageUrl;
   final DateTime? createdAt;
+  final int? setCardCount;
 
   const UserCard({
     required this.id,
@@ -51,6 +52,7 @@ class UserCard {
     required this.ssp,
     this.imageUrl,
     this.createdAt,
+    this.setCardCount,
   });
 
   factory UserCard.fromJson(Map<String, dynamic> json) {
@@ -68,7 +70,8 @@ class UserCard {
       set: release?['name'] as String?,        // release name e.g. "Topps Chrome"
       checklist: setData?['name'] as String?,  // set name e.g. "Base Set"
       year: release?['year'] as int?,
-      setId: setData?['id'] as String?,        // sets.id for parallel lookup
+      setId: setData?['id'] as String?,
+      setCardCount: setData?['card_count'] as int?,
       parallel: json['parallel_name'] as String? ?? 'Base',
       parallelId: json['parallel_id'] as String?,
       grade: json['grade_value'] as String?,
@@ -113,6 +116,7 @@ class CardStack {
   final int? year;
   final int? serialMax;
   final List<UserCard> cards;
+  final DateTime? latestCreatedAt;
 
   const CardStack({
     this.masterCardId,
@@ -135,6 +139,7 @@ class CardStack {
     this.year,
     this.serialMax,
     required this.cards,
+    this.latestCreatedAt,
   });
 
   double get avgCost => qty > 0 ? totalCost / qty : 0;
@@ -149,6 +154,8 @@ class CardStack {
     }
     return groups.values.map((group) {
       final first = group.first;
+      final dates = group.where((c) => c.createdAt != null).map((c) => c.createdAt!).toList()
+        ..sort((a, b) => b.compareTo(a));
       return CardStack(
         masterCardId: first.masterCardId,
         player: first.player,
@@ -170,7 +177,156 @@ class CardStack {
         year: first.year,
         serialMax: first.serialMax,
         cards: group,
+        latestCreatedAt: dates.isNotEmpty ? dates.first : null,
       );
     }).toList();
   }
+}
+
+// ── Set Tracker models ────────────────────────────────────────────────────────
+
+class SetParallelRow {
+  const SetParallelRow({
+    required this.parallelName,
+    required this.ownedCount,
+    required this.cardCount,
+    required this.pct,
+    required this.totalValue,
+  });
+  final String parallelName;
+  final int ownedCount;
+  final int cardCount;
+  final double pct;
+  final double totalValue;
+}
+
+class SetRow {
+  const SetRow({
+    required this.setId,
+    required this.setName,
+    this.releaseName,
+    this.year,
+    this.sport,
+    required this.cardCount,
+    required this.ownedCount,
+    required this.pct,
+    required this.totalValue,
+    required this.totalCost,
+    this.imageUrl,
+    required this.parallels,
+  });
+  final String setId;
+  final String setName;
+  final String? releaseName;
+  final int? year;
+  final String? sport;
+  final int cardCount;
+  final int ownedCount;
+  final double pct;
+  final double totalValue;
+  final double totalCost;
+  final String? imageUrl;
+  final List<SetParallelRow> parallels;
+
+  static List<SetRow> fromCards(List<UserCard> cards, {String sortBy = 'pct-desc'}) {
+    // Only cards that belong to a tracked set with a known card count
+    final tracked = cards.where((c) => c.setId != null && (c.setCardCount ?? 0) > 0);
+
+    // setId → row data accumulators
+    final rowMap = <String, _SetRowBuilder>{};
+
+    for (final c in tracked) {
+      final sid = c.setId!;
+      rowMap.putIfAbsent(sid, () => _SetRowBuilder(
+        setId: sid,
+        setName: c.checklist ?? 'Base Set',
+        releaseName: c.set,
+        year: c.year,
+        sport: c.sport,
+        cardCount: c.setCardCount!,
+      ));
+      final row = rowMap[sid]!;
+
+      // Track distinct masterCardIds per parallel
+      final parallel = c.parallel;
+      row.parallelMasters.putIfAbsent(parallel, () => <String?>{}).add(c.masterCardId);
+      row.parallelValues[parallel] = (row.parallelValues[parallel] ?? 0) + (c.currentValue ?? 0);
+
+      // Track overall distinct masterCardIds (across all parallels)
+      row.allMasters.add(c.masterCardId);
+
+      row.totalValue += c.currentValue ?? 0;
+      row.totalCost  += c.pricePaid ?? 0;
+      if (row.imageUrl == null && c.imageUrl != null) row.imageUrl = c.imageUrl;
+    }
+
+    final rows = rowMap.values.map((b) {
+      final ownedCount = b.allMasters.length;
+      final pct = (ownedCount / b.cardCount * 100).clamp(0, 100).toDouble();
+
+      // Build per-parallel rows; Base first, then by % desc
+      final parallelRows = b.parallelMasters.entries.map((e) {
+        final owned = e.value.length;
+        final ppct = (owned / b.cardCount * 100).clamp(0, 100).toDouble();
+        return SetParallelRow(
+          parallelName: e.key,
+          ownedCount: owned,
+          cardCount: b.cardCount,
+          pct: ppct,
+          totalValue: b.parallelValues[e.key] ?? 0,
+        );
+      }).toList()
+        ..sort((a, b) {
+          if (a.parallelName == 'Base') return -1;
+          if (b.parallelName == 'Base') return 1;
+          return b.pct.compareTo(a.pct);
+        });
+
+      return SetRow(
+        setId: b.setId,
+        setName: b.setName,
+        releaseName: b.releaseName,
+        year: b.year,
+        sport: b.sport,
+        cardCount: b.cardCount,
+        ownedCount: ownedCount,
+        pct: pct,
+        totalValue: b.totalValue,
+        totalCost: b.totalCost,
+        imageUrl: b.imageUrl,
+        parallels: parallelRows,
+      );
+    }).toList();
+
+    rows.sort((a, b) => switch (sortBy) {
+      'value-desc' => b.totalValue.compareTo(a.totalValue),
+      'name'       => '${a.year}${a.releaseName}${a.setName}'.compareTo('${b.year}${b.releaseName}${b.setName}'),
+      _            => b.pct.compareTo(a.pct), // pct-desc
+    });
+
+    return rows;
+  }
+}
+
+class _SetRowBuilder {
+  _SetRowBuilder({
+    required this.setId,
+    required this.setName,
+    this.releaseName,
+    this.year,
+    this.sport,
+    required this.cardCount,
+  });
+  final String setId;
+  final String setName;
+  final String? releaseName;
+  final int? year;
+  final String? sport;
+  final int cardCount;
+  double totalValue = 0;
+  double totalCost = 0;
+  String? imageUrl;
+  final Set<String?> allMasters = {};
+  final Map<String, Set<String?>> parallelMasters = {};
+  final Map<String, double> parallelValues = {};
 }

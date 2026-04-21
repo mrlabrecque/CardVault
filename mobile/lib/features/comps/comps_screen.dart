@@ -43,7 +43,6 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
     final historyAsync = ref.watch(lookupHistoryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Comps')),
       body: Column(
         children: [
           Padding(
@@ -138,8 +137,8 @@ class _CompTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final daysAgo = DateTime.now().difference(comp.soldAt).inDays;
-    final dateLabel = daysAgo == 0 ? 'Today' : daysAgo == 1 ? 'Yesterday' : '${daysAgo}d ago';
+    final daysAgo = comp.soldAt != null ? DateTime.now().difference(comp.soldAt!).inDays : null;
+    final dateLabel = daysAgo == null ? '' : daysAgo == 0 ? 'Today' : daysAgo == 1 ? 'Yesterday' : '${daysAgo}d ago';
 
     return ListTile(
       title: Text(comp.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),

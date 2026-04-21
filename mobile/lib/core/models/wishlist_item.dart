@@ -1,26 +1,132 @@
+class WishlistMatch {
+  final String id;
+  final String wishlistId;
+  final String? ebayItemId;
+  final String title;
+  final double price;
+  final String listingType; // 'AUCTION' | 'FIXED_PRICE'
+  final String? url;
+  final String? imageUrl;
+
+  const WishlistMatch({
+    required this.id,
+    required this.wishlistId,
+    this.ebayItemId,
+    required this.title,
+    required this.price,
+    required this.listingType,
+    this.url,
+    this.imageUrl,
+  });
+
+  factory WishlistMatch.fromJson(Map<String, dynamic> json) => WishlistMatch(
+        id: json['id'] as String,
+        wishlistId: json['wishlist_id'] as String? ?? '',
+        ebayItemId: json['ebay_item_id'] as String?,
+        title: json['title'] as String? ?? '',
+        price: (json['price'] as num?)?.toDouble() ?? 0,
+        listingType: json['listing_type'] as String? ?? 'FIXED_PRICE',
+        url: json['url'] as String?,
+        imageUrl: json['image_url'] as String?,
+      );
+}
+
 class WishlistItem {
   final String id;
-  final Map<String, dynamic> cardDetails;
+  final String? player;
+  final int? year;
+  final String? setName;
+  final String? parallel;
+  final String? cardNumber;
+  final bool isRookie;
+  final bool isAuto;
+  final bool isPatch;
+  final int? serialMax;
+  final String? grade;
+  final String? ebayQuery;
+  final List<String> excludeTerms;
   final double? targetPrice;
-  final String alertStatus;
+  final String alertStatus; // 'active' | 'paused' | 'triggered'
+  final double? lastSeenPrice;
+  final DateTime? lastCheckedAt;
   final DateTime? createdAt;
+  final List<WishlistMatch> matches;
 
   const WishlistItem({
     required this.id,
-    required this.cardDetails,
+    this.player,
+    this.year,
+    this.setName,
+    this.parallel,
+    this.cardNumber,
+    required this.isRookie,
+    required this.isAuto,
+    required this.isPatch,
+    this.serialMax,
+    this.grade,
+    this.ebayQuery,
+    required this.excludeTerms,
     this.targetPrice,
     required this.alertStatus,
+    this.lastSeenPrice,
+    this.lastCheckedAt,
     this.createdAt,
+    required this.matches,
   });
 
-  String get player => cardDetails['player'] as String? ?? '';
-  String get description => cardDetails['description'] as String? ?? cardDetails['set'] as String? ?? '';
+  bool get isTriggered => alertStatus == 'triggered';
+  bool get isPaused => alertStatus == 'paused';
+  double get savings => (targetPrice ?? 0) - (lastSeenPrice ?? 0);
 
-  factory WishlistItem.fromJson(Map<String, dynamic> json) => WishlistItem(
-        id: json['id'] as String,
-        cardDetails: json['card_details'] as Map<String, dynamic>? ?? {},
-        targetPrice: (json['target_price'] as num?)?.toDouble(),
-        alertStatus: json['alert_status'] as String? ?? 'inactive',
-        createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
+  List<String> get attrs {
+    final tags = <String>[];
+    if (isRookie) tags.add('RC');
+    if (isAuto) tags.add('AUTO');
+    if (isPatch) tags.add('PATCH');
+    if (serialMax != null) tags.add('/$serialMax');
+    return tags;
+  }
+
+  factory WishlistItem.fromJson(Map<String, dynamic> json) {
+    final rawMatches = json['wishlist_matches'] as List? ?? [];
+    return WishlistItem(
+      id: json['id'] as String,
+      player: json['player'] as String?,
+      year: json['year'] as int?,
+      setName: json['set_name'] as String?,
+      parallel: json['parallel'] as String?,
+      cardNumber: json['card_number'] as String?,
+      isRookie: json['is_rookie'] as bool? ?? false,
+      isAuto: json['is_auto'] as bool? ?? false,
+      isPatch: json['is_patch'] as bool? ?? false,
+      serialMax: json['serial_max'] as int?,
+      grade: json['grade'] as String?,
+      ebayQuery: json['ebay_query'] as String?,
+      excludeTerms: (json['exclude_terms'] as List?)?.cast<String>() ?? [],
+      targetPrice: (json['target_price'] as num?)?.toDouble(),
+      alertStatus: json['alert_status'] as String? ?? 'active',
+      lastSeenPrice: (json['last_seen_price'] as num?)?.toDouble(),
+      lastCheckedAt: json['last_checked_at'] != null
+          ? DateTime.tryParse(json['last_checked_at'] as String)
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
+      matches: rawMatches
+          .map((m) => WishlistMatch.fromJson(m as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  WishlistItem copyWith({String? alertStatus, List<WishlistMatch>? matches, double? lastSeenPrice}) =>
+      WishlistItem(
+        id: id, player: player, year: year, setName: setName, parallel: parallel,
+        cardNumber: cardNumber, isRookie: isRookie, isAuto: isAuto, isPatch: isPatch,
+        serialMax: serialMax, grade: grade, ebayQuery: ebayQuery, excludeTerms: excludeTerms,
+        targetPrice: targetPrice,
+        alertStatus: alertStatus ?? this.alertStatus,
+        lastSeenPrice: lastSeenPrice ?? this.lastSeenPrice,
+        lastCheckedAt: lastCheckedAt, createdAt: createdAt,
+        matches: matches ?? this.matches,
       );
 }

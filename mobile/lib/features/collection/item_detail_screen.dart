@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_card.dart';
+import '../../core/models/comp.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/services/comps_service.dart';
 import '../../core/widgets/serial_tag.dart';
 import '../../core/widgets/attr_tag.dart';
 
@@ -26,6 +29,31 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   String? _selectedParallelId;   // null = Base, '__other__' = custom
   late String _selectedParallelName = widget.card.parallel;
   bool get _isOtherParallel => _selectedParallelId == '__other__';
+
+  List<Comp>? _comps;
+  bool _compsLoading = false;
+  String? _compsError;
+  int _compsWindow = 90;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchComps();
+  }
+
+  Future<void> _fetchComps({bool refresh = false}) async {
+    setState(() { _compsLoading = true; _compsError = null; });
+    try {
+      final svc = ref.read(compsServiceProvider);
+      if (refresh) await svc.refreshCardValue(widget.card.id);
+      final results = await svc.getCardComps(widget.card.id);
+      if (mounted) setState(() => _comps = results);
+    } catch (e) {
+      if (mounted) setState(() => _compsError = e.toString());
+    } finally {
+      if (mounted) setState(() => _compsLoading = false);
+    }
+  }
 
   void _startEdit() => setState(() {
     _editing = true;
@@ -134,12 +162,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   Future<void> _delete() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete Card'),
         content: const Text('Remove this card from your collection?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
         ],
       ),
     );
@@ -375,6 +403,247 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               _CopyTile(label: 'Grade', value: '${card.grader ?? 'PSA'} ${card.grade ?? ''}'.trim()),
             ],
           ],
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 8),
+
+          // Sold Comps header + 30/90 toggle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Recent eBay Sales', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Row(
+                children: [
+                  // 30d / 90d toggle
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: colors.outlineVariant),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Row(
+                      children: [30, 90].map((days) {
+                        final active = _compsWindow == days;
+                        return GestureDetector(
+                          onTap: () => setState(() => _compsWindow = days),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            color: active ? const Color(0xFF800020) : Colors.transparent,
+                            child: Text(
+                              '${days}d',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: active ? Colors.white : colors.onSurface.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 18),
+                    onPressed: _compsLoading ? null : () => _fetchComps(refresh: true),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          if (_compsLoading)
+            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(strokeWidth: 2)))
+          else if (_compsError != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(_compsError!, style: TextStyle(color: colors.error, fontSize: 13)),
+            )
+          else if (_comps == null || _comps!.isEmpty)
+            _CompsEmptyState(message: 'No comps yet — tap refresh to fetch sales data.', icon: Icons.show_chart)
+          else ...[
+            Builder(builder: (context) {
+              final cutoff = _compsWindow == 30
+                  ? DateTime.now().subtract(const Duration(days: 30))
+                  : null;
+              final filtered = cutoff == null
+                  ? _comps!
+                  : _comps!.where((c) => c.soldAt == null || c.soldAt!.isAfter(cutoff)).toList();
+
+              if (filtered.isEmpty) {
+                return _CompsEmptyState(message: 'No sales in the last $_compsWindow days.', icon: Icons.calendar_today);
+              }
+
+              final hasBestOffer = filtered.any((c) => c.saleType == SaleType.bestOffer);
+              final avg = filtered.fold(0.0, (s, c) => s + c.price) / filtered.length;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Average chip
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(color: colors.primaryContainer, borderRadius: BorderRadius.circular(10)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Avg (${filtered.length} sales)', style: TextStyle(fontSize: 13, color: colors.onPrimaryContainer)),
+                        Text('\$${avg.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: colors.onPrimaryContainer)),
+                      ],
+                    ),
+                  ),
+                  // Best offer caveat
+                  if (hasBestOffer)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        border: Border.all(color: const Color(0xFFFCD34D)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline, size: 13, color: Color(0xFFB45309)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Best Offer prices shown are the listing ask, not the accepted offer — actual sold price may differ.',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Comp rows
+                  Container(
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.5)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: filtered.indexed.map(((int, Comp) entry) {
+                        final (i, comp) = entry;
+                        return Column(
+                          children: [
+                            if (i > 0) Divider(height: 1, color: colors.outlineVariant.withValues(alpha: 0.3)),
+                            _CompRow(comp: comp),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ],
+
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompsEmptyState extends StatelessWidget {
+  const _CompsEmptyState({required this.message, required this.icon});
+  final String message;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 28, color: colors.onSurface.withValues(alpha: 0.3)),
+          const SizedBox(height: 8),
+          Text(message, style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)), textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompRow extends StatelessWidget {
+  const _CompRow({required this.comp});
+  final Comp comp;
+
+  String _dateLabel() {
+    if (comp.soldAt == null) return '';
+    final daysAgo = DateTime.now().difference(comp.soldAt!).inDays;
+    if (daysAgo == 0) return 'Today';
+    if (daysAgo == 1) return 'Yesterday';
+    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return '${months[comp.soldAt!.month - 1]} ${comp.soldAt!.day}, ${comp.soldAt!.year}';
+  }
+
+  (String label, Color bg, Color fg) _saleTypeBadge() => switch (comp.saleType) {
+    SaleType.auction    => ('Auction',    const Color(0xFFEFF6FF), const Color(0xFF1D4ED8)),
+    SaleType.bestOffer  => ('Best Offer', const Color(0xFFFFFBEB), const Color(0xFFB45309)),
+    SaleType.fixedPrice => ('Buy It Now', const Color(0xFFF0FDF4), const Color(0xFF15803D)),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final (label, bg, fg) = _saleTypeBadge();
+    final dateLabel = _dateLabel();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(comp.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, height: 1.3)),
+                if (dateLabel.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(dateLabel, style: TextStyle(fontSize: 10, color: colors.onSurface.withValues(alpha: 0.45))),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('\$${comp.price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+                    child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: fg)),
+                  ),
+                  if (comp.url != null) ...[
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () => launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication),
+                      child: Icon(Icons.open_in_new, size: 12, color: colors.onSurface.withValues(alpha: 0.4)),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );

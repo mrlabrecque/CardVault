@@ -51,8 +51,6 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan Card'), backgroundColor: Colors.transparent),
-      extendBodyBehindAppBar: true,
       body: Stack(
         children: [
           MobileScanner(controller: _controller, onDetect: _onDetect),

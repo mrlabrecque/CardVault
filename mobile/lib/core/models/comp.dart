@@ -1,8 +1,11 @@
+enum SaleType { auction, fixedPrice, bestOffer }
+
 class Comp {
   final String title;
   final double price;
   final String currency;
-  final DateTime soldAt;
+  final DateTime? soldAt;
+  final SaleType saleType;
   final String? url;
   final String? imageUrl;
 
@@ -10,7 +13,8 @@ class Comp {
     required this.title,
     required this.price,
     required this.currency,
-    required this.soldAt,
+    this.soldAt,
+    required this.saleType,
     this.url,
     this.imageUrl,
   });
@@ -19,10 +23,17 @@ class Comp {
         title: json['title'] as String? ?? '',
         price: (json['price'] as num?)?.toDouble() ?? 0,
         currency: json['currency'] as String? ?? 'USD',
-        soldAt: DateTime.tryParse(json['sold_at'] as String? ?? '') ?? DateTime.now(),
+        soldAt: json['sold_at'] != null ? DateTime.tryParse(json['sold_at'] as String) : null,
+        saleType: _parseSaleType(json['sale_type'] as String?),
         url: json['url'] as String?,
         imageUrl: json['image_url'] as String?,
       );
+
+  static SaleType _parseSaleType(String? raw) => switch (raw) {
+    'auction'     => SaleType.auction,
+    'best_offer'  => SaleType.bestOffer,
+    _             => SaleType.fixedPrice,
+  };
 }
 
 class LookupHistory {

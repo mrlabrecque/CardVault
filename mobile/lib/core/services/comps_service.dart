@@ -27,6 +27,22 @@ class CompsService {
     return items.map((r) => Comp.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  Future<List<Comp>> getCardComps(String cardId) async {
+    final data = await _supabase
+        .from('card_sold_comps')
+        .select('title, price, currency, sale_type, sold_at, url')
+        .eq('user_card_id', cardId)
+        .order('sold_at', ascending: false, nullsFirst: false);
+    return (data as List).map((r) => Comp.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> refreshCardValue(String cardId) async {
+    await _supabase.functions.invoke(
+      'refresh-card-value',
+      body: {'cardId': cardId},
+    );
+  }
+
   Future<List<LookupHistory>> getHistory() async {
     final data = await _supabase
         .from('lookup_history')
