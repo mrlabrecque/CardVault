@@ -35,7 +35,7 @@ class ToolsScreen extends StatelessWidget {
           icon: Icons.grade_outlined,
           title: 'Grade Recommendations',
           subtitle: 'Find raw cards worth submitting to PSA or BGS',
-          comingSoon: true,
+          onTap: () => context.push('/grading'),
         ),
         const SizedBox(height: 12),
         _ToolCard(

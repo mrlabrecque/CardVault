@@ -13,6 +13,7 @@ import '../features/collection/add_card_screen.dart';
 import '../features/collection/bulk_add_screen.dart';
 import '../features/collection/item_detail_screen.dart';
 import '../features/lot_builder/lot_builder_screen.dart';
+import '../features/grading/grading_screen.dart';
 import 'models/user_card.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
@@ -46,6 +47,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/tools', builder: (context, state) => const ToolsScreen()),
           GoRoute(path: '/comps', builder: (context, state) => const CompsScreen()),
           GoRoute(path: '/lot-builder', builder: (context, state) => const LotBuilderScreen()),
+          GoRoute(path: '/grading', builder: (context, state) => const GradingScreen()),
           GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
           GoRoute(path: '/scan', builder: (context, state) => const ScanScreen()),
         ],
