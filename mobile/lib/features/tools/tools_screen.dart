@@ -21,7 +21,7 @@ class ToolsScreen extends StatelessWidget {
           icon: Icons.layers_outlined,
           title: 'Lot Builder',
           subtitle: 'Group cards into lots for bulk eBay listing',
-          comingSoon: true,
+          onTap: () => context.push('/lot-builder'),
         ),
         const SizedBox(height: 12),
         _ToolCard(
@@ -81,11 +81,11 @@ class _ToolCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFF3F4F6)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),

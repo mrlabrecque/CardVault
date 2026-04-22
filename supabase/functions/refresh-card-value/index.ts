@@ -310,7 +310,15 @@ Deno.serve(async (req) => {
     ? prices.reduce((s: number, p: number) => s + p, 0) / prices.length
     : 0;
 
-  await admin.from('user_cards').update({ current_value: avgValue }).eq('id', cardId);
+  // Snapshot current value before overwriting so clients can show price trend
+  const { data: existing } = await admin.from('user_cards').select('current_value').eq('id', cardId).single();
+  const previousValue = (existing as any)?.current_value ?? null;
+
+  await admin.from('user_cards').update({
+    previous_value: previousValue,
+    current_value: avgValue,
+    value_refreshed_at: new Date().toISOString(),
+  }).eq('id', cardId);
 
   await admin.from('card_sold_comps').delete().eq('user_card_id', cardId);
 

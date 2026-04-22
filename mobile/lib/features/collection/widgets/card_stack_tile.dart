@@ -56,15 +56,22 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
     final colors = Theme.of(context).colorScheme;
     final stack = widget.stack;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           InkWell(
             onTap: stack.qty > 1
                 ? () => setState(() => _expanded = !_expanded)
                 : () => Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(card: stack.cards.first))),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
@@ -78,7 +85,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
             ),
           ),
           if (_expanded) ...[
-            const Divider(height: 1),
+            const Divider(height: 1, color: Color(0xFFF3F4F6)),
             ...stack.cards.map((c) => _IndividualCardRow(card: c, onDelete: widget.onDelete)),
           ],
         ],
@@ -175,6 +182,12 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
                     ),
                   ),
                 ),
+              ),
+            if (stack.valueTrend != 0)
+              Icon(
+                stack.valueTrend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 13,
+                color: stack.valueTrend > 0 ? Colors.green : Colors.red,
               ),
             Text('\$${stack.totalValue.toFixed2()}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           ],

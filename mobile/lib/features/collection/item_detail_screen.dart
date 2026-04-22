@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_card.dart';
 import '../../core/models/comp.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/serial_tag.dart';
 import '../../core/widgets/attr_tag.dart';
@@ -17,7 +18,7 @@ class ItemDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<ItemDetailScreen> createState() => _ItemDetailScreenState();
 }
 
-class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
+class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with SingleTickerProviderStateMixin {
   late final _pricePaidCtrl = TextEditingController(text: widget.card.pricePaid?.toStringAsFixed(2) ?? '');
   late final _serialCtrl = TextEditingController(text: widget.card.serialNumber ?? '');
   late final _graderCtrl = TextEditingController(text: widget.card.grader ?? 'PSA');
@@ -25,6 +26,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   late final _otherParallelCtrl = TextEditingController();
   bool _editing = false;
   bool _saving = false;
+  late bool _weeklyPriceCheck = widget.card.weeklyPriceCheck;
   late bool _isGraded = widget.card.isGraded;
   String? _selectedParallelId;   // null = Base, '__other__' = custom
   late String _selectedParallelName = widget.card.parallel;
@@ -32,26 +34,72 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 
   List<Comp>? _comps;
   bool _compsLoading = false;
+  bool _refreshing = false;
   String? _compsError;
   int _compsWindow = 90;
+  double? _currentValue;
+  int _valueTrend = 0; // 1 up, -1 down, 0 flat
+
+  late final AnimationController _spinCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  );
 
   @override
   void initState() {
     super.initState();
+    _currentValue = widget.card.currentValue;
+    _valueTrend = widget.card.valueTrend;
     _fetchComps();
   }
 
+  @override
+  void dispose() {
+    _spinCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchComps({bool refresh = false}) async {
-    setState(() { _compsLoading = true; _compsError = null; });
+    setState(() {
+      _compsLoading = true;
+      _compsError = null;
+      if (refresh) {
+        _refreshing = true;
+        _spinCtrl.repeat();
+      }
+    });
     try {
       final svc = ref.read(compsServiceProvider);
-      if (refresh) await svc.refreshCardValue(widget.card.id);
+      if (refresh) {
+        await svc.refreshCardValue(widget.card.id);
+        final data = await ref.read(supabaseProvider)
+            .from('user_cards')
+            .select('current_value, previous_value')
+            .eq('id', widget.card.id)
+            .single();
+        if (mounted) {
+          final newValue = (data['current_value'] as num?)?.toDouble();
+          final prevValue = (data['previous_value'] as num?)?.toDouble();
+          setState(() {
+            _currentValue = newValue;
+            if (prevValue != null && newValue != null && newValue != prevValue) {
+              _valueTrend = newValue > prevValue ? 1 : -1;
+            }
+          });
+          ref.invalidate(userCardsProvider);
+        }
+      }
       final results = await svc.getCardComps(widget.card.id);
-      if (mounted) setState(() => _comps = results);
+      if (mounted) { setState(() => _comps = results); }
     } catch (e) {
-      if (mounted) setState(() => _compsError = e.toString());
+      if (mounted) { setState(() => _compsError = e.toString()); }
     } finally {
-      if (mounted) setState(() => _compsLoading = false);
+      if (mounted) setState(() {
+        _compsLoading = false;
+        _refreshing = false;
+        _spinCtrl.stop();
+        _spinCtrl.reset();
+      });
     }
   }
 
@@ -254,18 +302,35 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
           const Divider(),
           const SizedBox(height: 16),
 
-          // P/L summary
+          // P/L summary + refresh tier
           Row(
             children: [
-              Expanded(child: _InfoBox(label: 'Current Value', value: '\$${(card.currentValue ?? 0).toStringAsFixed(2)}')),
+              Expanded(child: _InfoBox(
+                label: 'Current Value',
+                value: '\$${(_currentValue ?? 0).toStringAsFixed(2)}',
+                trend: _valueTrend,
+              )),
               const SizedBox(width: 8),
               Expanded(child: _InfoBox(
                 label: 'P/L',
-                value: '${pl >= 0 ? '+' : ''}\$${pl.toStringAsFixed(2)} (${plPct.toStringAsFixed(1)}%)',
+                value: '${pl >= 0 ? '+' : ''}\$${pl.toStringAsFixed(2)}',
+                subtitle: '${plPct.toStringAsFixed(1)}%',
                 valueColor: pl >= 0 ? Colors.green : colors.error,
               )),
             ],
           ),
+          const SizedBox(height: 8),
+          if (ref.watch(dailyTierCardIdsProvider).contains(card.id))
+            _DailyRefreshBadge()
+          else
+            _PriceCheckToggle(
+              enabled: _weeklyPriceCheck,
+              onChanged: (val) async {
+                setState(() => _weeklyPriceCheck = val);
+                await ref.read(cardsServiceProvider).setWeeklyPriceCheck(card.id, val);
+                ref.invalidate(userCardsProvider);
+              },
+            ),
 
           const SizedBox(height: 20),
 
@@ -404,7 +469,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
             ],
           ],
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 8),
 
@@ -444,10 +509,16 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 18),
-                    onPressed: _compsLoading ? null : () => _fetchComps(refresh: true),
-                    visualDensity: VisualDensity.compact,
+                  RotationTransition(
+                    turns: _spinCtrl,
+                    child: IconButton(
+                      icon: Icon(Icons.refresh, size: 18,
+                          color: _refreshing
+                              ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8)
+                              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+                      onPressed: _compsLoading ? null : () => _fetchComps(refresh: true),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 ],
               ),
@@ -478,24 +549,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               }
 
               final hasBestOffer = filtered.any((c) => c.saleType == SaleType.bestOffer);
-              final avg = filtered.fold(0.0, (s, c) => s + c.price) / filtered.length;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Average chip
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(color: colors.primaryContainer, borderRadius: BorderRadius.circular(10)),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Avg (${filtered.length} sales)', style: TextStyle(fontSize: 13, color: colors.onPrimaryContainer)),
-                        Text('\$${avg.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: colors.onPrimaryContainer)),
-                      ],
-                    ),
-                  ),
                   // Best offer caveat
                   if (hasBestOffer)
                     Container(
@@ -651,23 +708,136 @@ class _CompRow extends StatelessWidget {
 }
 
 class _InfoBox extends StatelessWidget {
-  const _InfoBox({required this.label, required this.value, this.valueColor});
+  const _InfoBox({required this.label, required this.value, this.subtitle, this.valueColor, this.trend = 0});
   final String label;
   final String value;
+  final String? subtitle;
   final Color? valueColor;
+  final int trend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), letterSpacing: 0.5)),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              if (trend != 0) ...[
+                Icon(
+                  trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 13,
+                  color: trend > 0 ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 2),
+              ],
+              Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: valueColor ?? const Color(0xFF111827))),
+            ],
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(subtitle!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: valueColor?.withValues(alpha: 0.75) ?? const Color(0xFF6B7280))),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyRefreshBadge extends StatelessWidget {
+  const _DailyRefreshBadge();
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: colors.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Row(
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6))),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: valueColor)),
+          const Icon(Icons.bolt, size: 16, color: Color(0xFF2563EB)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Auto-refreshed Daily',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1D4ED8))),
+                Text('Top 50 by value — updated every 24 hours automatically',
+                    style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.45))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PriceCheckToggle extends StatelessWidget {
+  const _PriceCheckToggle({required this.enabled, required this.onChanged});
+  final bool enabled;
+  final void Function(bool) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: enabled ? const Color(0xFFF0FDF4) : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: enabled ? const Color(0xFF86EFAC) : Colors.transparent),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.schedule, size: 16, color: enabled ? const Color(0xFF16A34A) : colors.onSurface.withValues(alpha: 0.4)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Weekly Price Check',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: enabled ? const Color(0xFF15803D) : colors.onSurface.withValues(alpha: 0.7))),
+                Text('Auto-refresh value every 7 days',
+                    style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.45))),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => onChanged(!enabled),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 44, height: 24,
+              decoration: BoxDecoration(
+                color: enabled ? const Color(0xFF16A34A) : colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: enabled ? const Color(0xFF16A34A) : colors.outline.withValues(alpha: 0.3)),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 200),
+                alignment: enabled ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.all(3),
+                  width: 18, height: 18,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -681,20 +851,20 @@ class _CopyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 10, color: colors.onSurface.withValues(alpha: 0.5), letterSpacing: 0.5)),
+          Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), letterSpacing: 0.5)),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
         ],
       ),
     );

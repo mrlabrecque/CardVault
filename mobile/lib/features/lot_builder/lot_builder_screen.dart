@@ -1,0 +1,733 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/models/user_card.dart';
+import '../../core/services/cards_service.dart';
+import '../../core/services/lot_service.dart';
+import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/serial_tag.dart';
+import '../../core/theme/app_theme.dart';
+
+String _sportEmoji(String sport) => switch (sport.toLowerCase()) {
+  'basketball' => '🏀',
+  'baseball'   => '⚾',
+  'football'   => '🏈',
+  'hockey'     => '🏒',
+  'soccer'     => '⚽',
+  _            => '🃏',
+};
+
+class LotBuilderScreen extends ConsumerStatefulWidget {
+  const LotBuilderScreen({super.key});
+
+  @override
+  ConsumerState<LotBuilderScreen> createState() => _LotBuilderScreenState();
+}
+
+class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+  final Set<String> _filters = {};
+  bool _showBasket = false;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<UserCard> _filtered(List<UserCard> all) {
+    var result = all;
+    if (_query.isNotEmpty) {
+      final q = _query.toLowerCase();
+      result = result.where((c) =>
+        c.player.toLowerCase().contains(q) ||
+        (c.set?.toLowerCase().contains(q) ?? false) ||
+        (c.checklist?.toLowerCase().contains(q) ?? false) ||
+        c.sport.toLowerCase().contains(q),
+      ).toList();
+    }
+    if (_filters.contains('RC'))    result = result.where((c) => c.rookie).toList();
+    if (_filters.contains('AUTO'))  result = result.where((c) => c.autograph).toList();
+    if (_filters.contains('PATCH')) result = result.where((c) => c.memorabilia).toList();
+    return result;
+  }
+
+  void _toggleFilter(String f) => setState(() {
+    _filters.contains(f) ? _filters.remove(f) : _filters.add(f);
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final lot       = ref.watch(lotProvider);
+    final notifier  = ref.read(lotProvider.notifier);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9FAFB),
+      body: Column(
+        children: [
+          _Header(
+            showBasket: _showBasket,
+            basketCount: lot.items.length,
+            onToggle: (v) => setState(() => _showBasket = v),
+          ),
+          Expanded(
+            child: _showBasket
+                ? _BasketView(lot: lot, notifier: notifier)
+                : _BrowseView(
+                    searchCtrl: _searchCtrl,
+                    query: _query,
+                    filters: _filters,
+                    lot: lot,
+                    notifier: notifier,
+                    onQueryChanged: (v) => setState(() => _query = v),
+                    onFilterToggle: _toggleFilter,
+                    filteredCards: _filtered,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+class _Header extends StatelessWidget {
+  const _Header({required this.showBasket, required this.basketCount, required this.onToggle});
+  final bool showBasket;
+  final int basketCount;
+  final ValueChanged<bool> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
+              ),
+              const Text('Lot Builder', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Builder(builder: (context) {
+            return Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _TabBtn(label: 'Browse', active: !showBasket, onTap: () => onToggle(false)),
+                  _TabBtn(
+                    label: 'Basket',
+                    active: showBasket,
+                    badge: basketCount > 0 ? basketCount : null,
+                    onTap: () => onToggle(true),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabBtn extends StatelessWidget {
+  const _TabBtn({required this.label, required this.active, required this.onTap, this.badge});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final int? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: active ? colors.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: active
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: active ? colors.onSurface : colors.onSurface.withValues(alpha: 0.45),
+                ),
+              ),
+              if (badge != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text('$badge', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Browse view ───────────────────────────────────────────────────────────────
+
+class _BrowseView extends ConsumerWidget {
+  const _BrowseView({
+    required this.searchCtrl,
+    required this.query,
+    required this.filters,
+    required this.lot,
+    required this.notifier,
+    required this.onQueryChanged,
+    required this.onFilterToggle,
+    required this.filteredCards,
+  });
+
+  final TextEditingController searchCtrl;
+  final String query;
+  final Set<String> filters;
+  final LotState lot;
+  final LotNotifier notifier;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String> onFilterToggle;
+  final List<UserCard> Function(List<UserCard>) filteredCards;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cardsAsync = ref.watch(userCardsProvider);
+
+    return cardsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Color(0xFFDC2626)))),
+      data: (allCards) {
+        final cards = filteredCards(allCards);
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            // Search bar
+            TextField(
+              controller: searchCtrl,
+              onChanged: onQueryChanged,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search player, set, sport…',
+                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4))),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Filter chips
+            Row(
+              children: [
+                for (final label in ['RC', 'AUTO', 'PATCH']) ...[
+                  _FilterChip(
+                    label: label,
+                    active: filters.contains(label),
+                    onTap: () => onFilterToggle(label),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                const Spacer(),
+                Text('${cards.length} cards', style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (allCards.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 48),
+                child: Center(child: Text('No cards in your collection yet.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14))),
+              )
+            else if (cards.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 48),
+                child: Center(child: Text('No cards match your search.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14))),
+              )
+            else
+              ...cards.map((card) {
+                final inLot = lot.itemIds.contains(card.id);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _BrowseCardRow(
+                    card: card,
+                    inLot: inLot,
+                    onToggle: () => notifier.toggle(card),
+                  ),
+                );
+              }),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primary.withValues(alpha: 0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? AppTheme.primary.withValues(alpha: 0.4) : const Color(0xFFE5E7EB)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: active ? AppTheme.primary : const Color(0xFF6B7280),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BrowseCardRow extends StatelessWidget {
+  const _BrowseCardRow({required this.card, required this.inLot, required this.onToggle});
+  final UserCard card;
+  final bool inLot;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onToggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: inLot ? const Color(0xFFF0FDF4) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: inLot ? const Color(0xFF86EFAC) : const Color(0xFFF3F4F6)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
+        ),
+        child: Row(
+          children: [
+            // Thumbnail
+            _CardThumb(imageUrl: card.imageUrl, sport: card.sport, size: 44),
+            const SizedBox(width: 12),
+            // Info
+            Expanded(
+              child: Builder(builder: (context) {
+                final colors = Theme.of(context).colorScheme;
+                return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: card.player, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      if (card.cardNumber != null)
+                        TextSpan(text: '  #${card.cardNumber}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5))),
+                    ]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  if (card.set != null || card.checklist != null)
+                    Text(
+                      [
+                        if (card.year != null) '${card.year}',
+                        if (card.set != null) card.set!,
+                        if (card.checklist != null) card.checklist!,
+                      ].join(' · '),
+                      style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (card.parallel != 'Base')
+                    Text(card.parallel, style: TextStyle(fontSize: 12, color: colors.primary)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      if (card.isGraded && card.grade != null)
+                        AttrTag('${card.grader ?? ''} ${card.grade!}'.trim(), color: const Color(0xFF374151)),
+                      if (card.rookie)     AttrTag('RC',    color: const Color(0xFF2563EB)),
+                      if (card.autograph)  AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
+                      if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF059669)),
+                      SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
+                    ],
+                  ),
+                ],
+                );
+              }),
+            ),
+            const SizedBox(width: 10),
+            // Value + toggle button
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                ),
+                const SizedBox(height: 6),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: inLot ? const Color(0xFF22C55E) : AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    inLot ? Icons.check : Icons.add,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Basket view ───────────────────────────────────────────────────────────────
+
+class _BasketView extends StatelessWidget {
+  const _BasketView({required this.lot, required this.notifier});
+  final LotState lot;
+  final LotNotifier notifier;
+
+  String get _pctLabel {
+    if (lot.pct < 100) return '${lot.pct}% — Discount';
+    if (lot.pct == 100) return '100% — Market Value';
+    return '${lot.pct}% — Premium';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (lot.items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Center(child: Text('📦', style: TextStyle(fontSize: 30))),
+            ),
+            const SizedBox(height: 12),
+            const Text('Basket is empty', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF9CA3AF))),
+            const SizedBox(height: 4),
+            const Text('Switch to Browse and tap cards to add them.', style: TextStyle(fontSize: 12, color: Color(0xFFD1D5DB))),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      children: [
+        // Asking price card — centered
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            color: AppTheme.primary,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'ASKING PRICE',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFFCA5A5), letterSpacing: 1.5),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '\$${lot.askingPrice.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: Colors.white),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${lot.pct}% of \$${lot.totalValue.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFFFCA5A5)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Slider — bare, with end labels above and pct label below
+        Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('50% Discount', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                const Text('150% Premium', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: AppTheme.primary,
+                inactiveTrackColor: const Color(0xFFE5E7EB),
+                thumbColor: AppTheme.primary,
+                overlayColor: AppTheme.primary.withValues(alpha: 0.1),
+                trackHeight: 6,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+              ),
+              child: Slider(
+                min: 50,
+                max: 150,
+                divisions: 20,
+                value: lot.pct.toDouble(),
+                onChanged: (v) => notifier.setPct(v.round()),
+              ),
+            ),
+            Text(
+              _pctLabel,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Divider(color: Color(0xFFF3F4F6), height: 1),
+        const SizedBox(height: 16),
+        // Summary header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+          ),
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${lot.items.length} ${lot.items.length == 1 ? 'card' : 'cards'}',
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Market total: \$${lot.totalValue.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: notifier.clear,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text('Clear', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Card rows
+        ...lot.items.map((card) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _BasketCardRow(card: card, onRemove: () => notifier.remove(card.id)),
+        )),
+      ],
+    );
+  }
+}
+
+class _BasketCardRow extends StatelessWidget {
+  const _BasketCardRow({required this.card, required this.onRemove});
+  final UserCard card;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardThumb(imageUrl: card.imageUrl, sport: card.sport, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: card.player,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    if (card.cardNumber != null)
+                      TextSpan(
+                        text: '  #${card.cardNumber}',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5)),
+                      ),
+                  ]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                if (card.set != null || card.checklist != null)
+                  Text(
+                    [
+                      if (card.year != null) '${card.year}',
+                      if (card.set != null) card.set!,
+                      if (card.checklist != null) card.checklist!,
+                    ].join(' · '),
+                    style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (card.parallel != 'Base')
+                  Text(card.parallel, style: TextStyle(fontSize: 12, color: colors.primary)),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (card.isGraded && card.grade != null)
+                      AttrTag('${card.grader ?? ''} ${card.grade!}'.trim(), color: const Color(0xFF374151)),
+                    if (card.rookie)      AttrTag('RC',    color: const Color(0xFF2563EB)),
+                    if (card.autograph)   AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
+                    if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF059669)),
+                    SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+              ),
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Shared widgets ────────────────────────────────────────────────────────────
+
+class _CardThumb extends StatelessWidget {
+  const _CardThumb({required this.imageUrl, required this.sport, required this.size});
+  final String? imageUrl;
+  final String sport;
+  final double size;
+
+  // Standard trading card ratio: 2.5" × 3.5" → height = width × (7/5)
+  double get _height => size * 1.4;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        width: size,
+        height: _height,
+        child: imageUrl != null
+            ? CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover,
+                errorWidget: (_, _, _) => _Emoji(sport: sport, width: size, height: _height))
+            : _Emoji(sport: sport, width: size, height: _height),
+      ),
+    );
+  }
+}
+
+class _Emoji extends StatelessWidget {
+  const _Emoji({required this.sport, required this.width, required this.height});
+  final String sport;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFF9FAFB),
+      alignment: Alignment.center,
+      child: Text(_sportEmoji(sport), style: TextStyle(fontSize: width * 0.45)),
+    );
+  }
+}

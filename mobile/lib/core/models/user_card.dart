@@ -18,6 +18,7 @@ class UserCard {
   final int? serialMax;
   final double? pricePaid;
   final double? currentValue;
+  final double? previousValue;
   final bool rookie;
   final bool autograph;
   final bool memorabilia;
@@ -25,6 +26,8 @@ class UserCard {
   final String? imageUrl;
   final DateTime? createdAt;
   final int? setCardCount;
+  final bool weeklyPriceCheck;
+  final DateTime? valueRefreshedAt;
 
   const UserCard({
     required this.id,
@@ -46,6 +49,7 @@ class UserCard {
     this.serialMax,
     this.pricePaid,
     this.currentValue,
+    this.previousValue,
     required this.rookie,
     required this.autograph,
     required this.memorabilia,
@@ -53,6 +57,8 @@ class UserCard {
     this.imageUrl,
     this.createdAt,
     this.setCardCount,
+    this.weeklyPriceCheck = false,
+    this.valueRefreshedAt,
   });
 
   factory UserCard.fromJson(Map<String, dynamic> json) {
@@ -82,17 +88,26 @@ class UserCard {
       serialMax: parallel?['serial_max'] as int? ?? master?['serial_max'] as int?,
       pricePaid: (json['price_paid'] as num?)?.toDouble(),
       currentValue: (json['current_value'] as num?)?.toDouble(),
+      previousValue: (json['previous_value'] as num?)?.toDouble(),
       rookie: master?['is_rookie'] as bool? ?? false,
       autograph: master?['is_auto'] as bool? ?? false,
       memorabilia: master?['is_patch'] as bool? ?? false,
       ssp: master?['is_ssp'] as bool? ?? false,
       imageUrl: master?['image_url'] as String?,
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
+      weeklyPriceCheck: json['weekly_price_check'] as bool? ?? false,
+      valueRefreshedAt: json['value_refreshed_at'] != null ? DateTime.tryParse(json['value_refreshed_at'] as String) : null,
     );
   }
 
   double get pl => (currentValue ?? 0) - (pricePaid ?? 0);
   double get plPct => pricePaid != null && pricePaid! > 0 ? (pl / pricePaid!) * 100 : 0;
+
+  /// 1 = up, -1 = down, 0 = flat/unknown
+  int get valueTrend {
+    if (previousValue == null || previousValue == currentValue) return 0;
+    return (currentValue ?? 0) > previousValue! ? 1 : -1;
+  }
 }
 
 class CardStack {
@@ -105,6 +120,7 @@ class CardStack {
   final int qty;
   final double totalCost;
   final double totalValue;
+  final double? totalPreviousValue;
   final bool rookie;
   final bool autograph;
   final bool memorabilia;
@@ -128,6 +144,7 @@ class CardStack {
     required this.qty,
     required this.totalCost,
     required this.totalValue,
+    this.totalPreviousValue,
     required this.rookie,
     required this.autograph,
     required this.memorabilia,
@@ -142,9 +159,23 @@ class CardStack {
     this.latestCreatedAt,
   });
 
+  String get stackKey => '${masterCardId}__${parallel}__${grade}__${cards.first.gradeValue}';
+
   double get avgCost => qty > 0 ? totalCost / qty : 0;
   double get pl => totalValue - totalCost;
   double get plPct => totalCost > 0 ? (pl / totalCost) * 100 : 0;
+
+  /// 1 = up, -1 = down, 0 = flat/unknown
+  int get valueTrend {
+    if (totalPreviousValue == null || totalPreviousValue == totalValue) return 0;
+    return totalValue > totalPreviousValue! ? 1 : -1;
+  }
+
+  /// % change from previous to current value; 0 if no prior data
+  double get valueChangePct {
+    if (totalPreviousValue == null || totalPreviousValue == 0) return 0;
+    return (totalValue - totalPreviousValue!) / totalPreviousValue! * 100;
+  }
 
   static List<CardStack> fromCards(List<UserCard> cards) {
     final Map<String, List<UserCard>> groups = {};
@@ -166,6 +197,9 @@ class CardStack {
         qty: group.length,
         totalCost: group.fold(0, (s, c) => s + (c.pricePaid ?? 0)),
         totalValue: group.fold(0, (s, c) => s + (c.currentValue ?? 0)),
+        totalPreviousValue: group.any((c) => c.previousValue != null)
+            ? group.fold<double>(0.0, (s, c) => s + (c.previousValue ?? c.currentValue ?? 0))
+            : null,
         rookie: first.rookie,
         autograph: first.autograph,
         memorabilia: first.memorabilia,

@@ -158,29 +158,39 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  const { count } = await admin
+  const { data: existing } = await admin
     .from('lookup_history')
-    .select('*', { count: 'exact', head: true })
+    .select('id')
     .eq('user_id', userId)
-    .then(r => ({ count: r.count ?? 0 }));
+    .ilike('query', query)
+    .limit(1)
+    .single();
 
-  if (count >= HISTORY_LIMIT) {
-    const { data: oldest } = await admin
+  if (!existing) {
+    const { count } = await admin
       .from('lookup_history')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .order('timestamp', { ascending: true })
-      .limit(1)
-      .single();
-    if (oldest) await admin.from('lookup_history').delete().eq('id', oldest.id);
-  }
+      .then(r => ({ count: r.count ?? 0 }));
 
-  await admin.from('lookup_history').insert({
-    user_id:   userId,
-    query,
-    results:   items,
-    timestamp: new Date().toISOString(),
-  });
+    if (count >= HISTORY_LIMIT) {
+      const { data: oldest } = await admin
+        .from('lookup_history')
+        .select('id')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: true })
+        .limit(1)
+        .single();
+      if (oldest) await admin.from('lookup_history').delete().eq('id', oldest.id);
+    }
+
+    await admin.from('lookup_history').insert({
+      user_id:   userId,
+      query,
+      results:   items,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
     return json({ items, avgPrice });
   } catch (e: any) {

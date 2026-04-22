@@ -7,7 +7,7 @@ import '../../core/models/user_card.dart';
 import 'widgets/card_stack_tile.dart';
 import 'widgets/set_row_tile.dart';
 
-enum SortOption { dateDesc, playerAz, valueDesc, plPct }
+enum SortOption { dateDesc, playerAz, valueDesc, plPct, movingUp }
 enum SetSortOption { pctDesc, valueDesc, name }
 
 class CollectionScreen extends ConsumerStatefulWidget {
@@ -34,9 +34,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             !(s.set?.toLowerCase().contains(q) ?? false) &&
             !s.sport.toLowerCase().contains(q)) { return false; }
       }
-      if (_activeFilters.contains('rookie') && !s.rookie) return false;
-      if (_activeFilters.contains('autograph') && !s.autograph) return false;
-      if (_activeFilters.contains('memorabilia') && !s.memorabilia) return false;
+      if (_activeFilters.contains('RC') && !s.rookie) return false;
+      if (_activeFilters.contains('AUTO') && !s.autograph) return false;
+      if (_activeFilters.contains('PATCH') && !s.memorabilia) return false;
       return true;
     }).toList();
 
@@ -44,6 +44,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       SortOption.playerAz  => a.player.compareTo(b.player),
       SortOption.valueDesc => b.totalValue.compareTo(a.totalValue),
       SortOption.plPct     => b.plPct.compareTo(a.plPct),
+      SortOption.movingUp  => b.valueTrend != a.valueTrend
+          ? b.valueTrend.compareTo(a.valueTrend)
+          : b.valueChangePct.compareTo(a.valueChangePct),
       SortOption.dateDesc  => (b.latestCreatedAt ?? DateTime(0)).compareTo(a.latestCreatedAt ?? DateTime(0)),
     });
     return result;
@@ -71,7 +74,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     }
   }
 
-  String _stackKey(CardStack stack) => stack.masterCardId ?? stack.cards.first.id;
+  String _stackKey(CardStack stack) => stack.stackKey;
 
   Future<void> _refreshStack(CardStack stack) async {
     final key = _stackKey(stack);
@@ -105,93 +108,98 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     final cardsAsync = ref.watch(userCardsProvider);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF9FAFB),
       body: Column(
         children: [
-          // ── Tab toggle ────────────────────────────────────
+          // ── Controls (tabs + search + filters) ───────────
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(children: [
-                _tab('Cards', !_showSets, colors, () => setState(() => _showSets = false)),
-                _tab('Sets',   _showSets, colors, () => setState(() => _showSets = true)),
-              ]),
-            ),
-          ),
-
-          // ── Cards view controls ───────────────────────────
-          if (!_showSets) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: TextField(
-                controller: _searchCtrl,
-                onChanged: (v) => setState(() => _query = v),
-                decoration: InputDecoration(
-                  hintText: 'Search player, set, sport…',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); setState(() => _query = ''); })
-                      : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  isDense: true,
+            child: Column(
+              children: [
+                // Tab toggle
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    _tab('Cards', !_showSets, colors, () => setState(() => _showSets = false)),
+                    _tab('Sets',   _showSets, colors, () => setState(() => _showSets = true)),
+                  ]),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final f in ['rookie', 'autograph', 'memorabilia'])
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
-                                label: Text(f[0].toUpperCase() + f.substring(1)),
-                                selected: _activeFilters.contains(f),
-                                onSelected: (_) => _toggleFilter(f),
-                              ),
-                            ),
-                        ],
-                      ),
+
+                // Cards view controls
+                if (!_showSets) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _query = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search player, set, sport…',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _query.isNotEmpty
+                          ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); setState(() => _query = ''); })
+                          : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      isDense: true,
                     ),
                   ),
-                  PopupMenuButton<SortOption>(
-                    icon: const Icon(Icons.sort),
-                    onSelected: (s) => setState(() => _sort = s),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(value: SortOption.dateDesc,  child: _sortItem(Icons.calendar_today, 'Date Added',  _sort == SortOption.dateDesc,  colors)),
-                      PopupMenuItem(value: SortOption.playerAz,  child: _sortItem(Icons.sort_by_alpha,  'Player A–Z',  _sort == SortOption.playerAz,  colors)),
-                      PopupMenuItem(value: SortOption.valueDesc, child: _sortItem(Icons.trending_up,    'Value ↓',     _sort == SortOption.valueDesc, colors)),
-                      PopupMenuItem(value: SortOption.plPct,     child: _sortItem(Icons.percent,        'P/L %',       _sort == SortOption.plPct,     colors)),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, right: 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                for (final f in ['RC', 'AUTO', 'PATCH'])
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: FilterChip(
+                                      label: Text(f),
+                                      selected: _activeFilters.contains(f),
+                                      onSelected: (_) => _toggleFilter(f),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        PopupMenuButton<SortOption>(
+                          icon: const Icon(Icons.sort),
+                          onSelected: (s) => setState(() => _sort = s),
+                          itemBuilder: (_) => [
+                            PopupMenuItem(value: SortOption.dateDesc,  child: _sortItem(Icons.calendar_today,  'Date Added',   _sort == SortOption.dateDesc,  colors)),
+                            PopupMenuItem(value: SortOption.playerAz,  child: _sortItem(Icons.sort_by_alpha,   'Player A–Z',   _sort == SortOption.playerAz,  colors)),
+                            PopupMenuItem(value: SortOption.valueDesc, child: _sortItem(Icons.trending_up,     'Value ↓',      _sort == SortOption.valueDesc, colors)),
+                            PopupMenuItem(value: SortOption.plPct,     child: _sortItem(Icons.percent,         'P/L %',        _sort == SortOption.plPct,     colors)),
+                            PopupMenuItem(value: SortOption.movingUp,  child: _sortItem(Icons.arrow_upward,    'Moving Up',    _sort == SortOption.movingUp,  colors)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              ),
-            ),
-          ],
 
-          // ── Sets view sort ────────────────────────────────
-          if (_showSets)
-            Align(
-              alignment: Alignment.centerRight,
-              child: PopupMenuButton<SetSortOption>(
-                icon: const Icon(Icons.sort),
-                onSelected: (s) => setState(() => _setSort = s),
-                itemBuilder: (_) => [
-                  PopupMenuItem(value: SetSortOption.pctDesc,   child: _sortItem(Icons.percent,      'Most Complete', _setSort == SetSortOption.pctDesc,   colors)),
-                  PopupMenuItem(value: SetSortOption.valueDesc, child: _sortItem(Icons.trending_up,  'Value ↓',       _setSort == SetSortOption.valueDesc, colors)),
-                  PopupMenuItem(value: SetSortOption.name,      child: _sortItem(Icons.sort_by_alpha,'Name A–Z',      _setSort == SetSortOption.name,      colors)),
-                ],
-              ),
+                // Sets view sort
+                if (_showSets)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: PopupMenuButton<SetSortOption>(
+                      icon: const Icon(Icons.sort),
+                      onSelected: (s) => setState(() => _setSort = s),
+                      itemBuilder: (_) => [
+                        PopupMenuItem(value: SetSortOption.pctDesc,   child: _sortItem(Icons.percent,      'Most Complete', _setSort == SetSortOption.pctDesc,   colors)),
+                        PopupMenuItem(value: SetSortOption.valueDesc, child: _sortItem(Icons.trending_up,  'Value ↓',       _setSort == SetSortOption.valueDesc, colors)),
+                        PopupMenuItem(value: SetSortOption.name,      child: _sortItem(Icons.sort_by_alpha,'Name A–Z',      _setSort == SetSortOption.name,      colors)),
+                      ],
+                    ),
+                  ),
+              ],
             ),
+          ),
 
           // ── Content ───────────────────────────────────────
           Expanded(

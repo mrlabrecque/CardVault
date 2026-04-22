@@ -129,8 +129,9 @@ class CardsService {
   Future<List<UserCard>> loadUserCards() async {
     final data = await _supabase.from('user_cards').select('''
       id, master_card_id, parallel_id, parallel_name,
-      price_paid, current_value, serial_number,
+      price_paid, current_value, previous_value, serial_number,
       is_graded, grader, grade_value, created_at,
+      weekly_price_check, value_refreshed_at,
       master_card_definitions (
         player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url,
         sets ( id, name, card_count, releases ( year, sport, name ) )
@@ -187,6 +188,13 @@ class CardsService {
     }
     final data = await q.order('player').limit(50);
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> setWeeklyPriceCheck(String cardId, bool enabled) async {
+    await _supabase
+        .from('user_cards')
+        .update({'weekly_price_check': enabled})
+        .eq('id', cardId);
   }
 
   Future<String> addCard(AddCardFormData form) async {
@@ -247,4 +255,11 @@ final userCardsProvider = FutureProvider<List<UserCard>>((ref) async {
 
 final cardStacksProvider = Provider<AsyncValue<List<CardStack>>>((ref) {
   return ref.watch(userCardsProvider).whenData(CardStack.fromCards);
+});
+
+/// IDs of the top 50 cards by current value — these are auto-refreshed daily.
+final dailyTierCardIdsProvider = Provider<Set<String>>((ref) {
+  final cards = ref.watch(userCardsProvider).value ?? [];
+  final sorted = [...cards]..sort((a, b) => (b.currentValue ?? 0).compareTo(a.currentValue ?? 0));
+  return sorted.take(50).map((c) => c.id).toSet();
 });

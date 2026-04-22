@@ -21,6 +21,57 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
 
   static const _pageSize = 10;
 
+  void _showValueDisclaimer(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.info_outline, size: 18, color: Color(0xFFF97316)),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Why values may differ',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'This search returns broad eBay sold results based on whatever you type — it doesn\'t know your specific card.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'The value shown on cards in your collection is refreshed using that card\'s exact details — player, year, set, parallel, grade, and serial number — so those comps are much more targeted.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Use this search to explore the market. For the most accurate value on a card you own, use the refresh button on that card.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _search([String? query]) async {
     final q = query ?? _searchCtrl.text.trim();
     if (q.isEmpty) return;
@@ -80,6 +131,11 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
                   child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
                 ),
                 const Text('Comp Search', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => _showValueDisclaimer(context),
+                  child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF9CA3AF)),
+                ),
               ],
             ),
           ),
@@ -317,10 +373,10 @@ class _CompCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFF3F4F6)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -382,8 +438,9 @@ class _HistoryTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFF3F4F6)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Row(
           children: [

@@ -31,13 +31,20 @@ class _SetRowTileState extends State<SetRowTile> {
     final row = widget.row;
     final hasMultipleParallels = row.parallels.length > 1;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           InkWell(
             onTap: hasMultipleParallels ? () => setState(() => _expanded = !_expanded) : null,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(

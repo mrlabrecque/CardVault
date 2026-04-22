@@ -27,7 +27,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: base,
       fontFamily: 'Inter',
-      scaffoldBackgroundColor: surface,
+      scaffoldBackgroundColor: const Color(0xFFF9FAFB),
 
       appBarTheme: const AppBarTheme(
         backgroundColor: surface,
@@ -88,7 +88,7 @@ class AppTheme {
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceElev,
+        fillColor: Colors.white,
         hintStyle: const TextStyle(color: textMuted),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -115,7 +115,7 @@ class AppTheme {
       ),
 
       chipTheme: ChipThemeData(
-        backgroundColor: surfaceElev,
+        backgroundColor: Colors.white,
         selectedColor: primary.withValues(alpha: 0.12),
         labelStyle: const TextStyle(fontSize: 13, color: textMain),
         side: const BorderSide(color: border),
