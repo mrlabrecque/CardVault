@@ -254,45 +254,82 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               ),
               borderRadius: BorderRadius.circular(20),
             ),
-            padding: const EdgeInsets.all(24),
-            child: Column(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (card.imageUrl != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(imageUrl: card.imageUrl!, height: 160, fit: BoxFit.contain),
-                  )
-                else
-                  Text(_sportEmoji, style: const TextStyle(fontSize: 56)),
-                const SizedBox(height: 12),
-                Text(
-                  card.player,
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
+                // Card image
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: card.imageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: card.imageUrl!,
+                          width: 72, height: 100,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          width: 72, height: 100,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 32))),
+                        ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  [
-                    if (card.set != null) card.set!,
-                    if (card.checklist != null) card.checklist!,
-                    if (card.cardNumber != null) '#${card.cardNumber}',
-                  ].join(' · '),
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    if (card.rookie)      AttrTag('RC', color: const Color(0xFF16A34A)),
-                    if (card.autograph)   AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-                    if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-                    if (card.ssp)         AttrTag('SSP', color: const Color(0xFFB45309)),
-                    if (card.isGraded)    AttrTag('${card.grader ?? 'PSA'} ${card.grade ?? ''}'),
-                    SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
-                  ],
+                const SizedBox(width: 16),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        TextSpan(children: [
+                          TextSpan(
+                            text: card.player,
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          if (card.cardNumber != null)
+                            TextSpan(
+                              text: '  #${card.cardNumber}',
+                              style: const TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w400),
+                            ),
+                        ]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          if (card.year != null) '${card.year}',
+                          if (card.set != null) card.set!,
+                          if (card.checklist != null) card.checklist!,
+                        ].join(' · '),
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (card.parallel != 'Base') ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          card.parallel,
+                          style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          if (card.rookie)      AttrTag('RC', color: const Color(0xFF16A34A)),
+                          if (card.autograph)   AttrTag('AUTO', color: const Color(0xFF7C3AED)),
+                          if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
+                          if (card.ssp)         AttrTag('SSP', color: const Color(0xFFB45309)),
+                          if (card.isGraded)    AttrTag('${card.grader ?? 'PSA'} ${card.grade ?? ''}'),
+                          SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

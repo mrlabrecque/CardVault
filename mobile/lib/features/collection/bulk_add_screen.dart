@@ -715,7 +715,7 @@ class _BoxPriceCalculator extends StatelessWidget {
             decoration: InputDecoration(
               labelText: 'Box Price',
               prefixText: '\$ ',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               isDense: true,
               filled: true,
               fillColor: colors.surface,
@@ -729,7 +729,7 @@ class _BoxPriceCalculator extends StatelessWidget {
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: 'Cards / Box',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               isDense: true,
               filled: true,
               fillColor: colors.surface,
@@ -831,7 +831,14 @@ class _StagedCardTile extends StatelessWidget {
         const SizedBox(width: 8),
         GestureDetector(
           onTap: onRemove,
-          child: Icon(Icons.close, size: 16, color: colors.error),
+          child: Container(
+            width: 28, height: 28,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFFECACA)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
+          ),
         ),
       ]),
     );

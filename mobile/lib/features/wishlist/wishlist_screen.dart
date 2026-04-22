@@ -413,19 +413,47 @@ class _WishlistCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.player ?? 'Unknown',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(
-                      [
-                        if (item.year != null) '${item.year}',
-                        if (item.setName != null) item.setName!,
-                        if (item.parallel != null) '· ${item.parallel}',
-                      ].join(' '),
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                    // Name + card number
+                    Text.rich(
+                      TextSpan(children: [
+                        TextSpan(
+                          text: item.player ?? 'Unknown',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
+                        ),
+                        if (item.cardNumber != null)
+                          TextSpan(
+                            text: '  #${item.cardNumber}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Colors.grey.shade400),
+                          ),
+                      ]),
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                     ),
+                    // Year · Set
+                    if (item.year != null || item.setName != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        [
+                          if (item.year != null) '${item.year}',
+                          if (item.setName != null) item.setName!,
+                        ].join(' · '),
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    // Parallel
+                    if (item.parallel != null) ...[
+                      const SizedBox(height: 2),
+                      Text(item.parallel!,
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF800020), fontWeight: FontWeight.w500)),
+                    ],
+                    // Attributes
+                    if (item.attrs.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 4, runSpacing: 4,
+                        children: [for (final tag in item.attrs) _AttrTag(tag: tag)],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -439,20 +467,6 @@ class _WishlistCard extends StatelessWidget {
               ),
             ],
           ),
-
-          // Attributes
-          if (item.attrs.isNotEmpty || item.cardNumber != null) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6, runSpacing: 4,
-              children: [
-                if (item.cardNumber != null)
-                  Text('#${item.cardNumber}',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade400)),
-                for (final tag in item.attrs) _AttrTag(tag: tag),
-              ],
-            ),
-          ],
 
           // Price row
           const SizedBox(height: 12),
@@ -520,9 +534,10 @@ class _WishlistCard extends StatelessWidget {
                   icon: const Icon(Icons.search, size: 13),
                   label: const Text('Search Comps', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey.shade600,
-                    side: BorderSide(color: Colors.grey.shade200),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF6B7280),
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                 ),
@@ -531,7 +546,9 @@ class _WishlistCard extends StatelessWidget {
               _IconBtn(
                 icon: item.isPaused ? Icons.play_arrow : Icons.pause,
                 onTap: onTogglePause,
+                color: Colors.white,
                 border: true,
+                borderColor: const Color(0xFFE5E7EB),
               ),
               const SizedBox(width: 8),
               _IconBtn(
@@ -564,70 +581,73 @@ class _MatchRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          GestureDetector(
-            onTap: match.url != null
-                ? () => launchUrl(Uri.parse(match.url!), mode: LaunchMode.externalApplication)
-                : null,
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD1FAE5)),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFD1FAE5)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (match.imageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(match.imageUrl!, width: 40, height: 56, fit: BoxFit.cover,
+                    errorBuilder: (ctx, err, st) => const SizedBox(width: 40, height: 56)),
               ),
-              child: Row(
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (match.imageUrl != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(match.imageUrl!, width: 40, height: 40, fit: BoxFit.cover,
-                          errorBuilder: (ctx, err, st) => const SizedBox(width: 40, height: 40)),
-                    ),
-                  if (match.imageUrl != null) const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(match.title,
-                            style: const TextStyle(fontSize: 11, color: Colors.black87),
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 2),
-                        Text(isAuction ? 'Auction' : 'Buy Now',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.w700,
-                                color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB))),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  Text(match.title,
+                      style: const TextStyle(fontSize: 11, color: Colors.black87),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Row(
                     children: [
-                      Text('\$${match.price.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                              color: Color(0xFF059669))),
-                      const Icon(Icons.open_in_new, size: 10, color: Colors.grey),
+                      Text(isAuction ? 'Auction' : 'Buy Now',
+                          style: TextStyle(
+                              fontSize: 10, fontWeight: FontWeight.w700,
+                              color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB))),
+                      if (match.url != null) ...[
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => launchUrl(Uri.parse(match.url!), mode: LaunchMode.externalApplication),
+                          child: const Icon(Icons.open_in_new, size: 11, color: Color(0xFF9CA3AF)),
+                        ),
+                      ],
                     ],
                   ),
                 ],
               ),
             ),
-          ),
-          Positioned(
-            top: 4, right: 4,
-            child: GestureDetector(
-              onTap: onDismiss,
-              child: Container(
-                width: 20, height: 20,
-                decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
-                child: const Icon(Icons.close, color: Colors.white, size: 10),
-              ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('\$${match.price.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                        color: Color(0xFF059669))),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: onDismiss,
+                  child: Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFFECACA)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -745,7 +765,7 @@ class _IconBtn extends StatelessWidget {
         width: 36, height: 36,
         decoration: BoxDecoration(
           color: color ?? Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: border
               ? Border.all(color: borderColor ?? Colors.grey.shade200)
               : null,
