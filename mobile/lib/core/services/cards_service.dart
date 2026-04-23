@@ -85,6 +85,64 @@ class MasterCard {
   String get displayName => cardNumber != null ? '$player  #$cardNumber' : player;
 }
 
+class CatalogRelease {
+  const CatalogRelease({required this.id, required this.name, required this.year, required this.segmentId});
+  final String id;
+  final String name;
+  final String year;
+  final String segmentId;
+
+  factory CatalogRelease.fromJson(Map<String, dynamic> j) => CatalogRelease(
+    id:        j['id'] as String,
+    name:      j['name'] as String,
+    year:      (j['year'] ?? '').toString(),
+    segmentId: (j['segmentId'] ?? '') as String,
+  );
+
+  String get displayName => '$year $name';
+}
+
+class CatalogSetSummary {
+  const CatalogSetSummary({required this.id, required this.name, this.parallelCount = 0});
+  final String id;
+  final String name;
+  final int parallelCount;
+
+  factory CatalogSetSummary.fromJson(Map<String, dynamic> j) => CatalogSetSummary(
+    id:            j['id'] as String,
+    name:          j['name'] as String,
+    parallelCount: (j['parallelCount'] as int?) ?? 0,
+  );
+}
+
+class LazyImportResult {
+  const LazyImportResult({
+    required this.releaseId,
+    required this.releaseName,
+    this.releaseSport,
+    required this.setId,
+    required this.setName,
+    required this.parallels,
+  });
+  final String releaseId;
+  final String releaseName;
+  final String? releaseSport;
+  final String setId;
+  final String setName;
+  final List<SetParallel> parallels;
+
+  factory LazyImportResult.fromJson(Map<String, dynamic> j) => LazyImportResult(
+    releaseId:    j['releaseId'] as String,
+    releaseName:  j['releaseName'] as String,
+    releaseSport: j['releaseSport'] as String?,
+    setId:        j['setId'] as String,
+    setName:      j['setName'] as String,
+    parallels:    ((j['parallels'] as List?) ?? [])
+        .map((p) => SetParallel.fromJson(p as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
 class AddCardFormData {
   const AddCardFormData({
     this.masterCardId,
@@ -195,6 +253,47 @@ class CardsService {
         .from('user_cards')
         .update({'weekly_price_check': enabled})
         .eq('id', cardId);
+  }
+
+  Future<List<CatalogRelease>> searchCatalogReleases(String query, {int? year}) async {
+    final body = <String, dynamic>{};
+    if (query.isNotEmpty) body['query'] = query;
+    if (year != null) body['year'] = year;
+    final res = await _supabase.functions.invoke('catalog-search', body: body);
+    if (res.status != 200) throw Exception('Catalog search failed: ${res.status}');
+    final list = res.data as List? ?? [];
+    return list.map((r) => CatalogRelease.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<CatalogSetSummary>> getCatalogSets(String cardsightReleaseId) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-search',
+      body: {'releaseId': cardsightReleaseId},
+    );
+    if (res.status != 200) throw Exception('Failed to fetch sets: ${res.status}');
+    final list = res.data as List? ?? [];
+    return list.map((r) => CatalogSetSummary.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<LazyImportResult> lazyImportCatalog({
+    required String cardsightReleaseId,
+    required String releaseName,
+    required String releaseYear,
+    required String releaseSegmentId,
+    required String cardsightSetId,
+  }) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-lazy-import',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        'releaseName':        releaseName,
+        'releaseYear':        releaseYear,
+        'releaseSegmentId':   releaseSegmentId,
+        'cardsightSetId':     cardsightSetId,
+      },
+    );
+    if (res.status != 200) throw Exception('Catalog import failed: ${res.status}');
+    return LazyImportResult.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<String> addCard(AddCardFormData form) async {

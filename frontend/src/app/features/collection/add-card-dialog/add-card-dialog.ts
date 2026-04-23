@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CardsService, MasterCard } from '../../../core/services/cards';
 import { ReleasesService, ReleaseRecord, SetParallel, SetRecord } from '../../../core/services/releases';
+import { CardsightService, CardsightReleaseResult, CatalogSetSummary } from '../../../core/services/cardsight';
 import { UiService } from '../../../core/services/ui';
 
 const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
@@ -16,6 +17,7 @@ const GRADERS = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 export class AddCardDialog {
   private cardsService = inject(CardsService);
   private releasesService = inject(ReleasesService);
+  private cardsightService = inject(CardsightService);
   private ui = inject(UiService);
 
   @Output() cardAdded = new EventEmitter<void>();
@@ -31,6 +33,16 @@ export class AddCardDialog {
   setResults = signal<ReleaseRecord[]>([]);
   showSetDropdown = signal(false);
   selectedSet = signal<ReleaseRecord | null>(null);
+  noSetResults = signal(false);
+
+  // ── Catalog fallback ──────────────────────────────────────
+  catalogMode = signal(false);
+  catalogSearching = signal(false);
+  catalogResults = signal<CardsightReleaseResult[]>([]);
+  selectedCatalogRelease = signal<CardsightReleaseResult | null>(null);
+  catalogSets = signal<CatalogSetSummary[]>([]);
+  catalogSetsLoading = signal(false);
+  lazyImporting = signal(false);
 
   // ── Step 1.5: Set (subset within the release) ─────────────
   checklists = signal<SetRecord[]>([]);
@@ -130,6 +142,14 @@ export class AddCardDialog {
     this.setResults.set([]);
     this.showSetDropdown.set(false);
     this.selectedSet.set(null);
+    this.noSetResults.set(false);
+    this.catalogMode.set(false);
+    this.catalogSearching.set(false);
+    this.catalogResults.set([]);
+    this.selectedCatalogRelease.set(null);
+    this.catalogSets.set([]);
+    this.catalogSetsLoading.set(false);
+    this.lazyImporting.set(false);
     this.checklists.set([]);
     this.selectedChecklist.set(null);
     this.cardQuery.set('');
@@ -164,6 +184,11 @@ export class AddCardDialog {
     this.selectedSet.set(null);
     this.selectedChecklist.set(null);
     this.checklists.set([]);
+    this.noSetResults.set(false);
+    this.catalogMode.set(false);
+    this.catalogResults.set([]);
+    this.selectedCatalogRelease.set(null);
+    this.catalogSets.set([]);
     if (this.setSearchTimer) clearTimeout(this.setSearchTimer);
     if (!value.trim()) { this.setResults.set([]); this.showSetDropdown.set(false); return; }
     this.setSearchTimer = setTimeout(() => this.doSetSearch(value), 250);
@@ -173,6 +198,7 @@ export class AddCardDialog {
     const results = await this.releasesService.searchReleases(query);
     this.setResults.set(results);
     this.showSetDropdown.set(results.length > 0);
+    this.noSetResults.set(results.length === 0);
   }
 
   async selectSet(release: ReleaseRecord) {
@@ -206,7 +232,96 @@ export class AddCardDialog {
     this.checklists.set([]);
     this.selectedChecklist.set(null);
     this.setParallels.set([]);
+    this.noSetResults.set(false);
+    this.catalogMode.set(false);
+    this.catalogResults.set([]);
+    this.selectedCatalogRelease.set(null);
+    this.catalogSets.set([]);
     this.resetCardSection();
+  }
+
+  // ── Catalog fallback ─────────────────────────────────────
+
+  async searchCatalog() {
+    const q = this.setQuery().trim();
+    if (!q) return;
+    this.catalogMode.set(true);
+    this.catalogSearching.set(true);
+    this.showSetDropdown.set(false);
+    this.catalogResults.set([]);
+    try {
+      const yearMatch = q.match(/^(\d{4})\s+(.+)$/);
+      const params = yearMatch
+        ? { year: parseInt(yearMatch[1], 10), manufacturer: yearMatch[2] }
+        : { manufacturer: q };
+      const results = await this.cardsightService.searchReleases(params);
+      this.catalogResults.set(results);
+    } catch {
+      this.catalogResults.set([]);
+    } finally {
+      this.catalogSearching.set(false);
+    }
+  }
+
+  async selectCatalogRelease(release: CardsightReleaseResult) {
+    this.selectedCatalogRelease.set(release);
+    this.catalogResults.set([]);
+    this.catalogSetsLoading.set(true);
+    try {
+      const sets = await this.cardsightService.getReleaseSets(release.id);
+      this.catalogSets.set(sets);
+    } catch {
+      this.catalogSets.set([]);
+    } finally {
+      this.catalogSetsLoading.set(false);
+    }
+  }
+
+  async selectCatalogSet(catalogSet: CatalogSetSummary) {
+    const release = this.selectedCatalogRelease()!;
+    this.lazyImporting.set(true);
+    this.saveError.set(null);
+    try {
+      const result = await this.cardsightService.lazyImport({
+        cardsightReleaseId: release.id,
+        releaseName:        release.name,
+        releaseYear:        release.year,
+        releaseSegmentId:   release.segmentId,
+        cardsightSetId:     catalogSet.id,
+      });
+      const releaseRecord: ReleaseRecord = {
+        id:                   result.releaseId,
+        name:                 result.releaseName,
+        year:                 parseInt(release.year, 10),
+        sport:                result.releaseSport ?? '',
+        release_type:         'Hobby',
+        set_slug:             '',
+        cardsight_id:         release.id,
+        source:               '',
+        created_at:           '',
+      };
+      const setRecord: SetRecord = {
+        id:             result.setId,
+        release_id:     result.releaseId,
+        name:           result.setName,
+        prefix:         null,
+        created_at:     '',
+        parallel_count: result.parallels.length,
+      };
+      this.selectedSet.set(releaseRecord);
+      this.setQuery.set(`${release.year} ${release.name}`);
+      this.checklists.set([setRecord]);
+      this.selectedChecklist.set(setRecord);
+      this.setParallels.set(result.parallels as SetParallel[]);
+      this.catalogMode.set(false);
+      this.selectedCatalogRelease.set(null);
+      this.catalogSets.set([]);
+      this.resetCardSection();
+    } catch (e: any) {
+      this.saveError.set(e?.message ?? 'Failed to load release. Please try again.');
+    } finally {
+      this.lazyImporting.set(false);
+    }
   }
 
   private resetCardSection() {

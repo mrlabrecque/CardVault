@@ -37,6 +37,92 @@ router.get('/search', async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/cardsight/releases/:cardsightReleaseId/sets
+// Returns set summaries for a catalog release without importing anything. 1 external API call.
+router.get('/releases/:cardsightReleaseId/sets', async (req: AuthRequest, res) => {
+  const { cardsightReleaseId } = req.params;
+  try {
+    const release = await getReleaseDetails(cardsightReleaseId);
+    return res.json(release.sets ?? []);
+  } catch (e: any) {
+    console.error('[cardsight/releases/sets]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/cardsight/lazy-import
+// Imports a single release + single set (with its parallels). ~1 external API call.
+// Release metadata is passed from the client (already known from search results) to
+// avoid a redundant getReleaseDetails call.
+router.post('/lazy-import', async (req: AuthRequest, res) => {
+  const { cardsightReleaseId, releaseName, releaseYear, releaseSegmentId, cardsightSetId } = req.body;
+  if (!cardsightReleaseId || !releaseName || !releaseYear || !cardsightSetId) {
+    return res.status(400).json({ error: 'cardsightReleaseId, releaseName, releaseYear, and cardsightSetId are required' });
+  }
+  try {
+    const sport = releaseSegmentId ? mapSegmentToSport(String(releaseSegmentId)) : null;
+    const slug = [releaseYear, releaseName, sport ?? '']
+      .map(v => String(v).toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))
+      .filter(Boolean)
+      .join('-');
+
+    const [dbRelease] = await sql`
+      INSERT INTO releases (name, year, sport, release_type, set_slug, cardsight_id)
+      VALUES (${releaseName}, ${parseInt(String(releaseYear), 10)}, ${sport}, ${'Hobby'}, ${slug}, ${cardsightReleaseId})
+      ON CONFLICT (cardsight_id) DO UPDATE SET
+        name  = EXCLUDED.name,
+        year  = EXCLUDED.year,
+        sport = COALESCE(releases.sport, EXCLUDED.sport)
+      RETURNING id, name, sport
+    `;
+
+    const setDetail = await getSetDetails(cardsightSetId);
+
+    const [dbSet] = await sql`
+      INSERT INTO sets (release_id, name, card_count, cardsight_id)
+      VALUES (${dbRelease.id}, ${setDetail.name}, ${setDetail.cardCount ?? null}, ${setDetail.id})
+      ON CONFLICT (cardsight_id) DO UPDATE SET
+        name       = EXCLUDED.name,
+        card_count = EXCLUDED.card_count
+      RETURNING id, name
+    `;
+
+    const parallels = setDetail.parallels ?? [];
+    let dbParallels: any[] = [];
+    if (parallels.length > 0) {
+      const rows = parallels.map((p, i) => ({
+        set_id:       dbSet.id,
+        name:         p.name,
+        serial_max:   p.numberedTo ?? null,
+        is_auto:      /\bauto(graph)?\b/i.test(p.name),
+        color_hex:    null,
+        sort_order:   i,
+        cardsight_id: p.id,
+      }));
+      dbParallels = await sql`
+        INSERT INTO set_parallels ${sql(rows)}
+        ON CONFLICT (set_id, name) DO UPDATE SET
+          serial_max   = EXCLUDED.serial_max,
+          is_auto      = EXCLUDED.is_auto,
+          cardsight_id = EXCLUDED.cardsight_id
+        RETURNING id, set_id, name, serial_max, is_auto, color_hex, sort_order, created_at
+      `;
+    }
+
+    return res.json({
+      releaseId:    dbRelease.id,
+      releaseName:  dbRelease.name,
+      releaseSport: dbRelease.sport,
+      setId:        dbSet.id,
+      setName:      dbSet.name,
+      parallels:    dbParallels,
+    });
+  } catch (e: any) {
+    console.error('[cardsight/lazy-import]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/cardsight/import
 // body: { cardsightReleaseId: string }
 router.post('/import', async (req: AuthRequest, res) => {

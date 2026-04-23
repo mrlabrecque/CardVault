@@ -138,15 +138,30 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
           final analyzedCount = _cardStates.values.where((s) => s.result != null).length;
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
             children: [
+              // Breadcrumb
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
+                    ),
+                    const Text('Grading', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                  ],
+                ),
+              ),
               _buildFeeCard(),
               const SizedBox(height: 12),
               _buildSearch(),
               const SizedBox(height: 10),
               _buildAttributeFilters(),
-              const SizedBox(height: 10),
-              _buildSortRow(),
               const SizedBox(height: 10),
               _buildTierFilterRow(),
               if (ungradedCards.isNotEmpty) ...[
@@ -243,13 +258,12 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     return TextField(
       controller: _searchController,
       onChanged: (v) => setState(() => _search = v),
-      style: const TextStyle(fontSize: 13),
+      style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
         hintText: 'Search player, set, sport…',
-        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)),
+        hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
         prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
@@ -266,56 +280,45 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
       ('memorabilia', 'PATCH'),
     ];
     return Row(
-      children: filters.map((f) {
-        final active = _activeFilters.contains(f.$1);
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: () => setState(() => active ? _activeFilters.remove(f.$1) : _activeFilters.add(f.$1)),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: active ? AppTheme.primary : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: active ? AppTheme.primary : const Color(0xFFE5E7EB)),
+      children: [
+        ...filters.map((f) {
+          final active = _activeFilters.contains(f.$1);
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => setState(() => active ? _activeFilters.remove(f.$1) : _activeFilters.add(f.$1)),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: active ? AppTheme.primary : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: active ? AppTheme.primary : const Color(0xFFE5E7EB)),
+                ),
+                child: Text(f.$2, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF6B7280))),
               ),
-              child: Text(f.$2, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF6B7280))),
             ),
-          ),
-        );
-      }).toList(),
+          );
+        }),
+        const Spacer(),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.sort),
+          onSelected: (s) => setState(() => _sortBy = s),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: 'value-desc',   child: _sortItem(Icons.trending_up,   'Value ↓',      _sortBy == 'value-desc')),
+            PopupMenuItem(value: 'player',        child: _sortItem(Icons.sort_by_alpha, 'Player A–Z',   _sortBy == 'player')),
+            PopupMenuItem(value: 'profit-desc',   child: _sortItem(Icons.percent,       'PSA 9 Profit', _sortBy == 'profit-desc')),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildSortRow() {
-    final opts = [('value-desc', 'Value'), ('player', 'Player A–Z'), ('profit-desc', 'PSA 9 Profit')];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          const Text('SORT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFFD1D5DB), letterSpacing: 1)),
-          const SizedBox(width: 8),
-          ...opts.map((o) {
-            final active = _sortBy == o.$1;
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: GestureDetector(
-                onTap: () => setState(() => _sortBy = o.$1),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: active ? AppTheme.primary : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: active ? AppTheme.primary : const Color(0xFFE5E7EB)),
-                  ),
-                  child: Text(o.$2, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF6B7280))),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
+  Widget _sortItem(IconData icon, String label, bool active) {
+    return Row(children: [
+      Icon(icon, size: 16, color: active ? AppTheme.primary : null),
+      const SizedBox(width: 8),
+      Text(label, style: TextStyle(fontWeight: active ? FontWeight.w700 : FontWeight.normal)),
+    ]);
   }
 
   Widget _buildTierFilterRow() {

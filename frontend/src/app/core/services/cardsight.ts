@@ -18,6 +18,31 @@ export interface CardsightImportResult {
   parallelsCount: number;
 }
 
+export interface CatalogSetSummary {
+  id: string;
+  name: string;
+  cardCount: number;
+  parallelCount: number;
+}
+
+export interface LazyImportResult {
+  releaseId: string;
+  releaseName: string;
+  releaseSport: string | null;
+  setId: string;
+  setName: string;
+  parallels: Array<{
+    id: string;
+    set_id: string;
+    name: string;
+    serial_max: number | null;
+    is_auto: boolean;
+    color_hex: string | null;
+    sort_order: number;
+    created_at: string;
+  }>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CardsightService {
   constructor(private auth: AuthService) {}
@@ -49,6 +74,39 @@ export class CardsightService {
     const data = await res.json() as CardsightReleaseResult[];
     console.log('[cardsight] search response:', data);
     return data;
+  }
+
+  async getReleaseSets(cardsightReleaseId: string): Promise<CatalogSetSummary[]> {
+    const headers = await this.authHeaders();
+    const res = await fetch(
+      `${environment.apiUrl}/api/cardsight/releases/${cardsightReleaseId}/sets`,
+      { headers }
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as any;
+      throw new Error(body?.error ?? `Failed to fetch sets (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async lazyImport(params: {
+    cardsightReleaseId: string;
+    releaseName: string;
+    releaseYear: string;
+    releaseSegmentId: string;
+    cardsightSetId: string;
+  }): Promise<LazyImportResult> {
+    const headers = await this.authHeaders();
+    const res = await fetch(`${environment.apiUrl}/api/cardsight/lazy-import`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as any;
+      throw new Error(body?.error ?? `Catalog import failed (${res.status})`);
+    }
+    return res.json();
   }
 
   async importRelease(

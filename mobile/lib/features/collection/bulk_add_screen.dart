@@ -381,7 +381,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                   onChanged: _searchReleases,
                   decoration: InputDecoration(
                     hintText: 'Search releases…',
-                    prefixIcon: const Icon(Icons.search),
+                    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                    prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
                     suffixIcon: _loadingReleases
                         ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
                         : null,
@@ -483,7 +484,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     onChanged: _searchCards,
                     decoration: InputDecoration(
                       hintText: 'Search player name…',
-                      prefixIcon: const Icon(Icons.search),
+                      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                      prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
                       suffixIcon: _loadingCards
                           ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
                           : null,

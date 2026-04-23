@@ -52,7 +52,9 @@
               class="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900
                      placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020]/50"
             />
-            @if (showSetDropdown() && setResults().length > 0) {
+
+            <!-- Local results dropdown -->
+            @if (!catalogMode() && showSetDropdown() && setResults().length > 0) {
               <div class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg
                           overflow-hidden z-10 max-h-48 overflow-y-auto">
                 @for (set of setResults(); track set.id) {
@@ -66,11 +68,98 @@
                     </div>
                   </button>
                 }
+                <button
+                  class="w-full flex items-center gap-2 px-4 py-2.5 text-left text-gray-400 hover:bg-gray-50 text-xs border-t border-gray-100"
+                  (click)="searchCatalog()">
+                  <i class="pi pi-globe text-xs"></i>
+                  Search full catalog…
+                </button>
+              </div>
+            }
+
+            <!-- Catalog searching -->
+            @if (catalogSearching()) {
+              <div class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 px-4 py-3 flex items-center gap-2 text-sm text-gray-400">
+                <i class="pi pi-spin pi-spinner text-xs"></i> Searching…
+              </div>
+            }
+
+            <!-- Catalog results dropdown -->
+            @if (!catalogSearching() && catalogMode() && !selectedCatalogRelease()) {
+              <div class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg
+                          overflow-hidden z-10 max-h-56 overflow-y-auto">
+                @if (catalogResults().length > 0) {
+                  @for (r of catalogResults(); track r.id) {
+                    <button
+                      class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                      (click)="selectCatalogRelease(r)">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-gray-900 truncate">{{ r.year }} {{ r.name }}</p>
+                      </div>
+                      <i class="pi pi-chevron-right text-gray-300 text-xs shrink-0"></i>
+                    </button>
+                  }
+                } @else {
+                  <div class="px-4 py-3 text-sm text-gray-400">No results found.</div>
+                }
+                <button
+                  class="w-full flex items-center gap-2 px-4 py-2 text-left text-gray-400 hover:bg-gray-50 text-xs border-t border-gray-100"
+                  (click)="onSetQueryChange(setQuery())">
+                  <i class="pi pi-arrow-left text-xs"></i> Back to local search
+                </button>
               </div>
             }
           </div>
+
+          <!-- No local results — prompt catalog search -->
+          @if (!catalogMode() && noSetResults() && setQuery().trim()) {
+            <div class="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5 mt-1">
+              <span class="text-sm text-gray-400">Not in your catalog.</span>
+              <button class="text-sm font-semibold text-[#800020]" (click)="searchCatalog()">
+                Search online +
+              </button>
+            </div>
+          }
         }
       </div>
+
+      <!-- ── Catalog set picker (shown when a catalog release is selected but not yet imported) -->
+      @if (selectedCatalogRelease() && !selectedSet()) {
+        <div class="flex flex-col gap-2">
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+            Set <span class="text-red-400">*</span>
+          </label>
+
+          @if (lazyImporting()) {
+            <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-400">
+              <i class="pi pi-spin pi-spinner text-xs"></i> Loading…
+            </div>
+          } @else if (catalogSetsLoading()) {
+            <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-400">
+              <i class="pi pi-spin pi-spinner text-xs"></i> Fetching sets…
+            </div>
+          } @else {
+            <div class="flex flex-col gap-1">
+              @for (s of catalogSets(); track s.id) {
+                <button
+                  class="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
+                  (click)="selectCatalogSet(s)">
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-gray-900 truncate">{{ s.name }}</p>
+                    @if (s.parallelCount > 0) {
+                      <p class="text-[11px] text-gray-400">{{ s.parallelCount }} parallels</p>
+                    }
+                  </div>
+                  <i class="pi pi-chevron-right text-gray-300 text-xs shrink-0"></i>
+                </button>
+              }
+              @if (catalogSets().length === 0) {
+                <p class="text-sm text-gray-400 text-center py-3">No sets found for this release.</p>
+              }
+            </div>
+          }
+        </div>
+      }
 
       <!-- ── SECTION 1.5: Set ──────────────────────────────────────── -->
       @if (selectedSet() && checklists().length > 0) {

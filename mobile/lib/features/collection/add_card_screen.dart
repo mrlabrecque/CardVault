@@ -18,7 +18,17 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   final _releaseCtrl = TextEditingController();
   List<ReleaseRecord> _releaseResults = [];
   bool _loadingReleases = false;
+  bool _noReleaseResults = false;
   ReleaseRecord? _selectedRelease;
+
+  // ── Catalog fallback ─────────────────────────────────────────
+  bool _catalogMode = false;
+  bool _catalogSearching = false;
+  List<CatalogRelease> _catalogReleaseResults = [];
+  CatalogRelease? _selectedCatalogRelease;
+  List<CatalogSetSummary> _catalogSets = [];
+  bool _loadingCatalogSets = false;
+  bool _lazyImporting = false;
 
   // ── Step 2: Set ──────────────────────────────────────────────
   List<SetRecord> _sets = [];
@@ -70,12 +80,81 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   }
 
   Future<void> _searchReleases(String query) async {
-    setState(() => _loadingReleases = true);
+    setState(() { _loadingReleases = true; _noReleaseResults = false; _catalogMode = false; });
     try {
       final results = await ref.read(cardsServiceProvider).searchReleases(query);
-      setState(() => _releaseResults = results);
+      setState(() {
+        _releaseResults = results;
+        _noReleaseResults = results.isEmpty && query.trim().isNotEmpty;
+      });
     } finally {
       setState(() => _loadingReleases = false);
+    }
+  }
+
+  Future<void> _searchCatalog() async {
+    final query = _releaseCtrl.text.trim();
+    if (query.isEmpty) return;
+    setState(() { _catalogMode = true; _catalogSearching = true; _catalogReleaseResults = []; });
+    try {
+      final yearMatch = RegExp(r'^(\d{4})\s+(.+)$').firstMatch(query);
+      final year = yearMatch != null ? int.tryParse(yearMatch.group(1)!) : null;
+      final manufacturer = yearMatch != null ? yearMatch.group(2)! : query;
+      final results = await ref.read(cardsServiceProvider).searchCatalogReleases(manufacturer, year: year);
+      setState(() => _catalogReleaseResults = results);
+    } catch (_) {
+      setState(() => _catalogReleaseResults = []);
+    } finally {
+      setState(() => _catalogSearching = false);
+    }
+  }
+
+  Future<void> _selectCatalogRelease(CatalogRelease release) async {
+    setState(() { _selectedCatalogRelease = release; _catalogReleaseResults = []; _loadingCatalogSets = true; });
+    try {
+      final sets = await ref.read(cardsServiceProvider).getCatalogSets(release.id);
+      setState(() => _catalogSets = sets);
+    } catch (_) {
+      setState(() => _catalogSets = []);
+    } finally {
+      setState(() => _loadingCatalogSets = false);
+    }
+  }
+
+  Future<void> _selectCatalogSet(CatalogSetSummary catalogSet) async {
+    final release = _selectedCatalogRelease!;
+    setState(() => _lazyImporting = true);
+    try {
+      final result = await ref.read(cardsServiceProvider).lazyImportCatalog(
+        cardsightReleaseId: release.id,
+        releaseName:        release.name,
+        releaseYear:        release.year,
+        releaseSegmentId:   release.segmentId,
+        cardsightSetId:     catalogSet.id,
+      );
+      setState(() {
+        _selectedRelease = ReleaseRecord(id: result.releaseId, name: result.releaseName, sport: result.releaseSport);
+        _releaseCtrl.text = '${release.year} ${result.releaseName}';
+        _sets = [SetRecord(id: result.setId, name: result.setName)];
+        _selectedSet = _sets.first;
+        _parallels = result.parallels;
+        _selectedCatalogRelease = null;
+        _catalogSets = [];
+        _catalogMode = false;
+        _releaseResults = [];
+        _noReleaseResults = false;
+        _selectedCard = null;
+        _cardCtrl.clear();
+        _isNewCard = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _lazyImporting = false);
     }
   }
 
@@ -227,8 +306,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             results: _releaseResults,
             loading: _loadingReleases,
             selected: _selectedRelease,
+            noResults: _noReleaseResults && !_catalogMode,
             onSearch: _searchReleases,
             onSelect: _selectRelease,
+            onSearchCatalog: _searchCatalog,
             onClear: () => setState(() {
               _selectedRelease = null;
               _releaseCtrl.clear();
@@ -237,8 +318,44 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               _selectedSet = null;
               _selectedCard = null;
               _isNewCard = false;
+              _catalogMode = false;
+              _catalogReleaseResults = [];
+              _selectedCatalogRelease = null;
+              _catalogSets = [];
+              _noReleaseResults = false;
             }),
           ),
+
+          // Catalog searching spinner
+          if (_catalogSearching)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+
+          // Catalog release results
+          if (!_catalogSearching && _catalogMode && _selectedCatalogRelease == null) ...[
+            const SizedBox(height: 4),
+            _CatalogReleaseList(
+              results: _catalogReleaseResults,
+              onSelect: _selectCatalogRelease,
+              onBack: () => setState(() { _catalogMode = false; _catalogReleaseResults = []; }),
+            ),
+          ],
+
+          // Catalog set picker
+          if (_selectedCatalogRelease != null && _selectedRelease == null) ...[
+            const SizedBox(height: 20),
+            _sectionHeader('Set', colors),
+            const SizedBox(height: 8),
+            if (_loadingCatalogSets || _lazyImporting)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              _CatalogSetList(sets: _catalogSets, onSelect: _selectCatalogSet),
+          ],
 
           if (_selectedRelease != null) ...[
             const SizedBox(height: 20),
@@ -356,16 +473,20 @@ class _ReleaseSearch extends StatefulWidget {
     required this.results,
     required this.loading,
     required this.selected,
+    required this.noResults,
     required this.onSearch,
     required this.onSelect,
+    required this.onSearchCatalog,
     required this.onClear,
   });
   final TextEditingController controller;
   final List<ReleaseRecord> results;
   final bool loading;
   final ReleaseRecord? selected;
+  final bool noResults;
   final void Function(String) onSearch;
   final void Function(ReleaseRecord) onSelect;
+  final VoidCallback onSearchCatalog;
   final VoidCallback onClear;
 
   @override
@@ -392,7 +513,8 @@ class _ReleaseSearchState extends State<_ReleaseSearch> {
           onChanged: widget.onSearch,
           decoration: InputDecoration(
             hintText: 'Search releases…',
-            prefixIcon: const Icon(Icons.search),
+            hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
             suffixIcon: widget.loading ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             isDense: true,
@@ -405,21 +527,44 @@ class _ReleaseSearchState extends State<_ReleaseSearch> {
               border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: widget.results.length > 8 ? 8 : widget.results.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final r = widget.results[i];
-                return ListTile(
+            child: Column(
+              children: [
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: widget.results.length > 8 ? 8 : widget.results.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final r = widget.results[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(r.displayName, style: const TextStyle(fontSize: 14)),
+                      subtitle: r.sport != null ? Text(r.sport!, style: const TextStyle(fontSize: 12)) : null,
+                      onTap: () => widget.onSelect(r),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
                   dense: true,
-                  title: Text(r.displayName, style: const TextStyle(fontSize: 14)),
-                  subtitle: r.sport != null ? Text(r.sport!, style: const TextStyle(fontSize: 12)) : null,
-                  onTap: () => widget.onSelect(r),
-                );
-              },
+                  leading: Icon(Icons.public, size: 16, color: colors.onSurface.withValues(alpha: 0.4)),
+                  title: Text('Search full catalog…', style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
+                  onTap: widget.onSearchCatalog,
+                ),
+              ],
             ),
+          ),
+        ],
+        if (widget.noResults) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: Text('Not in your catalog.', style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5)))),
+              TextButton(
+                onPressed: widget.onSearchCatalog,
+                child: const Text('Search online +'),
+              ),
+            ],
           ),
         ],
       ],
@@ -454,8 +599,9 @@ class _SetPicker extends StatelessWidget {
             child: TextField(
               controller: filterCtrl,
               decoration: InputDecoration(
-                hintText: 'Filter sets…',
-                prefixIcon: const Icon(Icons.search, size: 18),
+                hintText: 'Search sets…',
+                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 isDense: true,
               ),
@@ -532,7 +678,8 @@ class _CardSearch extends StatelessWidget {
           onChanged: onSearch,
           decoration: InputDecoration(
             hintText: 'Search player name…',
-            prefixIcon: const Icon(Icons.search),
+            hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
             suffixIcon: loading ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             isDense: true,
@@ -780,6 +927,86 @@ class _YourCopyFields extends StatelessWidget {
           ]),
         ],
       ],
+    );
+  }
+}
+
+// ── Catalog Release Results ───────────────────────────────────────────────────
+
+class _CatalogReleaseList extends StatelessWidget {
+  const _CatalogReleaseList({required this.results, required this.onSelect, required this.onBack});
+  final List<CatalogRelease> results;
+  final void Function(CatalogRelease) onSelect;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          if (results.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('No results found.', style: TextStyle(fontSize: 13)),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: results.length > 10 ? 10 : results.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final r = results[i];
+                return ListTile(
+                  dense: true,
+                  title: Text(r.displayName, style: const TextStyle(fontSize: 14)),
+                  trailing: const Icon(Icons.chevron_right, size: 16),
+                  onTap: () => onSelect(r),
+                );
+              },
+            ),
+          const Divider(height: 1),
+          ListTile(
+            dense: true,
+            leading: Icon(Icons.arrow_back, size: 16, color: colors.onSurface.withValues(alpha: 0.4)),
+            title: Text('Back to local search', style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
+            onTap: onBack,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Catalog Set List ──────────────────────────────────────────────────────────
+
+class _CatalogSetList extends StatelessWidget {
+  const _CatalogSetList({required this.sets, required this.onSelect});
+  final List<CatalogSetSummary> sets;
+  final void Function(CatalogSetSummary) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (sets.isEmpty) {
+      return const Text('No sets found for this release.', style: TextStyle(fontSize: 13));
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: sets.map((s) => ChoiceChip(
+        label: Text(s.name),
+        selected: false,
+        onSelected: (_) => onSelect(s),
+        avatar: s.parallelCount > 0
+            ? Text('${s.parallelCount}', style: TextStyle(fontSize: 10, color: colors.onSurface.withValues(alpha: 0.5)))
+            : null,
+      )).toList(),
     );
   }
 }

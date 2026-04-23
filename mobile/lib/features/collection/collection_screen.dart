@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
+import '../../core/theme/app_theme.dart';
 import 'widgets/card_stack_tile.dart';
 import 'widgets/set_row_tile.dart';
 
@@ -135,14 +136,20 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   TextField(
                     controller: _searchCtrl,
                     onChanged: (v) => setState(() => _query = v),
-                    decoration: InputDecoration(
+                    style: const TextStyle(fontSize: 14),
+                  decoration: InputDecoration(
                       hintText: 'Search player, set, sport…',
-                      prefixIcon: const Icon(Icons.search),
+                      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                      prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
                       suffixIcon: _query.isNotEmpty
                           ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); setState(() => _query = ''); })
                           : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4))),
                     ),
                   ),
                   Padding(
