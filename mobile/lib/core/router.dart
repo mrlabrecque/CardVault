@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_service.dart';
+import 'services/cards_service.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
@@ -14,6 +15,11 @@ import '../features/collection/bulk_add_screen.dart';
 import '../features/collection/item_detail_screen.dart';
 import '../features/lot_builder/lot_builder_screen.dart';
 import '../features/grading/grading_screen.dart';
+import '../features/admin/catalog_import_screen.dart';
+import '../features/admin/admin_releases_screen.dart';
+import '../features/admin/admin_sets_screen.dart';
+import '../features/admin/admin_parallels_screen.dart';
+import '../features/admin/pending_parallels_screen.dart';
 import 'models/user_card.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
@@ -50,6 +56,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/grading', builder: (context, state) => const GradingScreen()),
           GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
           GoRoute(path: '/scan', builder: (context, state) => const ScanScreen()),
+          GoRoute(path: '/admin/catalog-import', builder: (_, _) => const CatalogImportScreen()),
+          GoRoute(path: '/admin/pending-parallels', builder: (_, _) => const PendingParallelsScreen()),
+          GoRoute(path: '/admin/releases', builder: (_, _) => const AdminReleasesScreen()),
+          GoRoute(
+            path: '/admin/releases/:id/sets',
+            builder: (_, state) => AdminSetsScreen(release: state.extra as ReleaseRecord),
+          ),
+          GoRoute(
+            path: '/admin/releases/:id/sets/:setId/parallels',
+            builder: (_, state) {
+              final extra = state.extra as (ReleaseRecord, SetRecord);
+              return AdminParallelsScreen(release: extra.$1, set: extra.$2);
+            },
+          ),
         ],
       ),
     ],

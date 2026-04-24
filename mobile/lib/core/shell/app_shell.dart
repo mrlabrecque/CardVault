@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_service.dart';
+import '../services/cards_service.dart';
 import '../theme/app_theme.dart';
 
 class AppShell extends ConsumerWidget {
@@ -17,11 +18,14 @@ class AppShell extends ConsumerWidget {
   ];
 
   static const _tabTitles = {
-    '/dashboard':  'Dashboard',
-    '/collection': 'Collection',
-    '/scan':       'Scan',
-    '/tools':      'Tools',
-    '/wishlist':   'Wishlist',
+    '/dashboard':                 'Dashboard',
+    '/collection':                'Collection',
+    '/scan':                      'Scan',
+    '/tools':                     'Tools',
+    '/wishlist':                  'Wishlist',
+    '/admin/catalog-import':      'Catalog Import',
+    '/admin/releases':            'Manage Releases',
+    '/admin/pending-parallels':   'Pending Parallels',
   };
 
   int _selectedIndex(String location) {
@@ -29,7 +33,8 @@ class AppShell extends ConsumerWidget {
     return idx < 0 ? 0 : idx;
   }
 
-  bool _isTabRoute(String location) => _tabTitles.keys.any((p) => location == p);
+  bool _isTabRoute(String location) =>
+    _tabTitles.keys.any((p) => location == p) || location.startsWith('/admin');
 
   String _pageTitle(String location) {
     for (final entry in _tabTitles.entries) {
@@ -84,13 +89,18 @@ class AppShell extends ConsumerWidget {
   }
 
   void _showAvatarSheet(BuildContext context, WidgetRef ref, String? email) {
+    final router = GoRouter.of(context);
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _AvatarSheet(
+      builder: (sheetCtx) => _AvatarSheet(
         email: email,
+        onNavigate: (path) {
+          Navigator.of(sheetCtx).pop();
+          router.go(path);
+        },
         onSignOut: () async {
           Navigator.pop(context);
           await ref.read(supabaseProvider).auth.signOut();
@@ -174,13 +184,19 @@ class _ShellHeader extends StatelessWidget {
 
 // ── Avatar bottom sheet ────────────────────────────────────────────────────────
 
-class _AvatarSheet extends StatelessWidget {
-  const _AvatarSheet({this.email, required this.onSignOut});
+class _AvatarSheet extends ConsumerWidget {
+  const _AvatarSheet({this.email, required this.onNavigate, required this.onSignOut});
   final String? email;
+  final void Function(String path) onNavigate;
   final VoidCallback onSignOut;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isAdmin = ref.watch(isAppAdminProvider).asData?.value ?? false;
+    final pendingCount = isAdmin
+        ? (ref.watch(pendingParallelCountProvider).asData?.value ?? 0)
+        : 0;
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
@@ -191,27 +207,32 @@ class _AvatarSheet extends StatelessWidget {
             Center(
               child: Container(
                 width: 36, height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            const Text('Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black87)),
+            const SizedBox(height: 16),
             if (email != null) ...[
-              Text(email!,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+              Text(email!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
               const SizedBox(height: 16),
               Divider(color: Colors.grey.shade100),
               const SizedBox(height: 8),
+            ],
+            if (isAdmin) ...[
+              _AdminLink(label: 'Catalog Import',     icon: Icons.download_outlined,     onTap: () => onNavigate('/admin/catalog-import')),
+              _AdminLink(label: 'Manage Releases',    icon: Icons.library_books_outlined, onTap: () => onNavigate('/admin/releases')),
+              _AdminLink(label: 'Pending Parallels',  icon: Icons.pending_outlined,       badge: pendingCount > 0 ? pendingCount : null, onTap: () => onNavigate('/admin/pending-parallels')),
+              const SizedBox(height: 4),
+              Divider(color: Colors.grey.shade100),
+              const SizedBox(height: 4),
             ],
             SizedBox(
               width: double.infinity,
               child: TextButton.icon(
                 onPressed: onSignOut,
                 icon: Icon(Icons.logout, size: 16, color: Colors.red.shade400),
-                label: Text('Sign Out',
-                    style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w600)),
+                label: Text('Sign Out', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w600)),
                 style: TextButton.styleFrom(
                   alignment: Alignment.centerLeft,
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
@@ -219,6 +240,38 @@ class _AvatarSheet extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminLink extends StatelessWidget {
+  const _AdminLink({required this.label, required this.icon, required this.onTap, this.badge});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final int? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: TextButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16, color: AppTheme.primary),
+        label: Row(children: [
+          Expanded(child: Text(label, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500))),
+          if (badge != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(color: Colors.amber.shade600, borderRadius: BorderRadius.circular(10)),
+              child: Text('$badge', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+        ]),
+        style: TextButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
         ),
       ),
     );

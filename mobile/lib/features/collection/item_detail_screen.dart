@@ -373,9 +373,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
 
           // Your Copy header
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Your Copy', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text('Your Copy', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              ),
               if (!_editing)
                 TextButton.icon(
                   onPressed: _startEdit,

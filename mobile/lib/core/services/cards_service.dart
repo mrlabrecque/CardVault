@@ -19,32 +19,36 @@ class SetParallel {
 }
 
 class ReleaseRecord {
-  const ReleaseRecord({required this.id, required this.name, this.year, this.sport});
+  const ReleaseRecord({required this.id, required this.name, this.year, this.sport, this.cardsightId});
   final String id;
   final String name;
   final int? year;
   final String? sport;
+  final String? cardsightId;
 
   factory ReleaseRecord.fromJson(Map<String, dynamic> j) => ReleaseRecord(
-    id: j['id'] as String,
-    name: j['name'] as String,
-    year: j['year'] as int?,
-    sport: j['sport'] as String?,
+    id:          j['id'] as String,
+    name:        j['name'] as String,
+    year:        j['year'] as int?,
+    sport:       j['sport'] as String?,
+    cardsightId: j['cardsight_id'] as String?,
   );
 
   String get displayName => year != null ? '$year $name' : name;
 }
 
 class SetRecord {
-  const SetRecord({required this.id, required this.name, this.cardCount});
+  const SetRecord({required this.id, required this.name, this.cardCount, this.cardsightId});
   final String id;
   final String name;
   final int? cardCount;
+  final String? cardsightId;
 
   factory SetRecord.fromJson(Map<String, dynamic> j) => SetRecord(
-    id: j['id'] as String,
-    name: j['name'] as String,
-    cardCount: j['card_count'] as int?,
+    id:          j['id'] as String,
+    name:        j['name'] as String,
+    cardCount:   j['card_count'] as int?,
+    cardsightId: j['cardsight_id'] as String?,
   );
 }
 
@@ -103,15 +107,17 @@ class CatalogRelease {
 }
 
 class CatalogSetSummary {
-  const CatalogSetSummary({required this.id, required this.name, this.parallelCount = 0});
+  const CatalogSetSummary({required this.id, required this.name, this.parallelCount = 0, this.cardCount});
   final String id;
   final String name;
   final int parallelCount;
+  final int? cardCount;
 
   factory CatalogSetSummary.fromJson(Map<String, dynamic> j) => CatalogSetSummary(
     id:            j['id'] as String,
     name:          j['name'] as String,
     parallelCount: (j['parallelCount'] as int?) ?? 0,
+    cardCount:     j['cardCount'] as int?,
   );
 }
 
@@ -219,7 +225,7 @@ class CardsService {
   }
 
   Future<List<ReleaseRecord>> searchReleases(String query) async {
-    var q = _supabase.from('releases').select('id, name, year, sport');
+    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id');
     if (query.trim().isNotEmpty) {
       q = q.ilike('name', '%${query.trim()}%');
     }
@@ -227,16 +233,71 @@ class CardsService {
     return (data as List).map((r) => ReleaseRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  /// Browses releases from our DB — no API call. Paginated.
+  Future<List<ReleaseRecord>> browseReleases({int? year, String? sport, int offset = 0, int limit = 30}) async {
+    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id');
+    if (year != null) q = q.eq('year', year);
+    if (sport != null && sport.isNotEmpty) q = q.eq('sport', sport);
+    final data = await q
+        .order('year', ascending: false)
+        .order('name')
+        .range(offset, offset + limit - 1);
+    return (data as List).map((r) => ReleaseRecord.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Lazily fetches sets for a release from CardSight and caches them in DB.
+  Future<List<SetRecord>> importSetsForRelease({
+    required String cardsightReleaseId,
+    String? releaseName,
+    String? releaseYear,
+    String? releaseSegmentId,
+  }) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-import-sets',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        if (releaseName    case final v?) 'releaseName':      v,
+        if (releaseYear    case final v?) 'releaseYear':      v,
+        if (releaseSegmentId case final v?) 'releaseSegmentId': v,
+      },
+    );
+    if (res.status != 200) throw Exception('Import sets failed: ${res.status}');
+    final list = ((res.data as Map<String, dynamic>)['sets'] as List?) ?? [];
+    return list.map((r) => SetRecord.fromJson({
+      'id':           (r as Map<String, dynamic>)['id'],
+      'name':         r['name'],
+      'card_count':   r['cardCount'],
+      'cardsight_id': r['cardsightId'],
+    })).toList();
+  }
+
   Future<List<SetRecord>> getSetsForRelease(String releaseId) async {
     final data = await _supabase
         .from('sets')
-        .select('id, name, card_count')
+        .select('id, name, card_count, cardsight_id')
         .eq('release_id', releaseId)
         .order('name');
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  Future<List<MasterCard>> searchMasterCards(String setId, String query) async {
+  /// Lazily imports all cards for a set from CardSight and caches them in DB.
+  Future<void> importCardsForSet({
+    required String cardsightReleaseId,
+    required String cardsightSetId,
+    required String setId,
+  }) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-import-cards',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        'cardsightSetId': cardsightSetId,
+        'setId': setId,
+      },
+    );
+    if (res.status != 200) throw Exception('Import cards failed: ${res.status}');
+  }
+
+  Future<List<MasterCard>> searchMasterCards(String setId, String query, {int offset = 0, int limit = 50}) async {
     var q = _supabase
         .from('master_card_definitions')
         .select('id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url')
@@ -244,7 +305,7 @@ class CardsService {
     if (query.trim().isNotEmpty) {
       q = q.ilike('player', '%${query.trim()}%');
     }
-    final data = await q.order('player').limit(50);
+    final data = await q.order('player').range(offset, offset + limit - 1);
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
   }
 
@@ -255,10 +316,11 @@ class CardsService {
         .eq('id', cardId);
   }
 
-  Future<List<CatalogRelease>> searchCatalogReleases(String query, {int? year}) async {
+  Future<List<CatalogRelease>> searchCatalogReleases(String query, {int? year, String? segment}) async {
     final body = <String, dynamic>{};
     if (query.isNotEmpty) body['query'] = query;
     if (year != null) body['year'] = year;
+    if (segment != null && segment.isNotEmpty) body['segment'] = segment;
     final res = await _supabase.functions.invoke('catalog-search', body: body);
     if (res.status != 200) throw Exception('Catalog search failed: ${res.status}');
     final list = res.data as List? ?? [];
@@ -294,6 +356,63 @@ class CardsService {
     );
     if (res.status != 200) throw Exception('Catalog import failed: ${res.status}');
     return LazyImportResult.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  // ── Admin methods ─────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> bulkImportReleases({
+    required int year,
+    required String segment,
+    int skip = 0,
+  }) async {
+    final res = await _supabase.functions.invoke('catalog-bulk-import', body: {
+      'year': year,
+      'segment': segment,
+      'skip': skip,
+    });
+    if (res.status != 200) throw Exception('Bulk import failed: ${res.status}');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<List<PendingParallel>> getPendingParallels() async {
+    final data = await _supabase
+        .from('pending_parallels')
+        .select('id, set_id, name, submission_count, status, sets(name, releases(name))')
+        .eq('status', 'pending')
+        .order('submission_count', ascending: false);
+    return (data as List).map((r) => PendingParallel.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> promotePendingParallel({
+    required String id,
+    required String setId,
+    required String name,
+    int? serialMax,
+    bool isAuto = false,
+    String? colorHex,
+  }) async {
+    final hex = (colorHex?.isNotEmpty ?? false) ? colorHex : null;
+    await _supabase.from('set_parallels').upsert({
+      'set_id': setId,
+      'name': name,
+      if (serialMax case final v?) 'serial_max': v,
+      'is_auto': isAuto,
+      if (hex case final v?) 'color_hex': v,
+    }, onConflict: 'set_id,name');
+    await _supabase.from('pending_parallels').update({'status': 'approved'}).eq('id', id);
+  }
+
+  Future<void> dismissPendingParallel(String id) async {
+    await _supabase.from('pending_parallels').update({'status': 'dismissed'}).eq('id', id);
+  }
+
+  Future<void> upsertParallels(String setId, List<Map<String, dynamic>> parallels) async {
+    final rows = parallels.map((p) => {'set_id': setId, ...p}).toList();
+    await _supabase.from('set_parallels').upsert(rows, onConflict: 'set_id,name');
+  }
+
+  Future<void> deleteParallel(String id) async {
+    await _supabase.from('set_parallels').delete().eq('id', id);
   }
 
   Future<String> addCard(AddCardFormData form) async {
@@ -340,6 +459,15 @@ final cardsServiceProvider = Provider<CardsService>((ref) {
   return CardsService(ref.watch(supabaseProvider));
 });
 
+final pendingParallelsProvider = FutureProvider<List<PendingParallel>>((ref) async {
+  return ref.watch(cardsServiceProvider).getPendingParallels();
+});
+
+final pendingParallelCountProvider = FutureProvider<int>((ref) async {
+  final list = await ref.watch(cardsServiceProvider).getPendingParallels();
+  return list.length;
+});
+
 final parallelsProvider = FutureProvider.family<List<SetParallel>, String>((ref, setId) async {
   return ref.watch(cardsServiceProvider).getParallels(setId);
 });
@@ -351,6 +479,41 @@ final setsForReleaseProvider = FutureProvider.family<List<SetRecord>, String>((r
 final userCardsProvider = FutureProvider<List<UserCard>>((ref) async {
   return ref.watch(cardsServiceProvider).loadUserCards();
 });
+
+// ── Admin models ──────────────────────────────────────────────────────────────
+
+class PendingParallel {
+  const PendingParallel({
+    required this.id,
+    required this.setId,
+    required this.name,
+    required this.submissionCount,
+    required this.status,
+    this.setName,
+    this.releaseName,
+  });
+  final String id;
+  final String setId;
+  final String name;
+  final int submissionCount;
+  final String status;
+  final String? setName;
+  final String? releaseName;
+
+  factory PendingParallel.fromJson(Map<String, dynamic> j) {
+    final set = j['sets'] as Map<String, dynamic>?;
+    final release = set?['releases'] as Map<String, dynamic>?;
+    return PendingParallel(
+      id:              j['id'] as String,
+      setId:           j['set_id'] as String,
+      name:            j['name'] as String,
+      submissionCount: j['submission_count'] as int? ?? 1,
+      status:          j['status'] as String? ?? 'pending',
+      setName:         set?['name'] as String?,
+      releaseName:     release?['name'] as String?,
+    );
+  }
+}
 
 final cardStacksProvider = Provider<AsyncValue<List<CardStack>>>((ref) {
   return ref.watch(userCardsProvider).whenData(CardStack.fromCards);

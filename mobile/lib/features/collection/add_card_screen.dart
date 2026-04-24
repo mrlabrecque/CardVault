@@ -3,8 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
+
+const _catalogYears = [
+  '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017',
+];
+
+const _catalogSports = [
+  ('Any sport', ''),
+  ('Baseball', 'Baseball'),
+  ('Basketball', 'Basketball'),
+  ('Football', 'Football'),
+  ('Soccer', 'Soccer'),
+  ('Hockey', 'Hockey'),
+];
+
+enum _CatalogStep { browsing, sets, card }
 
 class AddCardScreen extends ConsumerStatefulWidget {
   const AddCardScreen({super.key});
@@ -14,27 +30,28 @@ class AddCardScreen extends ConsumerStatefulWidget {
 }
 
 class _AddCardScreenState extends ConsumerState<AddCardScreen> {
-  // ── Step 1: Release ─────────────────────────────────────────
-  final _releaseCtrl = TextEditingController();
-  List<ReleaseRecord> _releaseResults = [];
-  bool _loadingReleases = false;
-  bool _noReleaseResults = false;
-  ReleaseRecord? _selectedRelease;
+  // ── Catalog step ─────────────────────────────────────────────
+  _CatalogStep _catalogStep = _CatalogStep.browsing;
+  String _catalogFilterYear = '';
+  String _catalogFilterSport = '';
+  final _browseSearchCtrl = TextEditingController();
 
-  // ── Catalog fallback ─────────────────────────────────────────
-  bool _catalogMode = false;
-  bool _catalogSearching = false;
-  List<CatalogRelease> _catalogReleaseResults = [];
-  CatalogRelease? _selectedCatalogRelease;
-  List<CatalogSetSummary> _catalogSets = [];
-  bool _loadingCatalogSets = false;
+  // ── Browse step (release list) ───────────────────────────────
+  List<ReleaseRecord> _browseResults = [];
+  bool _browseLoading = false;
+  bool _browseHasMore = false;
+  int _browseOffset = 0;
+  static const int _browsePageSize = 30;
+
+  // ── Sets step ────────────────────────────────────────────────
+  ReleaseRecord? _browseSelectedRelease;
+  List<SetRecord> _browseSets = [];
+  bool _browseSetsLoading = false;
   bool _lazyImporting = false;
 
-  // ── Step 2: Set ──────────────────────────────────────────────
-  List<SetRecord> _sets = [];
-  bool _loadingSets = false;
+  // ── Card step: Release + Set (set after browsing) ────────────
+  ReleaseRecord? _selectedRelease;
   SetRecord? _selectedSet;
-  final _setFilterCtrl = TextEditingController();
 
   // ── Step 3: Card ─────────────────────────────────────────────
   final _cardCtrl = TextEditingController();
@@ -42,6 +59,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   bool _loadingCards = false;
   MasterCard? _selectedCard;
   bool _isNewCard = false;
+  int _cardPage = 0;
+  static const int _cardPageSize = 50;
+  bool _cardHasMore = false;
 
   // ── New card fields ──────────────────────────────────────────
   final _newPlayerCtrl = TextEditingController();
@@ -65,10 +85,16 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
 
   bool _saving = false;
 
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBrowseReleases(reset: true);
+  }
+
   @override
   void dispose() {
-    _releaseCtrl.dispose();
-    _setFilterCtrl.dispose();
+    _browseSearchCtrl.dispose();
     _cardCtrl.dispose();
     _newPlayerCtrl.dispose();
     _newCardNumberCtrl.dispose();
@@ -79,73 +105,101 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     super.dispose();
   }
 
-  Future<void> _searchReleases(String query) async {
-    setState(() { _loadingReleases = true; _noReleaseResults = false; _catalogMode = false; });
-    try {
-      final results = await ref.read(cardsServiceProvider).searchReleases(query);
-      setState(() {
-        _releaseResults = results;
-        _noReleaseResults = results.isEmpty && query.trim().isNotEmpty;
-      });
-    } finally {
-      setState(() => _loadingReleases = false);
-    }
-  }
+  // ── Browse step methods ───────────────────────────────────────
 
-  Future<void> _searchCatalog() async {
-    final query = _releaseCtrl.text.trim();
-    if (query.isEmpty) return;
-    setState(() { _catalogMode = true; _catalogSearching = true; _catalogReleaseResults = []; });
+  Future<void> _loadBrowseReleases({bool reset = false}) async {
+    if (reset) setState(() { _browseOffset = 0; _browseResults = []; });
+    setState(() => _browseLoading = true);
     try {
-      final yearMatch = RegExp(r'^(\d{4})\s+(.+)$').firstMatch(query);
-      final year = yearMatch != null ? int.tryParse(yearMatch.group(1)!) : null;
-      final manufacturer = yearMatch != null ? yearMatch.group(2)! : query;
-      final results = await ref.read(cardsServiceProvider).searchCatalogReleases(manufacturer, year: year);
-      setState(() => _catalogReleaseResults = results);
-    } catch (_) {
-      setState(() => _catalogReleaseResults = []);
-    } finally {
-      setState(() => _catalogSearching = false);
-    }
-  }
-
-  Future<void> _selectCatalogRelease(CatalogRelease release) async {
-    setState(() { _selectedCatalogRelease = release; _catalogReleaseResults = []; _loadingCatalogSets = true; });
-    try {
-      final sets = await ref.read(cardsServiceProvider).getCatalogSets(release.id);
-      setState(() => _catalogSets = sets);
-    } catch (_) {
-      setState(() => _catalogSets = []);
-    } finally {
-      setState(() => _loadingCatalogSets = false);
-    }
-  }
-
-  Future<void> _selectCatalogSet(CatalogSetSummary catalogSet) async {
-    final release = _selectedCatalogRelease!;
-    setState(() => _lazyImporting = true);
-    try {
-      final result = await ref.read(cardsServiceProvider).lazyImportCatalog(
-        cardsightReleaseId: release.id,
-        releaseName:        release.name,
-        releaseYear:        release.year,
-        releaseSegmentId:   release.segmentId,
-        cardsightSetId:     catalogSet.id,
+      final year = _catalogFilterYear.isNotEmpty ? int.tryParse(_catalogFilterYear) : null;
+      final sport = _catalogFilterSport.isNotEmpty ? _catalogFilterSport : null;
+      final results = await ref.read(cardsServiceProvider).browseReleases(
+        year: year,
+        sport: sport,
+        offset: _browseOffset,
+        limit: _browsePageSize,
       );
       setState(() {
-        _selectedRelease = ReleaseRecord(id: result.releaseId, name: result.releaseName, sport: result.releaseSport);
-        _releaseCtrl.text = '${release.year} ${result.releaseName}';
-        _sets = [SetRecord(id: result.setId, name: result.setName)];
-        _selectedSet = _sets.first;
-        _parallels = result.parallels;
-        _selectedCatalogRelease = null;
-        _catalogSets = [];
-        _catalogMode = false;
-        _releaseResults = [];
-        _noReleaseResults = false;
+        _browseResults = reset ? results : [..._browseResults, ...results];
+        _browseHasMore = results.length == _browsePageSize;
+        _browseOffset = _browseResults.length;
+      });
+    } finally {
+      setState(() => _browseLoading = false);
+    }
+  }
+
+  Future<void> _selectBrowseRelease(ReleaseRecord release) async {
+    setState(() {
+      _browseSelectedRelease = release;
+      _catalogStep = _CatalogStep.sets;
+      _browseSets = [];
+      _browseSetsLoading = true;
+    });
+    try {
+      final existing = await ref.read(cardsServiceProvider).getSetsForRelease(release.id);
+      if (existing.isNotEmpty) {
+        setState(() => _browseSets = existing);
+      } else if (release.cardsightId != null) {
+        await ref.read(cardsServiceProvider).importSetsForRelease(
+          cardsightReleaseId: release.cardsightId!,
+          releaseName: release.name,
+          releaseYear: release.year?.toString(),
+        );
+        final fresh = await ref.read(cardsServiceProvider).getSetsForRelease(release.id);
+        setState(() => _browseSets = fresh);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load sets: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _catalogStep = _CatalogStep.browsing);
+      }
+    } finally {
+      if (mounted) setState(() => _browseSetsLoading = false);
+    }
+  }
+
+  Future<void> _selectBrowseSet(SetRecord set) async {
+    final release = _browseSelectedRelease!;
+    setState(() => _lazyImporting = true);
+    try {
+      // Lazy-load parallels if needed
+      var parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
+      if (parallels.isEmpty && set.cardsightId != null) {
+        final result = await ref.read(cardsServiceProvider).lazyImportCatalog(
+          cardsightReleaseId: release.cardsightId!,
+          releaseName:        release.name,
+          releaseYear:        release.year?.toString() ?? '',
+          releaseSegmentId:   '',
+          cardsightSetId:     set.cardsightId!,
+        );
+        parallels = result.parallels;
+      }
+
+      // Lazy-load cards if needed
+      var cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '');
+      if (cards.isEmpty && set.cardsightId != null && release.cardsightId != null) {
+        await ref.read(cardsServiceProvider).importCardsForSet(
+          cardsightReleaseId: release.cardsightId!,
+          cardsightSetId: set.cardsightId!,
+          setId: set.id,
+        );
+        cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '');
+      }
+
+      setState(() {
+        _selectedRelease = release;
+        _selectedSet = set;
+        _parallels = parallels;
+        _selectedParallel = null;
+        _parallelName = 'Base';
         _selectedCard = null;
         _cardCtrl.clear();
+        _cardResults = [];
         _isNewCard = false;
+        _catalogStep = _CatalogStep.card;
       });
     } catch (e) {
       if (mounted) {
@@ -158,57 +212,25 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     }
   }
 
-  Future<void> _selectRelease(ReleaseRecord release) async {
-    setState(() {
-      _selectedRelease = release;
-      _releaseCtrl.text = release.displayName;
-      _releaseResults = [];
-      _selectedSet = null;
-      _sets = [];
-      _setFilterCtrl.clear();
-      _selectedCard = null;
-      _cardCtrl.clear();
-      _isNewCard = false;
-      _parallels = [];
-      _selectedParallel = null;
-      _parallelName = 'Base';
-      _loadingSets = true;
-    });
-    try {
-      final sets = await ref.read(cardsServiceProvider).getSetsForRelease(release.id);
-      setState(() => _sets = sets);
-      if (sets.length == 1) _selectSet(sets.first);
-    } finally {
-      setState(() => _loadingSets = false);
-    }
-  }
+  // ── Card search ───────────────────────────────────────────────
 
-  void _selectSet(SetRecord set) async {
-    setState(() {
-      _selectedSet = set;
-      _selectedCard = null;
-      _cardCtrl.clear();
-      _cardResults = [];
-      _isNewCard = false;
-      _parallels = [];
-      _selectedParallel = null;
-      _parallelName = 'Base';
-      _loadingParallels = true;
-    });
-    try {
-      final parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
-      setState(() => _parallels = parallels);
-    } finally {
-      setState(() => _loadingParallels = false);
+  Future<void> _searchCards(String query, {int page = 0}) async {
+    if (_selectedSet == null || query.trim().isEmpty) {
+      setState(() { _cardResults = []; _cardHasMore = false; });
+      return;
     }
-  }
-
-  Future<void> _searchCards(String query) async {
-    if (_selectedSet == null) return;
-    setState(() => _loadingCards = true);
+    setState(() { _loadingCards = true; _cardPage = page; });
     try {
-      final results = await ref.read(cardsServiceProvider).searchMasterCards(_selectedSet!.id, query);
-      setState(() => _cardResults = results);
+      final results = await ref.read(cardsServiceProvider).searchMasterCards(
+        _selectedSet!.id,
+        query,
+        offset: page * _cardPageSize,
+        limit: _cardPageSize,
+      );
+      setState(() {
+        _cardResults = results;
+        _cardHasMore = results.length == _cardPageSize;
+      });
     } finally {
       setState(() => _loadingCards = false);
     }
@@ -219,7 +241,19 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _selectedCard = card;
       _cardCtrl.text = card.displayName;
       _cardResults = [];
+      _cardHasMore = false;
+      _cardPage = 0;
       _isNewCard = false;
+    });
+  }
+
+  void _startNewCardFromResults() {
+    setState(() {
+      _isNewCard = true;
+      _selectedCard = null;
+      _cardResults = [];
+      _cardHasMore = false;
+      _cardPage = 0;
     });
   }
 
@@ -229,6 +263,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _parallelName = p?.name ?? 'Base';
     });
   }
+
+  // ── Save ─────────────────────────────────────────────────────
 
   bool get _canSave {
     final hasCard = _selectedCard != null || (_isNewCard && _newPlayerCtrl.text.trim().isNotEmpty);
@@ -259,7 +295,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       );
       final newCardId = await ref.read(cardsServiceProvider).addCard(form);
       ref.invalidate(userCardsProvider);
-      // Fire-and-forget — don't block the UI on the Scrapechain call
       ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
         ref.invalidate(userCardsProvider);
       }).ignore();
@@ -280,178 +315,485 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     }
   }
 
+  // ── Build ─────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Card'),
-        actions: [
-          TextButton(
-            onPressed: _canSave ? _save : null,
-            child: _saving
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Save'),
+      body: switch (_catalogStep) {
+        _CatalogStep.browsing => _buildBrowseView(colors),
+        _CatalogStep.sets     => _buildSetsView(colors),
+        _CatalogStep.card     => _buildCardForm(colors),
+      },
+    );
+  }
+
+  // ── Browse view (release list) ────────────────────────────────
+
+  Widget _buildBrowseView(ColorScheme colors) {
+    final searchQuery = _browseSearchCtrl.text.toLowerCase();
+    final filtered = _browseResults.where((r) {
+      final name = r.displayName.toLowerCase();
+      final sport = (r.sport ?? '').toLowerCase();
+      return name.contains(searchQuery) || sport.contains(searchQuery);
+    }).toList();
+
+    return Column(
+      children: [
+        AppBreadcrumb(current: 'Catalog'),
+        // Filter row
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _sectionHeader('Release', colors),
-          const SizedBox(height: 8),
-          _ReleaseSearch(
-            controller: _releaseCtrl,
-            results: _releaseResults,
-            loading: _loadingReleases,
-            selected: _selectedRelease,
-            noResults: _noReleaseResults && !_catalogMode,
-            onSearch: _searchReleases,
-            onSelect: _selectRelease,
-            onSearchCatalog: _searchCatalog,
-            onClear: () => setState(() {
-              _selectedRelease = null;
-              _releaseCtrl.clear();
-              _releaseResults = [];
-              _sets = [];
-              _selectedSet = null;
-              _selectedCard = null;
-              _isNewCard = false;
-              _catalogMode = false;
-              _catalogReleaseResults = [];
-              _selectedCatalogRelease = null;
-              _catalogSets = [];
-              _noReleaseResults = false;
-            }),
-          ),
-
-          // Catalog searching spinner
-          if (_catalogSearching)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-
-          // Catalog release results
-          if (!_catalogSearching && _catalogMode && _selectedCatalogRelease == null) ...[
-            const SizedBox(height: 4),
-            _CatalogReleaseList(
-              results: _catalogReleaseResults,
-              onSelect: _selectCatalogRelease,
-              onBack: () => setState(() { _catalogMode = false; _catalogReleaseResults = []; }),
-            ),
-          ],
-
-          // Catalog set picker
-          if (_selectedCatalogRelease != null && _selectedRelease == null) ...[
-            const SizedBox(height: 20),
-            _sectionHeader('Set', colors),
-            const SizedBox(height: 8),
-            if (_loadingCatalogSets || _lazyImporting)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else
-              _CatalogSetList(sets: _catalogSets, onSelect: _selectCatalogSet),
-          ],
-
-          if (_selectedRelease != null) ...[
-            const SizedBox(height: 20),
-            _sectionHeader('Set', colors),
-            const SizedBox(height: 8),
-            if (_loadingSets)
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Center(child: CircularProgressIndicator()))
-            else
-              _SetPicker(
-                sets: _sets,
-                selected: _selectedSet,
-                filterCtrl: _setFilterCtrl,
-                onSelect: _selectSet,
-                onClear: () => setState(() {
-                  _selectedSet = null;
-                  _setFilterCtrl.clear();
-                  _selectedCard = null;
-                  _cardCtrl.clear();
-                  _isNewCard = false;
-                  _parallels = [];
-                  _selectedParallel = null;
-                  _parallelName = 'Base';
-                }),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _catalogFilterYear,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
+                    ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
+                  ],
+                  onChanged: (v) {
+                    setState(() {
+                      _catalogFilterYear = v ?? '';
+                      _browseSearchCtrl.clear();
+                    });
+                    _loadBrowseReleases(reset: true);
+                  },
+                ),
               ),
-          ],
-
-          if (_selectedSet != null) ...[
-            const SizedBox(height: 20),
-            _sectionHeader('Card', colors),
-            const SizedBox(height: 8),
-            _CardSearch(
-              controller: _cardCtrl,
-              results: _cardResults,
-              loading: _loadingCards,
-              selected: _selectedCard,
-              isNewCard: _isNewCard,
-              onSearch: _searchCards,
-              onSelect: _selectCard,
-              onNewCard: () => setState(() {
-                _isNewCard = true;
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _cardResults = [];
-              }),
-              onClear: () => setState(() {
-                _selectedCard = null;
-                _isNewCard = false;
-                _cardCtrl.clear();
-              }),
-            ),
-            if (_isNewCard) ...[
-              const SizedBox(height: 12),
-              _NewCardFields(
-                playerCtrl: _newPlayerCtrl,
-                cardNumberCtrl: _newCardNumberCtrl,
-                serialMaxCtrl: _newSerialMaxCtrl,
-                isRookie: _newIsRookie,
-                isAuto: _newIsAuto,
-                isPatch: _newIsPatch,
-                isSSP: _newIsSSP,
-                onToggleRookie: (v) => setState(() => _newIsRookie = v),
-                onToggleAuto: (v) => setState(() => _newIsAuto = v),
-                onTogglePatch: (v) => setState(() => _newIsPatch = v),
-                onToggleSSP: (v) => setState(() => _newIsSSP = v),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _catalogFilterSport,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  ),
+                  items: _catalogSports.map((s) => DropdownMenuItem(
+                    value: s.$2,
+                    child: Text(s.$1, style: const TextStyle(fontSize: 13)),
+                  )).toList(),
+                  onChanged: (v) {
+                    setState(() {
+                      _catalogFilterSport = v ?? '';
+                      _browseSearchCtrl.clear();
+                    });
+                    _loadBrowseReleases(reset: true);
+                  },
+                ),
               ),
             ],
-          ],
+          ),
+        ),
+        // Search bar
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
+          ),
+          child: TextField(
+            controller: _browseSearchCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Search releases…',
+              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+              suffixIcon: _browseSearchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => setState(() => _browseSearchCtrl.clear()),
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
+          ),
+        ),
+        // Release list
+        Expanded(
+          child: _browseLoading && _browseResults.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        _browseResults.isEmpty
+                            ? 'No releases found.\nTry a different year or sport.'
+                            : 'No results match your search.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: filtered.length + (_browseHasMore && filtered.length == _browseResults.length ? 1 : 0),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        if (i == filtered.length) {
+                          return _browseLoading
+                              ? const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(child: CircularProgressIndicator()),
+                                )
+                              : ListTile(
+                                  title: Text('Load more',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: colors.primary, fontSize: 14)),
+                                  onTap: _loadBrowseReleases,
+                                );
+                        }
+                        final r = filtered[i];
+                        return ListTile(
+                          title: Text(r.displayName,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                          subtitle: r.sport != null
+                              ? Text(r.sport!, style: const TextStyle(fontSize: 12))
+                              : null,
+                          trailing: const Icon(Icons.chevron_right, size: 18),
+                          onTap: () => _selectBrowseRelease(r),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
 
-          if (_selectedSet != null && (_selectedCard != null || _isNewCard)) ...[
-            const SizedBox(height: 20),
-            _sectionHeader('Your Copy', colors),
-            const SizedBox(height: 8),
-            _YourCopyFields(
-              parallels: _parallels,
-              loadingParallels: _loadingParallels,
-              selectedParallel: _selectedParallel,
-              parallelName: _parallelName,
-              pricePaidCtrl: _pricePaidCtrl,
-              serialNumberCtrl: _serialNumberCtrl,
-              isGraded: _isGraded,
-              grader: _grader,
-              gradeValueCtrl: _gradeValueCtrl,
-              onParallelChanged: _selectParallel,
-              onParallelNameChanged: (v) => setState(() => _parallelName = v),
-              onGradedChanged: (v) => setState(() => _isGraded = v),
-              onGraderChanged: (v) => setState(() => _grader = v),
+  // ── Sets view ─────────────────────────────────────────────────
+
+  Widget _buildSetsView(ColorScheme colors) {
+    return Column(
+      children: [
+        AppBreadcrumb(
+          parent: 'Catalog',
+          current: _browseSelectedRelease?.displayName ?? '',
+          onBack: () => setState(() {
+            _catalogStep = _CatalogStep.browsing;
+            _browseSelectedRelease = null;
+            _browseSets = [];
+          }),
+        ),
+        Expanded(
+          child: _browseSetsLoading || _lazyImporting
+              ? const Center(child: CircularProgressIndicator())
+              : _browseSets.isEmpty
+                  ? Center(
+                      child: Text('No sets found.',
+                          style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5))),
+                    )
+                  : ListView.separated(
+                      itemCount: _browseSets.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final s = _browseSets[i];
+                        return ListTile(
+                          title: Text(s.name,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                          subtitle: s.cardCount != null
+                              ? Text('${s.cardCount} cards', style: const TextStyle(fontSize: 12))
+                              : null,
+                          trailing: const Icon(Icons.chevron_right, size: 18),
+                          onTap: () => _selectBrowseSet(s),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  // ── Card form (persistent single view — no switching, preserves focus) ──────
+
+  Widget _buildCardForm(ColorScheme colors) {
+    final hasQuery = _cardCtrl.text.trim().isNotEmpty;
+    final showingForm = _selectedCard != null || _isNewCard;
+
+    void onBack() => setState(() {
+      _catalogStep = _CatalogStep.sets;
+      _selectedCard = null;
+      _cardCtrl.clear();
+      _cardResults = [];
+      _isNewCard = false;
+      _selectedRelease = null;
+      _selectedSet = null;
+    });
+
+    return Column(
+      children: [
+        AppBreadcrumb(
+          grandparent: 'Catalog',
+          onGrandparentBack: () => setState(() {
+            _catalogStep = _CatalogStep.browsing;
+            _browseSelectedRelease = null;
+            _browseSets = [];
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = [];
+            _isNewCard = false;
+            _selectedRelease = null;
+            _selectedSet = null;
+          }),
+          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+          current: _selectedSet?.name ?? '',
+          onBack: onBack,
+        ),
+        // Search field — always in the tree so the TextField keeps focus
+        if (!showingForm)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: TextField(
+              controller: _cardCtrl,
+              onChanged: _searchCards,
+              decoration: InputDecoration(
+                hintText: 'Search player name…',
+                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+                suffixIcon: _loadingCards
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                isDense: true,
+              ),
             ),
-            const SizedBox(height: 32),
-            FilledButton(
-              onPressed: _canSave ? _save : null,
-              child: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Save Card'),
+          ),
+        // Content area fills remaining space
+        Expanded(
+          child: showingForm
+              ? _buildYourCopyArea(colors)
+              : hasQuery
+                  ? _buildCardResultsArea(colors)
+                  : Center(
+                      child: Text('Search for a player name above.',
+                          style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
+                    ),
+        ),
+        // "Add manually" shown whenever a search is active
+        if (!showingForm && hasQuery)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: OutlinedButton.icon(
+              onPressed: _startNewCardFromResults,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Not in checklist? Add manually'),
+              style: OutlinedButton.styleFrom(textStyle: const TextStyle(fontSize: 13)),
             ),
-            const SizedBox(height: 16),
-          ],
+          ),
+      ],
+    );
+  }
+
+  // ── Card results area ─────────────────────────────────────────
+
+  Widget _buildCardResultsArea(ColorScheme colors) {
+    if (_loadingCards) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_cardResults.isEmpty) {
+      return Center(
+        child: Text('No cards found.',
+            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
+      );
+    }
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            itemCount: _cardResults.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final c = _cardResults[i];
+              return ListTile(
+                title: Text(c.displayName,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: _cardAttributePills(c),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => _selectCard(c),
+              );
+            },
+          ),
+        ),
+        if (_cardHasMore || _cardPage > 0)
+          _buildPaginationBar(
+            page: _cardPage,
+            totalPages: null,
+            onPrev: _cardPage > 0
+                ? () => _searchCards(_cardCtrl.text, page: _cardPage - 1)
+                : null,
+            onNext: _cardHasMore
+                ? () => _searchCards(_cardCtrl.text, page: _cardPage + 1)
+                : null,
+          ),
+      ],
+    );
+  }
+
+  Widget? _cardAttributePills(MasterCard c) {
+    final tags = [
+      if (c.isRookie) 'RC',
+      if (c.isAuto) 'AUTO',
+      if (c.isPatch) 'PATCH',
+      if (c.isSSP) 'SSP',
+      if (c.serialMax != null) '/${c.serialMax}',
+    ];
+    if (tags.isEmpty) return null;
+    return Wrap(
+      spacing: 4,
+      children: tags.map((t) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(t, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+      )).toList(),
+    );
+  }
+
+  // ── Your Copy area ────────────────────────────────────────────
+
+  Widget _buildYourCopyArea(ColorScheme colors) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        // Selected card chip or new card indicator
+        if (_selectedCard != null) ...[
+          _SelectedChip(
+            label: _selectedCard!.displayName,
+            onClear: () => setState(() {
+              _selectedCard = null;
+              _cardCtrl.clear();
+              _cardResults = [];
+            }),
+          ),
+          const SizedBox(height: 16),
+        ] else if (_isNewCard) ...[
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('New Card',
+                    style: TextStyle(fontSize: 13, color: colors.primary, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => setState(() {
+                  _isNewCard = false;
+                  _newPlayerCtrl.clear();
+                  _newCardNumberCtrl.clear();
+                  _newSerialMaxCtrl.clear();
+                  _newIsRookie = false;
+                  _newIsAuto = false;
+                  _newIsPatch = false;
+                  _newIsSSP = false;
+                }),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+        // New card definition fields
+        if (_isNewCard) ...[
+          _sectionHeader('Card Definition', colors),
+          const SizedBox(height: 8),
+          _NewCardFields(
+            playerCtrl: _newPlayerCtrl,
+            cardNumberCtrl: _newCardNumberCtrl,
+            serialMaxCtrl: _newSerialMaxCtrl,
+            isRookie: _newIsRookie,
+            isAuto: _newIsAuto,
+            isPatch: _newIsPatch,
+            isSSP: _newIsSSP,
+            onToggleRookie: (v) => setState(() => _newIsRookie = v),
+            onToggleAuto: (v) => setState(() => _newIsAuto = v),
+            onTogglePatch: (v) => setState(() => _newIsPatch = v),
+            onToggleSSP: (v) => setState(() => _newIsSSP = v),
+          ),
+          const SizedBox(height: 20),
+        ],
+        // Your Copy section
+        _sectionHeader('Your Copy', colors),
+        const SizedBox(height: 8),
+        _YourCopyFields(
+          parallels: _parallels,
+          loadingParallels: _loadingParallels,
+          selectedParallel: _selectedParallel,
+          parallelName: _parallelName,
+          pricePaidCtrl: _pricePaidCtrl,
+          serialNumberCtrl: _serialNumberCtrl,
+          isGraded: _isGraded,
+          grader: _grader,
+          gradeValueCtrl: _gradeValueCtrl,
+          onParallelChanged: _selectParallel,
+          onParallelNameChanged: (v) => setState(() => _parallelName = v),
+          onGradedChanged: (v) => setState(() => _isGraded = v),
+          onGraderChanged: (v) => setState(() => _grader = v),
+        ),
+        const SizedBox(height: 24),
+        // Save button
+        FilledButton(
+          onPressed: _canSave ? _save : null,
+          child: _saving
+              ? const SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Add to Collection'),
+        ),
+      ],
+    );
+  }
+
+  // ── Shared helpers ────────────────────────────────────────────
+
+  Widget _buildPaginationBar({
+    required int page,
+    required int? totalPages,
+    required VoidCallback? onPrev,
+    required VoidCallback? onNext,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colors.outline.withValues(alpha: 0.2))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          TextButton.icon(
+            onPressed: onPrev,
+            icon: const Icon(Icons.chevron_left, size: 18),
+            label: const Text('Prev'),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          ),
+          Text(
+            totalPages != null ? 'Page ${page + 1} of $totalPages' : 'Page ${page + 1}',
+            style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5)),
+          ),
+          TextButton.icon(
+            onPressed: onNext,
+            iconAlignment: IconAlignment.end,
+            icon: const Icon(Icons.chevron_right, size: 18),
+            label: const Text('Next'),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          ),
         ],
       ),
     );
@@ -460,276 +802,12 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   Widget _sectionHeader(String title, ColorScheme colors) {
     return Text(
       title,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.6), letterSpacing: 0.5),
+      style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: colors.onSurface.withValues(alpha: 0.6),
+          letterSpacing: 0.5),
     );
-  }
-}
-
-// ── Release Search Widget ─────────────────────────────────────────────────────
-
-class _ReleaseSearch extends StatefulWidget {
-  const _ReleaseSearch({
-    required this.controller,
-    required this.results,
-    required this.loading,
-    required this.selected,
-    required this.noResults,
-    required this.onSearch,
-    required this.onSelect,
-    required this.onSearchCatalog,
-    required this.onClear,
-  });
-  final TextEditingController controller;
-  final List<ReleaseRecord> results;
-  final bool loading;
-  final ReleaseRecord? selected;
-  final bool noResults;
-  final void Function(String) onSearch;
-  final void Function(ReleaseRecord) onSelect;
-  final VoidCallback onSearchCatalog;
-  final VoidCallback onClear;
-
-  @override
-  State<_ReleaseSearch> createState() => _ReleaseSearchState();
-}
-
-class _ReleaseSearchState extends State<_ReleaseSearch> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    if (widget.selected != null) {
-      return _SelectedChip(label: widget.selected!.displayName, onClear: widget.onClear);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: widget.controller,
-          onChanged: widget.onSearch,
-          decoration: InputDecoration(
-            hintText: 'Search releases…',
-            hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-            suffixIcon: widget.loading ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : null,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            isDense: true,
-          ),
-        ),
-        if (widget.results.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: widget.results.length > 8 ? 8 : widget.results.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final r = widget.results[i];
-                    return ListTile(
-                      dense: true,
-                      title: Text(r.displayName, style: const TextStyle(fontSize: 14)),
-                      subtitle: r.sport != null ? Text(r.sport!, style: const TextStyle(fontSize: 12)) : null,
-                      onTap: () => widget.onSelect(r),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  dense: true,
-                  leading: Icon(Icons.public, size: 16, color: colors.onSurface.withValues(alpha: 0.4)),
-                  title: Text('Search full catalog…', style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
-                  onTap: widget.onSearchCatalog,
-                ),
-              ],
-            ),
-          ),
-        ],
-        if (widget.noResults) ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: Text('Not in your catalog.', style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5)))),
-              TextButton(
-                onPressed: widget.onSearchCatalog,
-                child: const Text('Search online +'),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-// ── Set Picker Widget ─────────────────────────────────────────────────────────
-
-class _SetPicker extends StatelessWidget {
-  const _SetPicker({required this.sets, required this.selected, required this.filterCtrl, required this.onSelect, required this.onClear});
-  final List<SetRecord> sets;
-  final SetRecord? selected;
-  final TextEditingController filterCtrl;
-  final void Function(SetRecord) onSelect;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    if (sets.isEmpty) return const Text('No sets found for this release.', style: TextStyle(fontSize: 13));
-
-    if (selected != null) {
-      return _SelectedChip(label: selected!.name, onClear: onClear);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (sets.length > 4)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: TextField(
-              controller: filterCtrl,
-              decoration: InputDecoration(
-                hintText: 'Search sets…',
-                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
-            ),
-          ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: sets.where((s) {
-            final q = filterCtrl.text.toLowerCase();
-            return q.isEmpty || s.name.toLowerCase().contains(q);
-          }).map((s) => ChoiceChip(
-            label: Text(s.name),
-            selected: false,
-            onSelected: (_) => onSelect(s),
-          )).toList(),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Card Search Widget ────────────────────────────────────────────────────────
-
-class _CardSearch extends StatelessWidget {
-  const _CardSearch({
-    required this.controller,
-    required this.results,
-    required this.loading,
-    required this.selected,
-    required this.isNewCard,
-    required this.onSearch,
-    required this.onSelect,
-    required this.onNewCard,
-    required this.onClear,
-  });
-  final TextEditingController controller;
-  final List<MasterCard> results;
-  final bool loading;
-  final MasterCard? selected;
-  final bool isNewCard;
-  final void Function(String) onSearch;
-  final void Function(MasterCard) onSelect;
-  final VoidCallback onNewCard;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    if (selected != null) {
-      return _SelectedChip(label: selected!.displayName, onClear: onClear);
-    }
-    if (isNewCard) {
-      return Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text('New Card', style: TextStyle(fontSize: 13, color: colors.primary, fontWeight: FontWeight.w600)),
-          ),
-          const SizedBox(width: 8),
-          TextButton(onPressed: onClear, child: const Text('Cancel')),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: controller,
-          onChanged: onSearch,
-          decoration: InputDecoration(
-            hintText: 'Search player name…',
-            hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-            suffixIcon: loading ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : null,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            isDense: true,
-          ),
-        ),
-        if (results.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 240),
-            decoration: BoxDecoration(
-              border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: results.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final c = results[i];
-                return ListTile(
-                  dense: true,
-                  title: Text(c.player, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  subtitle: _cardSubtitle(c),
-                  onTap: () => onSelect(c),
-                );
-              },
-            ),
-          ),
-        ],
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: onNewCard,
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Not in checklist? Add manually'),
-          style: OutlinedButton.styleFrom(textStyle: const TextStyle(fontSize: 13)),
-        ),
-      ],
-    );
-  }
-
-  Widget? _cardSubtitle(MasterCard c) {
-    final parts = <String>[
-      if (c.cardNumber != null) '#${c.cardNumber}',
-      if (c.isRookie) 'RC',
-      if (c.isAuto) 'AUTO',
-      if (c.isPatch) 'PATCH',
-      if (c.serialMax != null) '/${c.serialMax}',
-    ];
-    if (parts.isEmpty) return null;
-    return Text(parts.join(' · '), style: const TextStyle(fontSize: 12));
   }
 }
 
@@ -836,9 +914,11 @@ class _YourCopyFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Parallel
         if (loadingParallels)
-          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Center(child: CircularProgressIndicator()))
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Center(child: CircularProgressIndicator()),
+          )
         else if (parallels.isNotEmpty)
           DropdownButtonFormField<SetParallel?>(
             initialValue: selectedParallel,
@@ -931,86 +1011,6 @@ class _YourCopyFields extends StatelessWidget {
   }
 }
 
-// ── Catalog Release Results ───────────────────────────────────────────────────
-
-class _CatalogReleaseList extends StatelessWidget {
-  const _CatalogReleaseList({required this.results, required this.onSelect, required this.onBack});
-  final List<CatalogRelease> results;
-  final void Function(CatalogRelease) onSelect;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          if (results.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No results found.', style: TextStyle(fontSize: 13)),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: results.length > 10 ? 10 : results.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final r = results[i];
-                return ListTile(
-                  dense: true,
-                  title: Text(r.displayName, style: const TextStyle(fontSize: 14)),
-                  trailing: const Icon(Icons.chevron_right, size: 16),
-                  onTap: () => onSelect(r),
-                );
-              },
-            ),
-          const Divider(height: 1),
-          ListTile(
-            dense: true,
-            leading: Icon(Icons.arrow_back, size: 16, color: colors.onSurface.withValues(alpha: 0.4)),
-            title: Text('Back to local search', style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
-            onTap: onBack,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Catalog Set List ──────────────────────────────────────────────────────────
-
-class _CatalogSetList extends StatelessWidget {
-  const _CatalogSetList({required this.sets, required this.onSelect});
-  final List<CatalogSetSummary> sets;
-  final void Function(CatalogSetSummary) onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    if (sets.isEmpty) {
-      return const Text('No sets found for this release.', style: TextStyle(fontSize: 13));
-    }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: sets.map((s) => ChoiceChip(
-        label: Text(s.name),
-        selected: false,
-        onSelected: (_) => onSelect(s),
-        avatar: s.parallelCount > 0
-            ? Text('${s.parallelCount}', style: TextStyle(fontSize: 10, color: colors.onSurface.withValues(alpha: 0.5)))
-            : null,
-      )).toList(),
-    );
-  }
-}
-
 // ── Shared selected chip ──────────────────────────────────────────────────────
 
 class _SelectedChip extends StatelessWidget {
@@ -1032,7 +1032,10 @@ class _SelectedChip extends StatelessWidget {
         children: [
           Icon(Icons.check_circle, size: 16, color: colors.primary),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: TextStyle(fontSize: 14, color: colors.primary, fontWeight: FontWeight.w500))),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(fontSize: 14, color: colors.primary, fontWeight: FontWeight.w500)),
+          ),
           GestureDetector(
             onTap: onClear,
             child: Icon(Icons.close, size: 16, color: colors.onSurface.withValues(alpha: 0.4)),

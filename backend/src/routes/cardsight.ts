@@ -60,7 +60,7 @@ router.post('/lazy-import', async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'cardsightReleaseId, releaseName, releaseYear, and cardsightSetId are required' });
   }
   try {
-    const sport = releaseSegmentId ? mapSegmentToSport(String(releaseSegmentId)) : null;
+    const sport = (releaseSegmentId ? mapSegmentToSport(String(releaseSegmentId)) : null) ?? 'Unknown';
     const slug = [releaseYear, releaseName, sport ?? '']
       .map(v => String(v).toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))
       .filter(Boolean)

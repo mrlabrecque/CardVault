@@ -42,16 +42,16 @@ Deno.serve(async (req) => {
     }
 
     const sport = releaseSegmentId
-      ? (SEGMENT_TO_SPORT[String(releaseSegmentId).toLowerCase()] ?? null)
-      : null;
+      ? (SEGMENT_TO_SPORT[String(releaseSegmentId).toLowerCase()] ?? 'Unknown')
+      : 'Unknown';
 
-    const slug = [releaseYear, releaseName, sport ?? '']
+    const slug = [releaseYear, releaseName, sport]
       .map(v => v.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))
       .filter(Boolean)
       .join('-');
 
     // ── Upsert release ───────────────────────────────────────────────────────
-    // Check if it already exists (preserve any admin edits to sport/type)
+    // Check-first to preserve any admin edits to sport/type on existing rows
     const { data: existingRelease } = await supabase
       .from('releases')
       .select('id, name, sport')
@@ -65,8 +65,16 @@ Deno.serve(async (req) => {
         .insert({ name: releaseName, year: parseInt(releaseYear, 10), sport, release_type: 'Hobby', set_slug: slug, cardsight_id: cardsightReleaseId })
         .select('id, name, sport')
         .single();
-      if (error) throw new Error(error.message);
-      dbRelease = data;
+      if (error && error.code === '23505') {
+        // Concurrent insert — fetch the row that won the race
+        const { data: raceWinner } = await supabase
+          .from('releases').select('id, name, sport').eq('cardsight_id', cardsightReleaseId).single();
+        dbRelease = raceWinner;
+      } else if (error) {
+        throw new Error(error.message);
+      } else {
+        dbRelease = data;
+      }
     }
 
     // ── Fetch set details from catalog ───────────────────────────────────────
@@ -93,12 +101,27 @@ Deno.serve(async (req) => {
         .insert({ release_id: dbRelease.id, name: setDetail.name, card_count: setDetail.cardCount ?? null, cardsight_id: setDetail.id })
         .select('id, name')
         .single();
-      if (error) throw new Error(error.message);
-      dbSet = data;
+      if (error && error.code === '23505') {
+        // Concurrent insert — fetch the winner
+        const { data: raceWinner } = await supabase
+          .from('sets').select('id, name').eq('cardsight_id', cardsightSetId).single();
+        dbSet = raceWinner;
+      } else if (error) {
+        throw new Error(error.message);
+      } else {
+        dbSet = data;
+      }
     }
 
     // ── Upsert parallels ─────────────────────────────────────────────────────
-    const parallels = setDetail.parallels ?? [];
+    const rawParallels = setDetail.parallels ?? [];
+    // Deduplicate by name in case the catalog returns duplicates
+    const seenNames = new Set<string>();
+    const parallels = rawParallels.filter(p => {
+      if (seenNames.has(p.name)) return false;
+      seenNames.add(p.name);
+      return true;
+    });
     let dbParallels: unknown[] = [];
     if (parallels.length > 0) {
       const rows = parallels.map((p, i) => ({
