@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/app_breadcrumb.dart';
+import '../../core/widgets/attr_tag.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -48,6 +49,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   List<SetRecord> _browseSets = [];
   bool _browseSetsLoading = false;
   bool _lazyImporting = false;
+  final _setSearchCtrl = TextEditingController();
 
   // ── Card step: Release + Set (set after browsing) ────────────
   ReleaseRecord? _selectedRelease;
@@ -56,6 +58,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   // ── Step 3: Card ─────────────────────────────────────────────
   final _cardCtrl = TextEditingController();
   List<MasterCard> _cardResults = [];
+  List<MasterCard> _allCards = [];
   bool _loadingCards = false;
   MasterCard? _selectedCard;
   bool _isNewCard = false;
@@ -95,6 +98,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   @override
   void dispose() {
     _browseSearchCtrl.dispose();
+    _setSearchCtrl.dispose();
     _cardCtrl.dispose();
     _newPlayerCtrl.dispose();
     _newCardNumberCtrl.dispose();
@@ -197,7 +201,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         _parallelName = 'Base';
         _selectedCard = null;
         _cardCtrl.clear();
-        _cardResults = [];
+        _setSearchCtrl.clear();
+        _allCards = cards;
+        _cardResults = cards;
         _isNewCard = false;
         _catalogStep = _CatalogStep.card;
       });
@@ -214,26 +220,20 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
 
   // ── Card search ───────────────────────────────────────────────
 
-  Future<void> _searchCards(String query, {int page = 0}) async {
-    if (_selectedSet == null || query.trim().isEmpty) {
+  void _searchCards(String query) {
+    if (_selectedSet == null) {
       setState(() { _cardResults = []; _cardHasMore = false; });
       return;
     }
-    setState(() { _loadingCards = true; _cardPage = page; });
-    try {
-      final results = await ref.read(cardsServiceProvider).searchMasterCards(
-        _selectedSet!.id,
-        query,
-        offset: page * _cardPageSize,
-        limit: _cardPageSize,
-      );
-      setState(() {
-        _cardResults = results;
-        _cardHasMore = results.length == _cardPageSize;
-      });
-    } finally {
-      setState(() => _loadingCards = false);
-    }
+    final q = query.toLowerCase();
+    final filtered = _allCards.where((card) {
+      final player = card.player.toLowerCase();
+      return player.contains(q);
+    }).toList();
+    setState(() {
+      _cardResults = filtered;
+      _cardHasMore = false;
+    });
   }
 
   void _selectCard(MasterCard card) {
@@ -294,10 +294,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
       );
       final newCardId = await ref.read(cardsServiceProvider).addCard(form);
+      await ref.read(compsServiceProvider).refreshCardValue(newCardId);
       ref.invalidate(userCardsProvider);
-      ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
-        ref.invalidate(userCardsProvider);
-      }).ignore();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
@@ -471,6 +469,11 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   // ── Sets view ─────────────────────────────────────────────────
 
   Widget _buildSetsView(ColorScheme colors) {
+    final searchQuery = _setSearchCtrl.text.toLowerCase();
+    final filtered = _browseSets.where((s) {
+      return s.name.toLowerCase().contains(searchQuery);
+    }).toList();
+
     return Column(
       children: [
         AppBreadcrumb(
@@ -480,21 +483,48 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             _catalogStep = _CatalogStep.browsing;
             _browseSelectedRelease = null;
             _browseSets = [];
+            _setSearchCtrl.clear();
           }),
+        ),
+        // Search bar
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
+          ),
+          child: TextField(
+            controller: _setSearchCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Search sets…',
+              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+              suffixIcon: _setSearchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => setState(() => _setSearchCtrl.clear()),
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
+          ),
         ),
         Expanded(
           child: _browseSetsLoading || _lazyImporting
               ? const Center(child: CircularProgressIndicator())
-              : _browseSets.isEmpty
+              : filtered.isEmpty
                   ? Center(
-                      child: Text('No sets found.',
-                          style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5))),
+                      child: Text(
+                        _browseSets.isEmpty ? 'No sets found.' : 'No results match your search.',
+                        style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+                      ),
                     )
                   : ListView.separated(
-                      itemCount: _browseSets.length,
+                      itemCount: filtered.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
-                        final s = _browseSets[i];
+                        final s = filtered[i];
                         return ListTile(
                           title: Text(s.name,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
@@ -514,7 +544,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   // ── Card form (persistent single view — no switching, preserves focus) ──────
 
   Widget _buildCardForm(ColorScheme colors) {
-    final hasQuery = _cardCtrl.text.trim().isNotEmpty;
     final showingForm = _selectedCard != null || _isNewCard;
 
     void onBack() => setState(() {
@@ -572,15 +601,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         Expanded(
           child: showingForm
               ? _buildYourCopyArea(colors)
-              : hasQuery
-                  ? _buildCardResultsArea(colors)
-                  : Center(
-                      child: Text('Search for a player name above.',
-                          style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
-                    ),
+              : _buildCardResultsArea(colors),
         ),
-        // "Add manually" shown whenever a search is active
-        if (!showingForm && hasQuery)
+        // "Add manually" shown whenever cards are visible
+        if (!showingForm && _cardResults.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: OutlinedButton.icon(
@@ -624,40 +648,22 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             },
           ),
         ),
-        if (_cardHasMore || _cardPage > 0)
-          _buildPaginationBar(
-            page: _cardPage,
-            totalPages: null,
-            onPrev: _cardPage > 0
-                ? () => _searchCards(_cardCtrl.text, page: _cardPage - 1)
-                : null,
-            onNext: _cardHasMore
-                ? () => _searchCards(_cardCtrl.text, page: _cardPage + 1)
-                : null,
-          ),
       ],
     );
   }
 
   Widget? _cardAttributePills(MasterCard c) {
-    final tags = [
-      if (c.isRookie) 'RC',
-      if (c.isAuto) 'AUTO',
-      if (c.isPatch) 'PATCH',
-      if (c.isSSP) 'SSP',
-      if (c.serialMax != null) '/${c.serialMax}',
-    ];
-    if (tags.isEmpty) return null;
+    final hasAttrs = c.isRookie || c.isAuto || c.isPatch || c.isSSP || c.serialMax != null;
+    if (!hasAttrs) return null;
     return Wrap(
       spacing: 4,
-      children: tags.map((t) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF3F4F6),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(t, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
-      )).toList(),
+      children: [
+        if (c.isRookie) AttrTag('RC', color: const Color(0xFF16A34A)),
+        if (c.isAuto) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
+        if (c.isPatch) AttrTag('PATCH', color: const Color(0xFF0369A1)),
+        if (c.isSSP) AttrTag('SSP', color: const Color(0xFFEA580C)),
+        if (c.serialMax != null) AttrTag('/${c.serialMax}', color: const Color(0xFF6366F1)),
+      ],
     );
   }
 

@@ -109,17 +109,24 @@ Deno.serve(async (req) => {
 
     if (sets.length === 0) return json({ sets: [] });
 
-    // Upsert set stubs — no parallels, no cards yet
-    const setRows = sets.map(s => ({
-      release_id:   releaseId,
-      name:         s.name,
-      card_count:   s.cardCount ?? null,
-      cardsight_id: s.id,
-    }));
+    // Deduplicate sets by (release_id, name) to avoid upsert conflicts
+    const setMap = new Map<string, { release_id: string; name: string; card_count: number | null; cardsight_id: string }>();
+    for (const s of sets) {
+      const key = `${releaseId}|${s.name}`;
+      if (!setMap.has(key)) {
+        setMap.set(key, {
+          release_id: releaseId,
+          name: s.name,
+          card_count: s.cardCount ?? null,
+          cardsight_id: s.id,
+        });
+      }
+    }
+    const setRows = Array.from(setMap.values());
 
     const { data: dbSets, error: setsError } = await supabase
       .from('sets')
-      .upsert(setRows, { onConflict: 'cardsight_id' })
+      .upsert(setRows, { onConflict: 'release_id,name' })
       .select('id, name, card_count, cardsight_id');
 
     if (setsError) throw new Error(setsError.message);

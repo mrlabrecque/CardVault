@@ -112,8 +112,8 @@ Deno.serve(async (req) => {
       cardsightCardId: string;
     }>();
 
+    // First pass: deduplicate by name|number
     for (const card of allCards) {
-      // Skip cards with null/empty names
       if (!card.name || card.name.trim() === '') continue;
 
       const attrs = (card.attributes ?? []).map(a => a.toUpperCase());
@@ -121,7 +121,6 @@ Deno.serve(async (req) => {
       const existing = cardMap.get(key);
 
       if (existing) {
-        // Merge attributes with OR logic
         existing.isRookie = existing.isRookie || attrs.includes('RC');
         existing.isAuto = existing.isAuto || attrs.includes('AU');
         existing.isPatch = existing.isPatch || attrs.includes('GU');
@@ -138,6 +137,40 @@ Deno.serve(async (req) => {
           cardsightCardId: card.id,
         });
       }
+    }
+
+    // Second pass: fetch images from CardSight, upload to Storage, save URL
+    for (const card of cardMap.values()) {
+      try {
+        const imgUrl = `${CARDSIGHT_BASE}/v1/images/cards/${card.cardsightCardId}`;
+
+        const imgRes = await fetch(imgUrl, {
+          headers: { 'X-Api-Key': apiKey },
+        });
+
+        if (imgRes.ok) {
+          const imageBuffer = await imgRes.arrayBuffer();
+          const fileName = `${card.cardsightCardId}.jpg`;
+
+          const { data, error: uploadError } = await supabase.storage
+            .from('cards')
+            .upload(fileName, imageBuffer, {
+              contentType: 'image/jpeg',
+              upsert: true,
+            });
+
+          if (!uploadError && data) {
+            const { data: urlData } = supabase.storage
+              .from('cards')
+              .getPublicUrl(fileName);
+            card.imageUrl = urlData.publicUrl;
+          }
+        }
+      } catch (_e) {
+        // Silently skip image fetch errors
+      }
+      // Small delay to avoid rate-limiting
+      await new Promise(r => setTimeout(r, 100));
     }
 
     // ── Upsert cards to master_card_definitions ───────────────────────────────
