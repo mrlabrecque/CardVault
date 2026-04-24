@@ -348,12 +348,30 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                 trend: _valueTrend,
               )),
               const SizedBox(width: 8),
-              Expanded(child: _InfoBox(
-                label: 'P/L',
-                value: '${pl >= 0 ? '+' : ''}\$${pl.toStringAsFixed(2)}',
-                subtitle: '${plPct.toStringAsFixed(1)}%',
-                valueColor: pl >= 0 ? Colors.green : colors.error,
-              )),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFF3F4F6)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('P/L', style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), letterSpacing: 0.5)),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('${pl >= 0 ? '+' : ''}\$${pl.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: pl >= 0 ? Colors.green : colors.error)),
+                          Text('${plPct.toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: pl >= 0 ? Colors.green : colors.error)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -403,14 +421,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
             TextField(
               controller: _pricePaidCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Price Paid', prefixText: '\$', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Price Paid',
+                prefixText: '\$',
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
             ),
             if (card.serialMax != null) ...[
               const SizedBox(height: 12),
               TextField(
                 controller: _serialCtrl,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Serial # (your copy, e.g. 34 of /${card.serialMax})', border: const OutlineInputBorder()),
+                decoration: InputDecoration(
+                  labelText: 'Serial # (your copy, e.g. 34 of /${card.serialMax})',
+                  border: const OutlineInputBorder(),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
               ),
             ],
             const SizedBox(height: 12),
@@ -425,8 +454,9 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                     duration: const Duration(milliseconds: 200),
                     width: 44, height: 24,
                     decoration: BoxDecoration(
-                      color: _isGraded ? const Color(0xFF800020) : colors.surfaceContainerHighest,
+                      color: _isGraded ? const Color(0xFF800020) : Colors.white,
                       borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: _isGraded ? const Color(0xFF800020) : colors.outline),
                     ),
                     child: AnimatedAlign(
                       duration: const Duration(milliseconds: 200),
@@ -434,7 +464,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                       child: Container(
                         margin: const EdgeInsets.all(3),
                         width: 18, height: 18,
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                          color: _isGraded ? Colors.white : colors.outline,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
                   ),
@@ -449,7 +482,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                     child: DropdownButtonFormField<String>(
                       key: ValueKey(_graderCtrl.text),
                       initialValue: _graderCtrl.text.isEmpty ? 'PSA' : _graderCtrl.text,
-                      decoration: const InputDecoration(labelText: 'Grader', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                        labelText: 'Grader',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
                       items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                       onChanged: (v) => _graderCtrl.text = v ?? 'PSA',
                     ),
@@ -458,7 +496,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                   Expanded(
                     child: TextField(
                       controller: _gradeCtrl,
-                      decoration: const InputDecoration(labelText: 'Grade', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                        labelText: 'Grade',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -470,6 +513,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _cancelEdit,
+                    style: OutlinedButton.styleFrom(backgroundColor: Colors.white),
                     child: const Text('Cancel'),
                   ),
                 ),

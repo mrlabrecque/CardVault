@@ -174,6 +174,36 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                             ),
                           ),
                         ),
+                        FilledButton.icon(
+                          onPressed: () => context.push('/bulk-add'),
+                          icon: const Icon(Icons.list, size: 14),
+                          label: const Text('Bulk'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: colors.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: const Size(90, 36),
+                            tapTargetSize: MaterialTapTargetSize.padded,
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: () => context.push('/add-card'),
+                          icon: const Icon(Icons.add, size: 14),
+                          label: const Text('Add Card'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: const Size(90, 36),
+                            tapTargetSize: MaterialTapTargetSize.padded,
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
                         PopupMenuButton<SortOption>(
                           icon: const Icon(Icons.sort),
                           onSelected: (s) => setState(() => _sort = s),
@@ -226,38 +256,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                '${allCards.length} ${allCards.length == 1 ? 'card' : 'cards'}'
-                                '${filtered.length != stacks.length ? ' · ${filtered.length} shown' : ''}',
-                                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
-                              ),
-                              const Spacer(),
-                              OutlinedButton.icon(
-                                onPressed: () => context.push('/bulk-add'),
-                                icon: const Icon(Icons.list, size: 14),
-                                label: const Text('Bulk'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton.icon(
-                                onPressed: () => context.push('/add-card'),
-                                icon: const Icon(Icons.add, size: 14),
-                                label: const Text('Add Card'),
-                                style: FilledButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            '${allCards.length} ${allCards.length == 1 ? 'card' : 'cards'}'
+                            '${filtered.length != stacks.length ? ' · ${filtered.length} shown' : ''}',
+                            style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
                           ),
                         ),
                       ),
