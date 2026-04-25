@@ -5,6 +5,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/info_box.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -339,7 +340,11 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
 
     return Column(
       children: [
-        AppBreadcrumb(current: 'Catalog'),
+        AppBreadcrumb(
+          parent: 'Collection',
+          current: 'Add Card',
+          onBack: () => context.pop(),
+        ),
         // Filter row
         Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -477,7 +482,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     return Column(
       children: [
         AppBreadcrumb(
-          parent: 'Catalog',
+          grandparent: 'Collection',
+          parent: 'Add Card',
           current: _browseSelectedRelease?.displayName ?? '',
           onBack: () => setState(() {
             _catalogStep = _CatalogStep.browsing;
@@ -559,8 +565,17 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     return Column(
       children: [
         AppBreadcrumb(
-          grandparent: 'Catalog',
+          grandparent: 'Add Card',
           onGrandparentBack: () => setState(() {
+            _catalogStep = _CatalogStep.sets;
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = [];
+            _isNewCard = false;
+            _selectedSet = null;
+          }),
+          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+          onBack: () => setState(() {
             _catalogStep = _CatalogStep.browsing;
             _browseSelectedRelease = null;
             _browseSets = [];
@@ -571,9 +586,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             _selectedRelease = null;
             _selectedSet = null;
           }),
-          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
           current: _selectedSet?.name ?? '',
-          onBack: onBack,
         ),
         // Search field — always in the tree so the TextField keeps focus
         if (!showingForm)
@@ -1027,13 +1040,9 @@ class _SelectedChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
+    return InfoBox(
+      color: colors.primary,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
-      ),
       child: Row(
         children: [
           Icon(Icons.check_circle, size: 16, color: colors.primary),

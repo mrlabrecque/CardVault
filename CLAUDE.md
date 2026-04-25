@@ -6,19 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A responsive, mobile-first web application for collectors to manage, value, and sell sports trading cards. Supports multi-tenancy so the owner and invited friends can each maintain independent, private collections.
+A mobile app for collectors to manage, value, and sell sports trading cards. Supports multi-tenancy so the owner and invited friends can each maintain independent, private collections.
 
 ---
 
-## Tech Stack
+## IMPORTANT: Active Tech Stack
+
+The active codebase is the **Flutter mobile app** (`mobile/`) with **Supabase Edge Functions** (`supabase/functions/`).
+
+**The `frontend/` (Angular) and `backend/` (Express) directories are no longer being updated.** Do not suggest changes to those folders.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Angular 21 (mobile-first, modern responsive UI) |
-| UI Libraries | Tailwind CSS v4 (utility styling) + PrimeNG 21 (components) |
-| Backend | Node.js with Express.js |
+| Mobile App | Flutter / Dart (`mobile/lib/`) |
+| State Management | Riverpod (`flutter_riverpod`) |
+| Backend Logic | Supabase Edge Functions (Deno/TypeScript, `supabase/functions/`) |
 | Database & Auth | Supabase (PostgreSQL + Supabase Auth) |
-| Integrations | eBay Browse/Trading APIs, Checklist Data Providers |
+| Navigation | go_router |
+| Integrations | Scrapechain (eBay sold comps), CardSight AI API |
+
+All network calls from Flutter use `supabase.from()` or `supabase.functions.invoke()`. Never reference `localhost:3000` or the Express backend.
 
 ---
 
@@ -93,7 +100,7 @@ Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the
 - **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
-- **eBay API**: Real-time market value sync from sold listings; automated listing creation. `fetchMarketValue()` call after add-card is currently commented out pending eBay API access.
+- **Scrapechain API**: Fetches real-time eBay sold comps via Edge Functions (`refresh-card-value`, `comps-search`, etc.) to populate `current_value` on user cards and lookup results. Called after card add/bulk add to populate pricing.
 - **CardSight AI API** (`api.cardsight.ai`) — used server-side only (API key in backend `.env`). Raw `fetch` calls, not the SDK. Two flows:
   - **Admin release import**: Search CardSight releases → select → backend upserts `releases`, `sets` (with `cardsight_id`), `set_parallels` (with `cardsight_id`), and all `master_card_definitions` for every set. Cards are paginated at 100 per page with 250ms delays between pages to avoid rate-limiting.
   - **Lazy image fetch**: `POST /api/cardsight/cards/:masterCardId/image` — called fire-and-forget after a user adds a card. Fetches from CardSight, uploads to Supabase Storage (`card-images` bucket, public), writes URL to `master_card_definitions.image_url`. Safe to call multiple times — returns cached URL immediately if already populated.
@@ -315,7 +322,7 @@ Running list of small things to implement that aren't full features:
 - [ ] Item detail — full card editor; "Post to eBay" button
 - [ ] Comps search — eBay sold listings integration; lookup history
 - [ ] Wishlist — price threshold editor; alert status
-- [ ] eBay API access — uncomment `fetchMarketValue()` call in `add-card-dialog.ts` once credentials are available
+- [ ] Auto-fetch pricing on card add — invoke scrapechain edge function after `addCard()` to fetch and store `current_value`
 - [ ] Lot Builder — group cards into lots for bulk eBay listing; lot valuation and P/L
 - [ ] Market Movers — surface cards in the collection with the biggest recent price changes (up or down) using eBay sold comps data
 - [ ] Grade Recommendations — analyze raw cards and recommend which are worth grading based on estimated PSA 10 premium vs. raw value

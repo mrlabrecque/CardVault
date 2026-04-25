@@ -1,18 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/services/comps_service.dart';
-import '../../core/widgets/serial_tag.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/app_breadcrumb.dart';
+import '../../core/widgets/info_box.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
+
+const _catalogYears = [
+  '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017',
+];
+
+const _catalogSports = [
+  ('Any sport', ''),
+  ('Baseball', 'Baseball'),
+  ('Basketball', 'Basketball'),
+  ('Football', 'Football'),
+  ('Soccer', 'Soccer'),
+  ('Hockey', 'Hockey'),
+];
 
 class _StagedCard {
   _StagedCard({
     required this.tempId,
-    this.masterCardId,
-    this.setId,
+    required this.masterCardId,
+    required this.setId,
     required this.player,
     this.cardNumber,
     this.setName,
@@ -28,15 +43,10 @@ class _StagedCard {
     this.isGraded = false,
     this.grader,
     this.gradeValue,
-    this.newSerialMax,
-    this.newIsRookie = false,
-    this.newIsAuto = false,
-    this.newIsPatch = false,
-    this.newIsSSP = false,
   });
   final String tempId;
-  final String? masterCardId;
-  final String? setId;
+  final String masterCardId;
+  final String setId;
   final String player;
   final String? cardNumber;
   final String? setName;
@@ -52,11 +62,6 @@ class _StagedCard {
   final bool isGraded;
   final String? grader;
   final String? gradeValue;
-  final int? newSerialMax;
-  final bool newIsRookie;
-  final bool newIsAuto;
-  final bool newIsPatch;
-  final bool newIsSSP;
 }
 
 class BulkAddScreen extends ConsumerStatefulWidget {
@@ -67,13 +72,18 @@ class BulkAddScreen extends ConsumerStatefulWidget {
 }
 
 class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
+  // ── Catalog filters ──────────────────────────────────────────
+  String _catalogFilterYear = '';
+  String _catalogFilterSport = '';
+
+  // ── Release browse ───────────────────────────────────────────
+  List<ReleaseRecord> _browseResults = [];
+  bool _browseLoading = false;
+  int _browseOffset = 0;
+  static const int _browsePageSize = 30;
+
   // ── Session ──────────────────────────────────────────────────
   ReleaseRecord? _selectedRelease;
-  List<SetRecord> _sets = [];
-  SetRecord? _selectedSet;
-  List<SetParallel> _parallels = [];
-  bool _loadingReleases = false;
-  bool _loadingSets = false;
 
   // ── Box price calculator ─────────────────────────────────────
   final _boxPriceCtrl = TextEditingController();
@@ -85,29 +95,23 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     return (price / qty * 100).roundToDouble() / 100;
   }
 
-  // ── Release search ───────────────────────────────────────────
-  final _releaseCtrl = TextEditingController();
-  List<ReleaseRecord> _releaseResults = [];
-
-  // ── Card search ──────────────────────────────────────────────
+  // ── Card search (cross-release via CardSight) ────────────────
   final _cardCtrl = TextEditingController();
-  List<MasterCard> _cardResults = [];
+  List<CardSightCardResult> _cardResults = [];
   bool _loadingCards = false;
+  bool _resolvingCard = false;
+
+  // ── Resolved card (after resolveCardFromCatalog) ──────────────
   MasterCard? _selectedCard;
-  bool _isNewCard = false;
+  CardSightCardResult? _selectedCsCard;
+  String? _selectedSetId;
+  List<SetParallel> _parallels = [];
 
-  // ── New card fields ──────────────────────────────────────────
-  final _newPlayerCtrl = TextEditingController();
-  final _newCardNumberCtrl = TextEditingController();
-  final _newSerialMaxCtrl = TextEditingController();
-  bool _newIsRookie = false;
-  bool _newIsAuto = false;
-  bool _newIsPatch = false;
-  bool _newIsSSP = false;
-
-  // ── Your copy ────────────────────────────────────────────────
+  // ── Parallels ────────────────────────────────────────────────
   SetParallel? _selectedParallel;
   String _parallelName = 'Base';
+
+  // ── Your copy ────────────────────────────────────────────────
   final _pricePaidCtrl = TextEditingController();
   final _serialNumberCtrl = TextEditingController();
   bool _isGraded = false;
@@ -122,780 +126,763 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
   @override
   void initState() {
     super.initState();
-    _boxPriceCtrl.addListener(_onBoxCalcChanged);
-    _boxQtyCtrl.addListener(_onBoxCalcChanged);
+    _loadBrowseReleases(reset: true);
   }
 
   @override
   void dispose() {
-    _releaseCtrl.dispose();
-    _cardCtrl.dispose();
-    _newPlayerCtrl.dispose();
-    _newCardNumberCtrl.dispose();
-    _newSerialMaxCtrl.dispose();
     _boxPriceCtrl.dispose();
     _boxQtyCtrl.dispose();
+    _cardCtrl.dispose();
     _pricePaidCtrl.dispose();
     _serialNumberCtrl.dispose();
     _gradeValueCtrl.dispose();
     super.dispose();
   }
 
-  void _onBoxCalcChanged() {
-    final ppc = _pricePerCard;
-    if (ppc != null) {
-      final formatted = ppc == ppc.truncateToDouble() ? ppc.toStringAsFixed(0) : ppc.toStringAsFixed(2);
-      if (_pricePaidCtrl.text != formatted) {
-        _pricePaidCtrl.text = formatted;
-      }
-    }
-    setState(() {});
-  }
-
-  Future<void> _searchReleases(String q) async {
-    setState(() => _loadingReleases = true);
+  Future<void> _loadBrowseReleases({bool reset = false}) async {
+    if (reset) setState(() { _browseOffset = 0; _browseResults = []; });
+    setState(() => _browseLoading = true);
     try {
-      final r = await ref.read(cardsServiceProvider).searchReleases(q);
-      if (mounted) setState(() => _releaseResults = r);
+      final year = _catalogFilterYear.isNotEmpty ? int.tryParse(_catalogFilterYear) : null;
+      final sport = _catalogFilterSport.isNotEmpty ? _catalogFilterSport : null;
+      final results = await ref.read(cardsServiceProvider).browseReleases(
+        year: year,
+        sport: sport,
+        offset: _browseOffset,
+        limit: _browsePageSize,
+      );
+      setState(() {
+        _browseResults = reset ? results : [..._browseResults, ...results];
+        _browseOffset = _browseResults.length;
+      });
     } finally {
-      if (mounted) setState(() => _loadingReleases = false);
+      setState(() => _browseLoading = false);
     }
   }
 
-  Future<void> _selectRelease(ReleaseRecord r) async {
-    setState(() {
-      _selectedRelease = r;
-      _releaseCtrl.text = r.displayName;
-      _releaseResults = [];
-      _selectedSet = null;
-      _sets = [];
-      _parallels = [];
-      _selectedCard = null;
-      _cardCtrl.clear();
-      _isNewCard = false;
-      _cardResults = [];
-      _loadingSets = true;
-    });
-    try {
-      final sets = await ref.read(cardsServiceProvider).getSetsForRelease(r.id);
-      if (mounted) {
-        setState(() => _sets = sets);
-        if (sets.length == 1) await _selectSet(sets.first);
-      }
-    } finally {
-      if (mounted) setState(() => _loadingSets = false);
-    }
-  }
 
-  Future<void> _selectSet(SetRecord s) async {
+  void _selectRelease(ReleaseRecord release) {
     setState(() {
-      _selectedSet = s;
-      _selectedCard = null;
-      _cardCtrl.clear();
-      _cardResults = [];
-      _isNewCard = false;
-      _parallels = [];
-      _selectedParallel = null;
-      _parallelName = 'Base';
+      _selectedRelease = release;
+      _resetCardForm();
     });
-    final parallels = await ref.read(cardsServiceProvider).getParallels(s.id);
-    if (mounted) setState(() => _parallels = parallels);
   }
 
   Future<void> _searchCards(String q) async {
-    if (_selectedSet == null) return;
-    setState(() => _loadingCards = true);
+    if (q.isEmpty) {
+      setState(() { _cardResults = []; });
+      return;
+    }
+    final release = _selectedRelease;
+    if (release == null || release.cardsightId == null) return;
+
+    setState(() { _loadingCards = true; });
     try {
-      final r = await ref.read(cardsServiceProvider).searchMasterCards(_selectedSet!.id, q);
-      if (mounted) setState(() => _cardResults = r);
-    } finally {
-      if (mounted) setState(() => _loadingCards = false);
+      final svc = ref.read(cardsServiceProvider);
+      final results = await svc.searchCardsInRelease(release.cardsightId!, q, take: 20);
+      setState(() { _cardResults = results; _loadingCards = false; });
+    } catch (_) {
+      setState(() { _loadingCards = false; });
     }
   }
 
-  void _selectCard(MasterCard card) {
+  Future<void> _selectCsCard(CardSightCardResult csCard) async {
+    setState(() { _resolvingCard = true; _cardResults = []; });
+    _cardCtrl.text = csCard.number != null ? '${csCard.name} #${csCard.number}' : csCard.name;
+
+    try {
+      final release = _selectedRelease!;
+      final svc = ref.read(cardsServiceProvider);
+      final result = await svc.resolveCardFromCatalog(
+        card: csCard,
+        releaseName: release.name,
+        releaseYear: release.year ?? DateTime.now().year,
+        releaseSegmentId: null,
+      );
+
+      if (!mounted) return;
+      final ppc = _pricePerCard;
+      setState(() {
+        _selectedCard = MasterCard(
+          id: result.masterCardId,
+          player: csCard.name,
+          cardNumber: csCard.number,
+          isRookie: csCard.attributes.contains('RC'),
+          isAuto: csCard.attributes.contains('AU'),
+          isPatch: csCard.attributes.contains('GU'),
+          isSSP: csCard.attributes.contains('SSP'),
+        );
+        _selectedCsCard = csCard;
+        _selectedSetId = result.setId;
+        _parallels = result.parallels;
+        _selectedParallel = null;
+        _parallelName = 'Base';
+        if (ppc != null) {
+          _pricePaidCtrl.text = ppc.toStringAsFixed(2);
+        }
+        _resolvingCard = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _resolvingCard = false; });
+    }
+  }
+
+  void _clearCardSelection() {
     setState(() {
-      _selectedCard = card;
-      _cardCtrl.text = card.displayName;
+      _selectedCard = null;
+      _selectedCsCard = null;
+      _selectedSetId = null;
+      _cardCtrl.clear();
       _cardResults = [];
-      _isNewCard = false;
+      _parallels = [];
+      _selectedParallel = null;
+      _parallelName = 'Base';
+      _pricePaidCtrl.clear();
+      _serialNumberCtrl.clear();
+      _isGraded = false;
+      _grader = 'PSA';
+      _gradeValueCtrl.clear();
     });
   }
 
   bool get _canStage {
-    final hasCard = _selectedCard != null || (_isNewCard && _newPlayerCtrl.text.trim().isNotEmpty);
-    final hasPricePaid = double.tryParse(_pricePaidCtrl.text) != null;
-    final gradeOk = !_isGraded || _gradeValueCtrl.text.trim().isNotEmpty;
-    return hasCard && hasPricePaid && gradeOk;
+    if (_selectedCard == null) return false;
+    if (_pricePaidCtrl.text.isEmpty) return false;
+    if (double.tryParse(_pricePaidCtrl.text) == null) return false;
+    if (_isGraded && _gradeValueCtrl.text.trim().isEmpty) return false;
+    return true;
   }
 
   void _stageCard() {
     if (!_canStage) return;
-    final card = _selectedCard;
-    final isNew = _isNewCard;
+    final card = _selectedCard!;
+    final csCard = _selectedCsCard!;
+    final pricePaid = double.parse(_pricePaidCtrl.text);
+
     _staged.add(_StagedCard(
       tempId: '${_tempIdCounter++}',
-      masterCardId: card?.id,
-      setId: _selectedSet?.id,
-      player: isNew ? _newPlayerCtrl.text.trim() : (card?.player ?? ''),
-      cardNumber: isNew ? (_newCardNumberCtrl.text.trim().isEmpty ? null : _newCardNumberCtrl.text.trim()) : card?.cardNumber,
-      setName: _selectedSet?.name,
+      masterCardId: card.id,
+      setId: _selectedSetId ?? '',
+      player: card.player,
+      cardNumber: card.cardNumber,
+      setName: csCard.setName,
       parallelId: _selectedParallel?.id,
       parallelName: _parallelName,
-      serialMax: _selectedParallel?.serialMax ?? card?.serialMax,
-      serialNumber: _serialNumberCtrl.text.trim().isEmpty ? null : _serialNumberCtrl.text.trim(),
-      isRookie: card?.isRookie ?? false,
-      isAuto: card?.isAuto ?? false,
-      isPatch: card?.isPatch ?? false,
-      isSSP: card?.isSSP ?? false,
-      pricePaid: double.tryParse(_pricePaidCtrl.text),
+      serialMax: card.serialMax,
+      serialNumber: _serialNumberCtrl.text,
+      isRookie: card.isRookie,
+      isAuto: card.isAuto,
+      isPatch: card.isPatch,
+      isSSP: card.isSSP,
+      pricePaid: pricePaid,
       isGraded: _isGraded,
-      grader: _isGraded ? _grader : null,
-      gradeValue: _isGraded ? _gradeValueCtrl.text.trim() : null,
-      newSerialMax: isNew ? int.tryParse(_newSerialMaxCtrl.text.trim()) : null,
-      newIsRookie: isNew ? _newIsRookie : false,
-      newIsAuto: isNew ? _newIsAuto : false,
-      newIsPatch: isNew ? _newIsPatch : false,
-      newIsSSP: isNew ? _newIsSSP : false,
+      grader: _grader,
+      gradeValue: _gradeValueCtrl.text,
     ));
 
-    // Reset card-level fields; keep parallel + box calc
-    setState(() {
-      _selectedCard = null;
-      _cardCtrl.clear();
-      _isNewCard = false;
-      _newPlayerCtrl.clear();
-      _newCardNumberCtrl.clear();
-      _newSerialMaxCtrl.clear();
-      _newIsRookie = false;
-      _newIsAuto = false;
-      _newIsPatch = false;
-      _newIsSSP = false;
-      _serialNumberCtrl.clear();
-      _isGraded = false;
-      _gradeValueCtrl.clear();
-      // Only reset price if not from box calc
-      if (_pricePerCard == null) _pricePaidCtrl.clear();
-    });
+    _resetCardForm();
+    // Restore price per card after reset
+    final ppc = _pricePerCard;
+    if (ppc != null) {
+      _pricePaidCtrl.text = ppc.toStringAsFixed(2);
+    }
+
+    setState(() {});
+  }
+
+  void _resetCardForm() {
+    _cardCtrl.clear();
+    _cardResults = [];
+    _selectedCard = null;
+    _selectedCsCard = null;
+    _parallels = [];
+    _selectedParallel = null;
+    _parallelName = 'Base';
+    _pricePaidCtrl.clear();
+    _serialNumberCtrl.clear();
+    _isGraded = false;
+    _grader = 'PSA';
+    _gradeValueCtrl.clear();
+  }
+
+  void _removeStagedCard(int index) {
+    _staged.removeAt(index);
+    setState(() {});
   }
 
   Future<void> _commitAll() async {
     if (_staged.isEmpty) return;
-    setState(() => _committing = true);
+    setState(() { _committing = true; });
+
     try {
       final svc = ref.read(cardsServiceProvider);
-      final comps = ref.read(compsServiceProvider);
-      final newIds = <String>[];
-      for (final c in _staged) {
-        final id = await svc.addCard(AddCardFormData(
-          masterCardId: c.masterCardId,
-          setId: c.setId,
-          player: c.player,
-          cardNumber: c.cardNumber,
-          serialMax: c.newSerialMax,
-          isRookie: c.newIsRookie,
-          isAuto: c.newIsAuto,
-          isPatch: c.newIsPatch,
-          isSSP: c.newIsSSP,
-          parallelId: c.parallelId,
-          parallelName: c.parallelName,
-          pricePaid: c.pricePaid,
-          serialNumber: c.serialNumber,
-          isGraded: c.isGraded,
-          grader: c.grader ?? 'PSA',
-          gradeValue: c.gradeValue,
+      final supabase = ref.read(supabaseProvider);
+
+      for (final staged in _staged) {
+        final cardId = await svc.addCard(AddCardFormData(
+          masterCardId: staged.masterCardId,
+          player: staged.player,
+          cardNumber: staged.cardNumber,
+          parallelId: staged.parallelId,
+          parallelName: staged.parallelName,
+          pricePaid: staged.pricePaid,
+          serialNumber: staged.serialNumber,
+          isGraded: staged.isGraded,
+          grader: staged.grader ?? 'PSA',
+          gradeValue: staged.gradeValue,
+          isRookie: staged.isRookie,
+          isAuto: staged.isAuto,
+          isPatch: staged.isPatch,
+          isSSP: staged.isSSP,
         ));
-        newIds.add(id);
+
+        // Fetch pricing from scrapechain (fire-and-forget)
+        try {
+          await supabase.functions.invoke('refresh-card-value', body: {'cardId': cardId});
+        } catch (_) {
+          // Pricing fetch failed, but card was added — user can refresh later
+        }
       }
+
+      // Invalidate the cards provider to refresh the list
       ref.invalidate(userCardsProvider);
-      // Fire-and-forget value refresh for all newly added cards
-      Future.wait(newIds.map((id) => comps.refreshCardValue(id)))
-          .then((_) => ref.invalidate(userCardsProvider))
-          .ignore();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${_staged.length} card${_staged.length == 1 ? '' : 's'} saved!'), duration: const Duration(seconds: 2)),
-        );
-        context.pop();
-      }
+
+      if (!mounted) return;
+      setState(() { _committing = false; _staged.clear(); });
+      context.pop();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _committing = false);
+      if (!mounted) return;
+      setState(() { _committing = false; });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final hasSession = _selectedRelease != null && _selectedSet != null;
+    if (_selectedRelease == null) {
+      return _buildBrowseView(colors);
+    }
+    return _buildBulkAddView(context, colors);
+  }
 
+  Widget _buildBrowseView(ColorScheme colors) {
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _selectedRelease != null ? _selectedRelease!.displayName : 'Bulk Add',
-              style: const TextStyle(fontSize: 17),
+      body: Column(
+        children: [
+          AppBreadcrumb(
+            parent: 'Collection',
+            current: 'Bulk Add',
+            onBack: () => context.pop(),
+          ),
+          // Filter row
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
             ),
-            if (_selectedSet != null)
-              Text(_selectedSet!.name, style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6))),
-          ],
-        ),
-        actions: [
-          if (_selectedRelease != null)
-            TextButton(
-              onPressed: () => setState(() {
-                _selectedRelease = null;
-                _releaseCtrl.clear();
-                _sets = [];
-                _selectedSet = null;
-                _parallels = [];
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _isNewCard = false;
-                _cardResults = [];
-                _releaseResults = [];
-              }),
-              child: const Text('Change'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _catalogFilterYear,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
+                      ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
+                    ],
+                    onChanged: (v) {
+                      setState(() {
+                        _catalogFilterYear = v ?? '';
+                      });
+                      _loadBrowseReleases(reset: true);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _catalogFilterSport,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    ),
+                    items: _catalogSports.map((s) => DropdownMenuItem(
+                      value: s.$2,
+                      child: Text(s.$1, style: const TextStyle(fontSize: 13)),
+                    )).toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        _catalogFilterSport = v ?? '';
+                      });
+                      _loadBrowseReleases(reset: true);
+                    },
+                  ),
+                ),
+              ],
             ),
+          ),
+          // Release list
+          Expanded(
+            child: _browseLoading && _browseResults.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : _browseResults.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No releases found.\nTry a different year or sport.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: _browseResults.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final r = _browseResults[i];
+                          return ListTile(
+                            title: Text(r.displayName,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            subtitle: r.sport != null
+                                ? Text(r.sport!, style: const TextStyle(fontSize: 12))
+                                : null,
+                            trailing: const Icon(Icons.chevron_right, size: 18),
+                            onTap: () => _selectRelease(r),
+                          );
+                        },
+                      ),
+          ),
         ],
       ),
-      body: Stack(
+    );
+  }
+
+  Widget _buildBulkAddView(BuildContext context, ColorScheme colors) {
+    return Scaffold(
+      body: Column(
         children: [
-          ListView(
-            padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: _staged.isNotEmpty ? 88 : 24),
-            children: [
-              // ── Release search ──────────────────────────────
-              if (_selectedRelease == null) ...[
-                _sectionLabel('Release', colors),
+          AppBreadcrumb(
+            grandparent: 'Collection',
+            parent: 'Bulk Add',
+            current: _selectedRelease!.displayName,
+            onBack: () => setState(() => _selectedRelease = null),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+              // ── BOX CALCULATOR ──
+              if (_selectedRelease != null) ...[
+                const Text('Box Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _releaseCtrl,
-                  onChanged: _searchReleases,
-                  decoration: InputDecoration(
-                    hintText: 'Search releases…',
-                    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                    suffixIcon: _loadingReleases
-                        ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                        : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    isDense: true,
-                  ),
-                ),
-                if (_releaseResults.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  _Dropdown(
-                    children: _releaseResults.take(8).map((r) => ListTile(
-                      dense: true,
-                      title: Text(r.displayName, style: const TextStyle(fontSize: 14)),
-                      subtitle: r.sport != null ? Text(r.sport!, style: const TextStyle(fontSize: 12)) : null,
-                      onTap: () => _selectRelease(r),
-                    )).toList(),
-                  ),
-                ],
-              ],
-
-              // ── Set picker ──────────────────────────────────
-              if (_selectedRelease != null && _selectedSet == null) ...[
-                const SizedBox(height: 16),
-                _sectionLabel('Set', colors),
-                const SizedBox(height: 8),
-                if (_loadingSets)
-                  const Center(child: CircularProgressIndicator())
-                else
-                  Wrap(
-                    spacing: 8, runSpacing: 8,
-                    children: _sets.map((s) => ActionChip(
-                      label: Text(s.name, style: const TextStyle(fontSize: 13)),
-                      onPressed: () => _selectSet(s),
-                    )).toList(),
-                  ),
-              ],
-
-              // ── Set tabs (when session active, multiple sets) ─
-              if (hasSession && _sets.length > 1) ...[
-                const SizedBox(height: 4),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _sets.map((s) {
-                      final active = s.id == _selectedSet?.id;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: GestureDetector(
-                          onTap: active ? null : () => _selectSet(s),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: active ? const Color(0xFF800020) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: active ? const Color(0xFF800020) : colors.outline.withValues(alpha: 0.4)),
-                            ),
-                            child: Text(s.name, style: TextStyle(fontSize: 13, color: active ? Colors.white : colors.onSurface, fontWeight: active ? FontWeight.w600 : FontWeight.normal)),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Box price calculator ────────────────────────
-              if (hasSession) ...[
-                const SizedBox(height: 4),
-                _BoxPriceCalculator(
-                  boxPriceCtrl: _boxPriceCtrl,
-                  boxQtyCtrl: _boxQtyCtrl,
-                  pricePerCard: _pricePerCard,
-                ),
-                const SizedBox(height: 20),
-
-                // ── Card search ─────────────────────────────
-                _sectionLabel('Card', colors),
-                const SizedBox(height: 8),
-                if (_selectedCard != null)
-                  _SelectedChip(label: _selectedCard!.displayName, onClear: () => setState(() {
-                    _selectedCard = null;
-                    _cardCtrl.clear();
-                    _isNewCard = false;
-                  }))
-                else if (_isNewCard)
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: colors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                      child: Text('New Card', style: TextStyle(fontSize: 13, color: colors.primary, fontWeight: FontWeight.w600)),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(onPressed: () => setState(() { _isNewCard = false; _cardCtrl.clear(); }), child: const Text('Cancel')),
-                  ])
-                else ...[
-                  TextField(
-                    controller: _cardCtrl,
-                    onChanged: _searchCards,
-                    decoration: InputDecoration(
-                      hintText: 'Search player name…',
-                      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                      prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                      suffixIcon: _loadingCards
-                          ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                          : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      isDense: true,
-                    ),
-                  ),
-                  if (_cardResults.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    _Dropdown(
-                      maxHeight: 220,
-                      children: [
-                        ..._cardResults.map((c) => ListTile(
-                          dense: true,
-                          title: Text(c.player, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                          subtitle: _cardMeta(c),
-                          onTap: () => _selectCard(c),
-                        )),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => setState(() { _isNewCard = true; _cardCtrl.clear(); _cardResults = []; }),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Not in checklist? Add manually'),
-                    style: OutlinedButton.styleFrom(textStyle: const TextStyle(fontSize: 13)),
-                  ),
-                ],
-
-                // ── New card fields ─────────────────────────
-                if (_isNewCard) ...[
-                  const SizedBox(height: 12),
-                  _NewCardFields(
-                    playerCtrl: _newPlayerCtrl,
-                    cardNumberCtrl: _newCardNumberCtrl,
-                    serialMaxCtrl: _newSerialMaxCtrl,
-                    isRookie: _newIsRookie, isAuto: _newIsAuto, isPatch: _newIsPatch, isSSP: _newIsSSP,
-                    onToggleRookie: (v) => setState(() => _newIsRookie = v),
-                    onToggleAuto: (v) => setState(() => _newIsAuto = v),
-                    onTogglePatch: (v) => setState(() => _newIsPatch = v),
-                    onToggleSSP: (v) => setState(() => _newIsSSP = v),
-                  ),
-                ],
-
-                // ── Your copy ───────────────────────────────
-                if (_selectedCard != null || _isNewCard) ...[
-                  const SizedBox(height: 20),
-                  _sectionLabel('Your Copy', colors),
-                  const SizedBox(height: 8),
-                  if (_parallels.isNotEmpty)
-                    DropdownButtonFormField<SetParallel?>(
-                      initialValue: _selectedParallel,
-                      decoration: InputDecoration(labelText: 'Parallel', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Base')),
-                        ..._parallels.map((p) => DropdownMenuItem(value: p, child: Text(p.name))),
-                      ],
-                      onChanged: (p) => setState(() { _selectedParallel = p; _parallelName = p?.name ?? 'Base'; }),
-                    )
-                  else
-                    TextField(
-                      onChanged: (v) => setState(() => _parallelName = v.trim().isEmpty ? 'Base' : v.trim()),
-                      decoration: InputDecoration(labelText: 'Parallel (e.g. Silver)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true),
-                    ),
-                  const SizedBox(height: 12),
-                  Row(children: [
+                Row(
+                  children: [
                     Expanded(
                       child: TextField(
-                        controller: _pricePaidCtrl,
-                        readOnly: _pricePerCard != null,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          labelText: 'Price Paid *',
-                          prefixText: '\$ ',
-                          suffixText: _pricePerCard != null ? 'from box' : null,
-                          suffixStyle: const TextStyle(fontSize: 11, color: Color(0xFF800020)),
-                          filled: _pricePerCard != null,
-                          fillColor: _pricePerCard != null ? Colors.grey.withValues(alpha: 0.1) : null,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        controller: _boxPriceCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Box Price',
+                          prefixText: '\$',
                           isDense: true,
                         ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _boxQtyCtrl,
+                        decoration: const InputDecoration(
+                          labelText: '# Cards',
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_pricePerCard != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '\$${_pricePerCard!.toStringAsFixed(2)} per card',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                const SizedBox(height: 24),
+
+                // ── CARD ENTRY ──
+                const Text('Add Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _cardCtrl,
+                        decoration: InputDecoration(
+                          hintText: 'Player or card #...',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        enabled: _selectedRelease?.cardsightId != null,
+                        onChanged: (q) => setState(() => _cardResults = []),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _serialNumberCtrl,
-                        decoration: InputDecoration(labelText: 'Serial #', hintText: 'e.g. 45/99', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true),
+                    GestureDetector(
+                      onTap: _selectedRelease?.cardsightId != null && _cardCtrl.text.isNotEmpty && !_loadingCards
+                          ? () => _searchCards(_cardCtrl.text)
+                          : null,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: _loadingCards ? 0.4 : 1.0),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: _loadingCards
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                ),
+                              )
+                            : const Icon(Icons.search, color: Colors.white, size: 18),
                       ),
                     ),
-                  ]),
+                  ],
+                ),
+                if (_selectedRelease?.cardsightId == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'This release is not linked to CardSight',
+                      style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                    ),
+                  ),
+                if (_cardResults.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: _cardResults.map((card) => ListTile(
+                        title: Text(card.name, style: const TextStyle(fontSize: 13)),
+                        subtitle: Row(
+                          children: [
+                            if (card.number != null) ...[
+                              Text('#${card.number}', style: const TextStyle(fontSize: 11)),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(card.setName, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                            if (card.attributes.contains('RC')) ...[
+                              const SizedBox(width: 4),
+                              const AttrTag('RC'),
+                            ],
+                            if (card.attributes.contains('AU')) ...[
+                              const SizedBox(width: 4),
+                              const AttrTag('AU'),
+                            ],
+                          ],
+                        ),
+                        dense: true,
+                        onTap: () => _selectCsCard(card),
+                      )).toList(),
+                    ),
+                  ),
+                if (_resolvingCard)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                          const SizedBox(height: 8),
+                          const Text('Loading card...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // ── SELECTED CARD ──
+                if (_selectedCard != null) ...[
                   const SizedBox(height: 12),
-                  // Graded toggle
-                  GestureDetector(
-                    onTap: () => setState(() => _isGraded = !_isGraded),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _isGraded ? const Color(0xFF800020) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _isGraded ? const Color(0xFF800020) : colors.outline.withValues(alpha: 0.4)),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.verified_outlined, size: 16, color: _isGraded ? Colors.white : colors.onSurface.withValues(alpha: 0.6)),
-                        const SizedBox(width: 6),
-                        Text('Graded', style: TextStyle(fontSize: 13, color: _isGraded ? Colors.white : colors.onSurface.withValues(alpha: 0.6), fontWeight: FontWeight.w500)),
-                      ]),
+                  InfoBox(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedCard!.player,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  if (_selectedCard!.cardNumber != null) ...[
+                                    Text('#${_selectedCard!.cardNumber}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text(_selectedCsCard!.setName, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                  if (_selectedCard!.isRookie) ...[
+                                    const SizedBox(width: 4),
+                                    const AttrTag('RC'),
+                                  ],
+                                  if (_selectedCard!.isAuto) ...[
+                                    const SizedBox(width: 4),
+                                    const AttrTag('AU'),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: _clearCardSelection,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
                     ),
+                  ),
+
+                  // ── YOUR COPY ──
+                  const SizedBox(height: 16),
+                  const Text('Your Copy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _parallelName,
+                    decoration: const InputDecoration(
+                      labelText: 'Parallel',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: 'Base', child: Text('Base'))
+                    ] + _parallels.map((p) => DropdownMenuItem(
+                      value: p.name,
+                      child: Text('${p.name}${p.serialMax != null ? ' /${p.serialMax}' : ''}'),
+                    )).toList(),
+                    onChanged: (name) {
+                      if (name == null) return;
+                      setState(() {
+                        _parallelName = name;
+                        _selectedParallel = _parallels.firstWhere((p) => p.name == name, orElse: () => SetParallel(id: '', name: name));
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _pricePaidCtrl,
+                    enabled: false,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Price Paid',
+                      prefixText: '\$',
+                      border: const OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _serialNumberCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Serial #',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Graded', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                      GestureDetector(
+                        onTap: () => setState(() => _isGraded = !_isGraded),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 44, height: 24,
+                          decoration: BoxDecoration(
+                            color: _isGraded ? const Color(0xFF800020) : Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: _isGraded ? const Color(0xFF800020) : Theme.of(context).colorScheme.outline),
+                          ),
+                          child: AnimatedAlign(
+                            duration: const Duration(milliseconds: 200),
+                            alignment: _isGraded ? Alignment.centerRight : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.all(3),
+                              width: 18, height: 18,
+                              decoration: BoxDecoration(
+                                color: _isGraded ? Colors.white : Theme.of(context).colorScheme.outline,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   if (_isGraded) ...[
                     const SizedBox(height: 12),
-                    Row(children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _grader,
-                          decoration: InputDecoration(labelText: 'Grader', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true),
-                          items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                          onChanged: (v) => setState(() => _grader = v ?? 'PSA'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _grader,
+                            decoration: const InputDecoration(
+                              labelText: 'Grader',
+                              border: OutlineInputBorder(),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                            onChanged: (g) => setState(() { _grader = g ?? 'PSA'; }),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _gradeValueCtrl,
-                          onChanged: (_) => setState(() {}),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: InputDecoration(labelText: 'Grade *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _gradeValueCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Grade',
+                              border: OutlineInputBorder(),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                          ),
                         ),
-                      ),
-                    ]),
+                      ],
+                    ),
                   ],
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
+                    child: ElevatedButton(
                       onPressed: _canStage ? _stageCard : null,
-                      style: FilledButton.styleFrom(backgroundColor: _canStage ? const Color(0xFF800020) : null),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                       child: const Text('Add to Batch'),
                     ),
                   ),
                 ],
               ],
 
-              // ── Staged list ─────────────────────────────────
+              // ── STAGED LIST ──
               if (_staged.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                Row(children: [
-                  Text('Batch (${_staged.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                ]),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Batch (${_staged.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ],
+                ),
                 const SizedBox(height: 8),
-                ...List.generate(_staged.length, (i) {
-                  final c = _staged[i];
-                  return _StagedCardTile(
-                    card: c,
-                    onRemove: () => setState(() => _staged.removeAt(i)),
-                  );
-                }),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _staged.length,
+                  separatorBuilder: (_, _) => const Divider(),
+                  itemBuilder: (_, idx) {
+                    final card = _staged[idx];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  card.cardNumber != null ? '${card.player} #${card.cardNumber}' : card.player,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${card.setName ?? '—'} · ${card.parallelName} · \$${card.pricePaid?.toStringAsFixed(2) ?? '—'}',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                ),
+                                if (card.isGraded)
+                                  Text(
+                                    '${card.grader} ${card.gradeValue}',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => _removeStagedCard(idx),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ],
+              const SizedBox(height: 80),
             ],
           ),
-
-          // ── Sticky commit bar ────────────────────────────────
-          if (_staged.isNotEmpty)
-            Positioned(
-              left: 0, right: 0, bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  border: Border(top: BorderSide(color: colors.outline.withValues(alpha: 0.2))),
-                ),
-                child: FilledButton(
+        ),
+            ),
+          ),
+          ],
+        ),
+      bottomSheet: _staged.isNotEmpty
+          ? Container(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(context).padding.bottom + 12,
+              ),
+              color: Colors.white,
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
                   onPressed: _committing ? null : _commitAll,
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF800020), minimumSize: const Size(double.infinity, 48)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                   child: _committing
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text('Save ${_staged.length} Card${_staged.length == 1 ? '' : 's'} to Collection'),
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)))
+                      : Text('Save ${_staged.length} Cards to Collection'),
                 ),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionLabel(String label, ColorScheme colors) => Text(
-    label,
-    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.6), letterSpacing: 0.5),
-  );
-
-  Widget? _cardMeta(MasterCard c) {
-    final parts = <String>[
-      if (c.cardNumber != null) '#${c.cardNumber}',
-      if (c.isRookie) 'RC',
-      if (c.isAuto) 'AUTO',
-      if (c.isPatch) 'PATCH',
-      if (c.serialMax != null) '/${c.serialMax}',
-    ];
-    if (parts.isEmpty) return null;
-    return Text(parts.join(' · '), style: const TextStyle(fontSize: 12));
-  }
-}
-
-// ── Box Price Calculator ──────────────────────────────────────────────────────
-
-class _BoxPriceCalculator extends StatelessWidget {
-  const _BoxPriceCalculator({required this.boxPriceCtrl, required this.boxQtyCtrl, required this.pricePerCard});
-  final TextEditingController boxPriceCtrl;
-  final TextEditingController boxQtyCtrl;
-  final double? pricePerCard;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.outline.withValues(alpha: 0.2)),
-      ),
-      child: Row(children: [
-        Expanded(
-          child: TextField(
-            controller: boxPriceCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Box Price',
-              prefixText: '\$ ',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
-              filled: true,
-              fillColor: colors.surface,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: boxQtyCtrl,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Cards / Box',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
-              filled: true,
-              fillColor: colors.surface,
-            ),
-          ),
-        ),
-        if (pricePerCard != null) ...[
-          const SizedBox(width: 12),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('\$${pricePerCard!.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF800020))),
-            const Text('per card', style: TextStyle(fontSize: 10, color: Colors.grey)),
-          ]),
-        ],
-      ]),
-    );
-  }
-}
-
-// ── New Card Fields ───────────────────────────────────────────────────────────
-
-class _NewCardFields extends StatelessWidget {
-  const _NewCardFields({
-    required this.playerCtrl, required this.cardNumberCtrl, required this.serialMaxCtrl,
-    required this.isRookie, required this.isAuto, required this.isPatch, required this.isSSP,
-    required this.onToggleRookie, required this.onToggleAuto, required this.onTogglePatch, required this.onToggleSSP,
-  });
-  final TextEditingController playerCtrl, cardNumberCtrl, serialMaxCtrl;
-  final bool isRookie, isAuto, isPatch, isSSP;
-  final void Function(bool) onToggleRookie, onToggleAuto, onTogglePatch, onToggleSSP;
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-    TextField(controller: playerCtrl, decoration: InputDecoration(labelText: 'Player Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true)),
-    const SizedBox(height: 8),
-    Row(children: [
-      Expanded(child: TextField(controller: cardNumberCtrl, decoration: InputDecoration(labelText: 'Card #', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true))),
-      const SizedBox(width: 8),
-      Expanded(child: TextField(controller: serialMaxCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Serial Number', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), isDense: true))),
-    ]),
-    const SizedBox(height: 8),
-    Wrap(spacing: 8, children: [
-      FilterChip(label: const Text('RC'), selected: isRookie, onSelected: onToggleRookie),
-      FilterChip(label: const Text('AUTO'), selected: isAuto, onSelected: onToggleAuto),
-      FilterChip(label: const Text('PATCH'), selected: isPatch, onSelected: onTogglePatch),
-      FilterChip(label: const Text('SSP'), selected: isSSP, onSelected: onToggleSSP),
-    ]),
-  ]);
-}
-
-// ── Staged Card Tile ──────────────────────────────────────────────────────────
-
-class _StagedCardTile extends StatelessWidget {
-  const _StagedCardTile({required this.card, required this.onRemove});
-  final _StagedCard card;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final meta = <String>[
-      if (card.setName != null) card.setName!,
-      if (card.parallelName != 'Base') card.parallelName,
-      if (card.pricePaid != null) '\$${card.pricePaid!.toStringAsFixed(2)}',
-      if (card.isGraded && card.grader != null) '${card.grader} ${card.gradeValue ?? ''}'.trim(),
-    ];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.outline.withValues(alpha: 0.15)),
-      ),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                child: Text.rich(TextSpan(children: [
-                  TextSpan(text: card.player, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  if (card.cardNumber != null)
-                    TextSpan(text: '  #${card.cardNumber}', style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5))),
-                ])),
-              ),
-              const SizedBox(width: 8),
-              Wrap(spacing: 4, children: [
-                if (card.isRookie) AttrTag('RC', color: const Color(0xFF16A34A)),
-                if (card.isAuto)   AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-                if (card.isPatch)  AttrTag('PATCH', color: const Color(0xFF0369A1)),
-                SerialTag(serialMax: card.serialMax, serialNumber: card.serialNumber),
-              ]),
-            ]),
-            if (meta.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(meta.join(' · '), style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5))),
-            ],
-          ]),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: onRemove,
-          child: Container(
-            width: 28, height: 28,
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFFFECACA)),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
-          ),
-        ),
-      ]),
-    );
-  }
-}
-
-// ── Shared: Dropdown container ────────────────────────────────────────────────
-
-class _Dropdown extends StatelessWidget {
-  const _Dropdown({required this.children, this.maxHeight = 200});
-  final List<Widget> children;
-  final double maxHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      constraints: BoxConstraints(maxHeight: maxHeight),
-      decoration: BoxDecoration(
-        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        itemCount: children.length,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (_, i) => children[i],
-      ),
-    );
-  }
-}
-
-// ── Shared: Selected chip ─────────────────────────────────────────────────────
-
-class _SelectedChip extends StatelessWidget {
-  const _SelectedChip({required this.label, required this.onClear});
-  final String label;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
-      ),
-      child: Row(children: [
-        Icon(Icons.check_circle, size: 16, color: colors.primary),
-        const SizedBox(width: 8),
-        Expanded(child: Text(label, style: TextStyle(fontSize: 14, color: colors.primary, fontWeight: FontWeight.w500))),
-        GestureDetector(onTap: onClear, child: Icon(Icons.close, size: 16, color: colors.onSurface.withValues(alpha: 0.4))),
-      ]),
+            )
+          : null,
     );
   }
 }

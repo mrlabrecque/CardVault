@@ -9,6 +9,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/serial_tag.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/info_box.dart';
 
 class ItemDetailScreen extends ConsumerStatefulWidget {
   const ItemDetailScreen({super.key, required this.card});
@@ -637,26 +638,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                 children: [
                   // Best offer caveat
                   if (hasBestOffer)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB),
-                        border: Border.all(color: const Color(0xFFFCD34D)),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.info_outline, size: 13, color: Color(0xFFB45309)),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Best Offer prices shown are the listing ask, not the accepted offer — actual sold price may differ.',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: InfoBox(
+                        color: const Color(0xFFFCD34D),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        borderRadius: 10,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.info_outline, size: 13, color: Color(0xFFB45309)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Best Offer prices shown are the listing ask, not the accepted offer — actual sold price may differ.',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   // Comp rows

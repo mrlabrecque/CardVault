@@ -149,6 +149,35 @@ class LazyImportResult {
   );
 }
 
+class CardSightCardResult {
+  const CardSightCardResult({
+    required this.id,
+    required this.name,
+    this.number,
+    required this.setId,
+    required this.setName,
+    required this.releaseId,
+    required this.attributes,
+  });
+  final String id;
+  final String name;
+  final String? number;
+  final String setId;
+  final String setName;
+  final String releaseId;
+  final List<String> attributes;
+
+  factory CardSightCardResult.fromJson(Map<String, dynamic> j) => CardSightCardResult(
+    id:        j['id'] as String,
+    name:      j['name'] as String,
+    number:    j['number'] as String?,
+    setId:     j['setId'] as String,
+    setName:   j['setName'] as String,
+    releaseId: j['releaseId'] as String,
+    attributes: List<String>.from(j['attributes'] as List? ?? []),
+  );
+}
+
 class AddCardFormData {
   const AddCardFormData({
     this.masterCardId,
@@ -335,6 +364,82 @@ class CardsService {
     if (res.status != 200) throw Exception('Failed to fetch sets: ${res.status}');
     final list = res.data as List? ?? [];
     return list.map((r) => CatalogSetSummary.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Search cards within a release cross-set via CardSight API (with retry on rate limit)
+  Future<List<CardSightCardResult>> searchCardsInRelease(
+    String cardsightReleaseId,
+    String name, {
+    int take = 20,
+  }) async {
+    const maxRetries = 3;
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      final res = await _supabase.functions.invoke(
+        'catalog-search-cards',
+        body: {'cardsightReleaseId': cardsightReleaseId, 'name': name, 'take': take},
+      );
+
+      if (res.status == 200) {
+        final data = res.data as Map<String, dynamic>? ?? {};
+        final cards = data['cards'] as List? ?? [];
+        return cards.map((c) => CardSightCardResult.fromJson(c as Map<String, dynamic>)).toList();
+      }
+
+      if (res.status == 429 && attempt < maxRetries - 1) {
+        final delayMs = 250 * (1 << attempt);
+        await Future.delayed(Duration(milliseconds: delayMs));
+        continue;
+      }
+
+      return [];
+    }
+    return [];
+  }
+
+  /// Resolve a CardSight card: lazy-import set + parallels, then find or import the card
+  Future<({String masterCardId, String setId, List<SetParallel> parallels})>
+      resolveCardFromCatalog({
+    required CardSightCardResult card,
+    required String releaseName,
+    required int releaseYear,
+    String? releaseSegmentId,
+  }) async {
+    // Step 1: Lazy-import set + parallels
+    final importResult = await lazyImportCatalog(
+      cardsightReleaseId: card.releaseId,
+      releaseName: releaseName,
+      releaseYear: releaseYear.toString(),
+      releaseSegmentId: releaseSegmentId ?? '',
+      cardsightSetId: card.setId,
+    );
+    final setId = importResult.setId;
+    final parallels = importResult.parallels;
+
+    // Step 2: Check if card already exists in DB
+    final existing = await _supabase
+        .from('master_card_definitions')
+        .select('id')
+        .eq('cardsight_card_id', card.id)
+        .maybeSingle();
+
+    if (existing != null) {
+      return (masterCardId: existing['id'] as String, setId: setId, parallels: parallels);
+    }
+
+    // Step 3: Import all cards for this set, then look up the card
+    await importCardsForSet(
+      cardsightReleaseId: card.releaseId,
+      cardsightSetId: card.setId,
+      setId: setId,
+    );
+
+    final found = await _supabase
+        .from('master_card_definitions')
+        .select('id')
+        .eq('cardsight_card_id', card.id)
+        .single();
+
+    return (masterCardId: found['id'] as String, setId: setId, parallels: parallels);
   }
 
   Future<LazyImportResult> lazyImportCatalog({
