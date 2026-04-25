@@ -15,6 +15,7 @@ import '../features/collection/bulk_add_screen.dart';
 import '../features/collection/item_detail_screen.dart';
 import '../features/lot_builder/lot_builder_screen.dart';
 import '../features/grading/grading_screen.dart';
+import '../features/market_movers/market_movers_screen.dart';
 import '../features/admin/catalog_import_screen.dart';
 import '../features/admin/admin_releases_screen.dart';
 import '../features/admin/admin_sets_screen.dart';
@@ -56,6 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/grading', builder: (context, state) => const GradingScreen()),
           GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
           GoRoute(path: '/scan', builder: (context, state) => const ScanScreen()),
+          GoRoute(path: '/market-movers', builder: (context, state) => const MarketMoversScreen()),
           GoRoute(path: '/admin/catalog-import', builder: (_, _) => const CatalogImportScreen()),
           GoRoute(path: '/admin/pending-parallels', builder: (_, _) => const PendingParallelsScreen()),
           GoRoute(path: '/admin/releases', builder: (_, _) => const AdminReleasesScreen()),
