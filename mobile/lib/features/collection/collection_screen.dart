@@ -21,11 +21,14 @@ class CollectionScreen extends ConsumerStatefulWidget {
 
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   final _searchCtrl = TextEditingController();
+  final _setSearchCtrl = TextEditingController();
   String _query = '';
+  String _setQuery = '';
   SortOption _sort = SortOption.dateDesc;
   SetSortOption _setSort = SetSortOption.pctDesc;
   final Set<String> _activeFilters = {};
   final Set<String> _refreshingStacks = {};
+  final Set<String> _setViewSports = {};
   bool _showSets = false;
 
   List<CardStack> _filter(List<CardStack> stacks) {
@@ -141,6 +144,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                 }
                 final filtered = _filter(stacks);
                 return StickySubHeaderLayout(
+                  useScaffold: false,
                   header: const SizedBox.shrink(),
                   subHeader: FilterSortActionBar<SortOption>(
                     searchText: _query,
@@ -207,37 +211,100 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   }
 
   Widget _buildSetsView(List<UserCard> cards, ColorScheme colors) {
-    final rows = SetRow.fromCards(cards, sortBy: _setSortKey);
-    if (rows.isEmpty) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('📦', style: TextStyle(fontSize: 40)),
-          const SizedBox(height: 12),
-          const Text('No sets yet', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text('Add cards from an imported release to track set completion.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
-        ]),
+    final allRows = SetRow.fromCards(cards, sortBy: _setSortKey);
+
+    // Get unique sports for filtering
+    final sports = <String>{};
+    for (final card in cards) {
+      sports.add(card.sport);
+    }
+    final sportsList = sports.map((s) => s.toUpperCase()).toList()..sort();
+
+    // Filter rows by sport and search query
+    var filtered = _setViewSports.isEmpty
+        ? allRows
+        : allRows.where((row) => _setViewSports.contains(row.sport?.toUpperCase())).toList();
+    if (_setQuery.isNotEmpty) {
+      final q = _setQuery.toLowerCase();
+      filtered = filtered.where((row) => row.setName.toLowerCase().contains(q)).toList();
+    }
+
+    if (allRows.isEmpty) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF9FAFB),
+        body: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('📦', style: TextStyle(fontSize: 40)),
+            const SizedBox(height: 12),
+            const Text('No sets yet', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text('Add cards from an imported release to track set completion.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
+          ]),
+        ),
       );
     }
-    return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(userCardsProvider),
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 100),
-        itemCount: rows.length + 1,
-        itemBuilder: (_, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text('${rows.length} ${rows.length == 1 ? 'set' : 'sets'}',
-                  style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5))),
-            );
-          }
-          return SetRowTile(row: rows[i - 1]);
+
+    return StickySubHeaderLayout(
+      useScaffold: false,
+      header: const SizedBox.shrink(),
+      subHeader: FilterSortActionBar<SetSortOption>(
+        searchText: _setQuery,
+        onSearchChanged: (v) => setState(() => _setQuery = v),
+        onSearchClear: () {
+          _setSearchCtrl.clear();
+          setState(() => _setQuery = '');
         },
+        searchHint: 'Search sets…',
+        filters: sportsList,
+        activeFilters: _setViewSports,
+        onFilterToggle: (sport) => setState(() {
+          _setViewSports.contains(sport)
+              ? _setViewSports.remove(sport)
+              : _setViewSports.add(sport);
+        }),
+        sortMenuBuilder: (_) => [
+          PopupMenuItem(value: SetSortOption.pctDesc, child: _setSortItem(Icons.percent, 'Most Complete', _setSort == SetSortOption.pctDesc, colors)),
+          PopupMenuItem(value: SetSortOption.valueDesc, child: _setSortItem(Icons.trending_up, 'Value ↓', _setSort == SetSortOption.valueDesc, colors)),
+          PopupMenuItem(value: SetSortOption.name, child: _setSortItem(Icons.sort_by_alpha, 'Name A–Z', _setSort == SetSortOption.name, colors)),
+        ],
+        onSortSelected: (s) => setState(() => _setSort = s),
+      ),
+      label: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          '${filtered.length} ${filtered.length == 1 ? 'set' : 'sets'}'
+          '${filtered.length != allRows.length ? ' · ${allRows.length} total' : ''}',
+          style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(userCardsProvider),
+        child: filtered.isEmpty
+            ? Center(
+                child: Text(
+                  _setViewSports.isNotEmpty
+                      ? 'No sets match your sport filter.'
+                      : 'No sets in your collection.',
+                  style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.only(bottom: 100),
+                itemCount: filtered.length,
+                itemBuilder: (_, i) => SetRowTile(row: filtered[i]),
+              ),
       ),
     );
+  }
+
+  Widget _setSortItem(IconData icon, String label, bool active, ColorScheme colors) {
+    return Row(children: [
+      Icon(icon, size: 16, color: active ? colors.primary : null),
+      const SizedBox(width: 8),
+      Text(label),
+    ]);
   }
 
   Widget _tab(String label, bool active, ColorScheme colors, VoidCallback onTap) {

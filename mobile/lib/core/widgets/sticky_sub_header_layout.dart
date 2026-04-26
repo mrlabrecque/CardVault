@@ -19,6 +19,7 @@ class StickySubHeaderLayout extends StatelessWidget {
     this.labelPadding = const EdgeInsets.fromLTRB(16, 10, 16, 12),
     this.bodyTopPadding = 0,
     this.backgroundColor = const Color(0xFFF9FAFB),
+    this.useScaffold = true,
   });
 
   final Widget header;
@@ -30,40 +31,45 @@ class StickySubHeaderLayout extends StatelessWidget {
   final EdgeInsets labelPadding;
   final double bodyTopPadding;
   final Color backgroundColor;
+  final bool useScaffold;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: Column(
-        children: [
-          // Fixed header
+    final column = Column(
+      children: [
+        // Fixed header
+        Padding(
+          padding: headerPadding,
+          child: header,
+        ),
+        // Sticky sub-header
+        Padding(
+          padding: subHeaderPadding,
+          child: subHeader,
+        ),
+        // Optional label/info row
+        if (label != null)
           Padding(
-            padding: headerPadding,
-            child: header,
+            padding: labelPadding,
+            child: label!,
           ),
-          // Sticky sub-header
-          Padding(
-            padding: subHeaderPadding,
-            child: subHeader,
-          ),
-          // Optional label/info row
-          if (label != null)
-            Padding(
-              padding: labelPadding,
-              child: label!,
-            ),
-          // Scrollable body
-          Expanded(
-            child: bodyTopPadding > 0
-                ? Padding(
-                    padding: EdgeInsets.only(top: bodyTopPadding),
-                    child: body,
-                  )
-                : body,
-          ),
-        ],
-      ),
+        // Scrollable body
+        Expanded(
+          child: bodyTopPadding > 0
+              ? Padding(
+                  padding: EdgeInsets.only(top: bodyTopPadding),
+                  child: body,
+                )
+              : body,
+        ),
+      ],
     );
+
+    return useScaffold
+        ? Scaffold(
+            backgroundColor: backgroundColor,
+            body: column,
+          )
+        : column;
   }
 }
