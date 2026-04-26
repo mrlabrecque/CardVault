@@ -284,7 +284,9 @@ class _PriceChart extends StatelessWidget {
     final spots = <FlSpot>[];
     for (int i = 0; i < sortedDates.length; i++) {
       final price = data[sortedDates[i]]!;
-      spots.add(FlSpot(i.toDouble(), price));
+      // Round to 2 decimal places
+      final roundedPrice = double.parse(price.toStringAsFixed(2));
+      spots.add(FlSpot(i.toDouble(), roundedPrice));
     }
 
     return LineChart(
@@ -315,8 +317,22 @@ class _PriceChart extends StatelessWidget {
               reservedSize: 50,
             ),
           ),
-          bottomTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= sortedDates.length) return const SizedBox.shrink();
+                final date = sortedDates[index];
+                final month = date.month.toString().padLeft(2, '0');
+                final day = date.day.toString().padLeft(2, '0');
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('$month/$day', style: const TextStyle(fontSize: 9, color: Color(0xFF9CA3AF))),
+                );
+              },
+              reservedSize: 30,
+            ),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -326,6 +342,12 @@ class _PriceChart extends StatelessWidget {
           border: const Border(
             left: BorderSide(color: Color(0xFFF3F4F6), width: 1),
             bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+          ),
+        ),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (touchedSpot) => Colors.white,
+            tooltipBorder: const BorderSide(color: Color(0xFFF3F4F6)),
           ),
         ),
         minY: minPrice - priceRange * 0.1,
