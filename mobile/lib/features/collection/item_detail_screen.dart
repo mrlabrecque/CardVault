@@ -179,7 +179,11 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
           AppBreadcrumb(
             items: [
               BreadcrumbItem(
-                label: card.set ?? 'Set',
+                label: card.set ?? 'Release',
+                onTap: () => Navigator.pop(context),
+              ),
+              BreadcrumbItem(
+                label: card.checklist ?? 'Set',
                 onTap: () => Navigator.pop(context),
               ),
               BreadcrumbItem(label: card.player),
