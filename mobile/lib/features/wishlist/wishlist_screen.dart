@@ -4,6 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/models/wishlist_item.dart';
+import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/serial_tag.dart';
+import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── eBay query builder ─────────────────────────────────────────────────────────
 
@@ -123,7 +127,8 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
   }
 
   Future<void> add(Map<String, dynamic> data) async {
-    await ref.read(supabaseProvider).from('wishlist').insert(data);
+    final userId = ref.read(supabaseProvider).auth.currentUser?.id;
+    await ref.read(supabaseProvider).from('wishlist').insert({...data, 'user_id': userId});
     await reload();
   }
 
@@ -143,10 +148,37 @@ class WishlistScreen extends ConsumerStatefulWidget {
 }
 
 class _WishlistScreenState extends ConsumerState<WishlistScreen> {
+  final _searchCtrl = TextEditingController();
   final _expandedMatches = <String>{};
   String? _deletingId;
-  bool _checking = false;
-  ({int checked, int triggered, String? error})? _checkResult;
+  String _searchQuery = '';
+  final Set<String> _activeFilters = {};
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleFilter(String f) => setState(() {
+    _activeFilters.contains(f) ? _activeFilters.remove(f) : _activeFilters.add(f);
+  });
+
+  List<WishlistItem> _filterItems(List<WishlistItem> items) {
+    if (_searchQuery.isEmpty && _activeFilters.isEmpty) return items;
+    final q = _searchQuery.toLowerCase();
+    return items.where((item) {
+      if (q.isNotEmpty) {
+        final matches = (item.player?.toLowerCase().contains(q) ?? false) ||
+            (item.setName?.toLowerCase().contains(q) ?? false) ||
+            (item.parallel?.toLowerCase().contains(q) ?? false) ||
+            (item.cardNumber?.toLowerCase().contains(q) ?? false);
+        if (!matches) return false;
+      }
+      if (_activeFilters.contains('DEAL FOUND') && item.matches.isEmpty) return false;
+      return true;
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +197,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
   }
 
   Widget _buildEmpty() {
+    final colors = Theme.of(context).colorScheme;
     return ListView(
       children: [
         const SizedBox(height: 64),
@@ -172,25 +205,25 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
           children: [
             Container(
               width: 64, height: 64,
-              decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
-              child: Icon(Icons.bookmark_border, size: 28, color: Colors.grey.shade300),
+              decoration: BoxDecoration(color: colors.outline.withValues(alpha: 0.1), shape: BoxShape.circle),
+              child: Icon(Icons.bookmark_border, size: 28, color: colors.onSurface.withValues(alpha: 0.3)),
             ),
             const SizedBox(height: 16),
-            const Text('No cards on your wishlist',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
+            Text('No cards on your wishlist',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.onSurface)),
             const SizedBox(height: 4),
             Text('Add cards to watch for deals on eBay.',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5))),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () => _showWishlistForm(context, ref),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF800020),
-                foregroundColor: Colors.white,
+                backgroundColor: colors.primary,
+                foregroundColor: colors.onPrimary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              child: const Text('Add a Card', style: TextStyle(fontWeight: FontWeight.w600)),
+              child: Text('Add a Card', style: TextStyle(fontWeight: FontWeight.w600, color: colors.onPrimary)),
             ),
           ],
         ),
@@ -198,107 +231,66 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     );
   }
 
-  Widget _buildList(List<WishlistItem> items) {
-    final lastChecked = items
-        .where((i) => i.lastCheckedAt != null)
-        .map((i) => i.lastCheckedAt!)
-        .fold<DateTime?>(null, (best, t) => best == null || t.isAfter(best) ? t : best);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 16, 12, 100),
-      children: [
-        // Check Now bar
-        Row(
-          children: [
-            ElevatedButton.icon(
-              onPressed: _checking ? null : () async {
-                setState(() { _checking = true; _checkResult = null; });
-                final result = await ref.read(wishlistProvider.notifier).checkNow();
-                setState(() { _checking = false; _checkResult = result; });
-              },
-              icon: _checking
-                  ? const SizedBox(width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.refresh, size: 14),
-              label: Text(_checking ? 'Checking eBay…' : 'Check Now',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF800020),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFF800020).withValues(alpha: 0.5),
-                disabledForegroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                elevation: 0,
+  Widget _buildList(List<WishlistItem> items) {
+    final filtered = _filterItems(items);
+
+    return StickySubHeaderLayout(
+      header: const SizedBox.shrink(),
+      subHeader: FilterSortActionBar<String>(
+        searchText: _searchQuery,
+        onSearchChanged: (v) => setState(() => _searchQuery = v),
+        onSearchClear: () {
+          _searchCtrl.clear();
+          setState(() => _searchQuery = '');
+        },
+        searchHint: 'Search player, set, card #…',
+        filters: const ['DEAL FOUND'],
+        activeFilters: _activeFilters,
+        onFilterToggle: _toggleFilter,
+        actionButton: const SizedBox.shrink(),
+      ),
+      label: null,
+      body: filtered.isEmpty
+          ? Center(
+              child: Text(
+                _searchQuery.isNotEmpty ? 'No cards match your search.' : 'No wishlist items yet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 100),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) {
+                final item = filtered[i];
+                return _WishlistCard(
+                  item: item,
+                  isMatchesExpanded: _expandedMatches.contains(item.id),
+                  isDeleting: _deletingId == item.id,
+                  onToggleMatches: () => setState(() {
+                    _expandedMatches.contains(item.id)
+                        ? _expandedMatches.remove(item.id)
+                        : _expandedMatches.add(item.id);
+                  }),
+                  onEdit: () => _showWishlistForm(context, ref, editing: item),
+                  onSearchComps: () {
+                    final base = item.ebayQuery ?? item.player ?? '';
+                    final exclusions = item.excludeTerms.map((t) => '-"$t"').join(' ');
+                    final q = exclusions.isNotEmpty ? '$base $exclusions' : base;
+                    context.go('/comps?q=${Uri.encodeComponent(q)}');
+                  },
+                  onTogglePause: () => ref.read(wishlistProvider.notifier).togglePause(item.id),
+                  onDelete: () async {
+                    setState(() => _deletingId = item.id);
+                    await ref.read(wishlistProvider.notifier).remove(item.id);
+                    setState(() => _deletingId = null);
+                  },
+                  onDismissMatch: (matchId) =>
+                      ref.read(wishlistProvider.notifier).dismissMatch(item.id, matchId),
+                );
+              },
             ),
-            if (_checkResult != null) ...[
-              const SizedBox(width: 12),
-              if (_checkResult!.triggered > 0)
-                Text(
-                  '${_checkResult!.triggered} deal${_checkResult!.triggered == 1 ? '' : 's'} found!',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF059669)),
-                )
-              else if (_checkResult!.error != null)
-                Text('Error: ${_checkResult!.error}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)))
-              else
-                Text('Checked ${_checkResult!.checked} item${_checkResult!.checked == 1 ? '' : 's'} — no deals yet.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-            ],
-          ],
-        ),
-        if (lastChecked != null) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: Text('Last checked at ${_formatChecked(lastChecked)}',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
-          ),
-        ],
-        const SizedBox(height: 16),
-        for (final item in items) ...[
-          _WishlistCard(
-            item: item,
-            isMatchesExpanded: _expandedMatches.contains(item.id),
-            isDeleting: _deletingId == item.id,
-            onToggleMatches: () => setState(() {
-              _expandedMatches.contains(item.id)
-                  ? _expandedMatches.remove(item.id)
-                  : _expandedMatches.add(item.id);
-            }),
-            onEdit: () => _showWishlistForm(context, ref, editing: item),
-            onSearchComps: () {
-              final base = item.ebayQuery ?? item.player ?? '';
-              final exclusions = item.excludeTerms.map((t) => '-"$t"').join(' ');
-              final q = exclusions.isNotEmpty ? '$base $exclusions' : base;
-              context.go('/comps?q=${Uri.encodeComponent(q)}');
-            },
-            onTogglePause: () => ref.read(wishlistProvider.notifier).togglePause(item.id),
-            onDelete: () async {
-              setState(() => _deletingId = item.id);
-              await ref.read(wishlistProvider.notifier).remove(item.id);
-              setState(() => _deletingId = null);
-            },
-            onDismissMatch: (matchId) =>
-                ref.read(wishlistProvider.notifier).dismissMatch(item.id, matchId),
-          ),
-          const SizedBox(height: 12),
-        ],
-        // Add another
-        OutlinedButton.icon(
-          onPressed: () => _showWishlistForm(context, ref),
-          icon: const Icon(Icons.add, size: 14),
-          label: const Text('Add Another Card', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.grey.shade400,
-            side: BorderSide(color: Colors.grey.shade200, width: 2),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            minimumSize: const Size(double.infinity, 0),
-          ),
-        ),
-      ],
     );
   }
 
@@ -325,17 +317,6 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     );
   }
 
-  String _formatChecked(DateTime dt) {
-    final now = DateTime.now();
-    final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
-    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final m = dt.minute.toString().padLeft(2, '0');
-    final ampm = dt.hour < 12 ? 'AM' : 'PM';
-    final time = '$h:$m $ampm';
-    if (isToday) return time;
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${months[dt.month - 1]} ${dt.day} at $time';
-  }
 }
 
 // ── Item card ──────────────────────────────────────────────────────────────────
@@ -365,200 +346,310 @@ class _WishlistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final triggered = item.isTriggered;
-    final borderColor = triggered ? const Color(0xFF6EE7B7) : const Color(0xFFF3F4F6);
-    final bgColor = triggered ? const Color(0xFFF0FDF4) : Colors.white;
-    final dividerColor = triggered ? const Color(0xFFD1FAE5) : const Color(0xFFF9FAFB);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: triggered ? colors.surface : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
+        border: Border.all(
+          color: triggered ? colors.primary : colors.outline.withValues(alpha: 0.2),
+          width: 1,
+        ),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Deal Found banner
           if (triggered) ...[
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF10b981),
-                borderRadius: BorderRadius.circular(12),
+                color: colors.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.local_offer, color: Colors.white, size: 14),
+                  Icon(Icons.local_offer, color: colors.onPrimary, size: 14),
                   const SizedBox(width: 8),
-                  const Text('Deal Found!',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                  Text('Deal Found!', style: TextStyle(color: colors.onPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
                   const Spacer(),
                   if (item.savings > 0)
                     Text('\$${item.savings.toStringAsFixed(0)} under target',
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: colors.onPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
+            const Divider(height: 1),
           ],
-
-          // Top row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Main content row: left (info) + right (badge/edit + prices)
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Name + card number
-                    Text.rich(
-                      TextSpan(children: [
-                        TextSpan(
-                          text: item.player ?? 'Unknown',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
-                        ),
-                        if (item.cardNumber != null)
-                          TextSpan(
-                            text: '  #${item.cardNumber}',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Colors.grey.shade400),
+                    // Left side: player, set, parallel, attributes
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: item.player ?? 'Unknown', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              if (item.cardNumber != null)
+                                TextSpan(
+                                  text: '  #${item.cardNumber}',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5)),
+                                ),
+                            ]),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
                           ),
-                      ]),
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                    ),
-                    // Year · Set
-                    if (item.year != null || item.setName != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        [
-                          if (item.year != null) '${item.year}',
-                          if (item.setName != null) item.setName!,
-                        ].join(' · '),
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                          if (item.year != null || item.setName != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              [if (item.year != null) '${item.year}', if (item.setName != null) item.setName!].join(' · '),
+                              style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5)),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          if (item.parallel != null || item.attrs.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 4, runSpacing: 4,
+                              children: [
+                                if (item.parallel != null && item.parallel != 'Base')
+                                  Text(item.parallel!, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: colors.primary)),
+                                for (final tag in item.attrs)
+                                  AttrTag(tag, color: _attrColor(tag)),
+                                if (item.serialMax != null)
+                                  SerialTag(serialMax: item.serialMax),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                    // Parallel
-                    if (item.parallel != null) ...[
-                      const SizedBox(height: 2),
-                      Text(item.parallel!,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF800020), fontWeight: FontWeight.w500)),
-                    ],
-                    // Attributes
-                    if (item.attrs.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 4, runSpacing: 4,
-                        children: [for (final tag in item.attrs) _AttrTag(tag: tag)],
+                    ),
+                    const SizedBox(width: 12),
+                    // Right side: badge + edit, then prices
+                    SizedBox(
+                      width: 130,
+                      child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Top: badge + edit
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!triggered)
+                              _StatusBadge(status: item.alertStatus, colors: colors),
+                            if (!triggered)
+                              const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: onEdit,
+                              child: Icon(Icons.edit_outlined, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Price boxes (inline)
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          alignment: WrapAlignment.end,
+                          children: [
+                            if (item.targetPrice != null)
+                              _PriceBox(colors: colors, label: 'Target', value: '\$${item.targetPrice!.toStringAsFixed(2)}'),
+                            if (item.lastSeenPrice != null)
+                              _PriceBox(
+                                colors: colors,
+                                label: 'Best',
+                                value: '\$${item.lastSeenPrice!.toStringAsFixed(2)}',
+                                highlight: triggered,
+                              ),
+                            _PriceBox(colors: colors, label: 'Grade', value: item.grade?.isNotEmpty == true ? item.grade! : 'Any'),
+                          ],
+                        ),
+                      ],
+                    ),
+                    ),
+                  ],
+                ),
+
+                // Active listings section
+                if (triggered && item.matches.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: onToggleMatches,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${item.matches.length} active listing${item.matches.length == 1 ? '' : 's'}',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.7)),
+                        ),
+                        Icon(isMatchesExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
+                      ],
+                    ),
+                  ),
+                  if (isMatchesExpanded) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(color: colors.surface, borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        children: [
+                          for (int i = 0; i < item.matches.length; i++) ...[
+                            _MatchRow(
+                              match: item.matches[i],
+                              colors: colors,
+                              onDismiss: () => onDismissMatch(item.matches[i].id),
+                            ),
+                            if (i < item.matches.length - 1)
+                              Divider(height: 1, color: colors.outline.withValues(alpha: 0.1)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+
+                // Action buttons
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onSearchComps,
+                        icon: Icon(Icons.search, size: 13, color: colors.onSurface.withValues(alpha: 0.6)),
+                        label: Text('Comps', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.7))),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          side: BorderSide(color: colors.outline.withValues(alpha: 0.3)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: onTogglePause,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(item.isPaused ? Icons.play_arrow : Icons.pause, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: onDelete,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: colors.error.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: isDeleting
+                            ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: colors.error))
+                            : Icon(Icons.delete_outline, size: 16, color: colors.error.withValues(alpha: 0.6)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _attrColor(String tag) => switch (tag) {
+    'RC'   => const Color(0xFF16A34A),
+    'AUTO' => const Color(0xFF7C3AED),
+    'PATCH'=> const Color(0xFF0369A1),
+    _      => const Color(0xFF6B7280),
+  };
+}
+
+// ── Match row ──────────────────────────────────────────────────────────────────
+
+class _MatchRow extends StatelessWidget {
+  const _MatchRow({required this.match, required this.colors, required this.onDismiss});
+  final WishlistMatch match;
+  final ColorScheme colors;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final isAuction = match.listingType == 'AUCTION';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (match.imageUrl != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(match.imageUrl!, width: 36, height: 48, fit: BoxFit.cover,
+                  errorBuilder: (ctx, err, st) => const SizedBox(width: 36, height: 48)),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(match.title,
+                    style: const TextStyle(fontSize: 11, color: Colors.black87),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(isAuction ? 'Auction' : 'Buy Now',
+                        style: TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.w600,
+                            color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB))),
+                    if (match.url != null) ...[
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => launchUrl(Uri.parse(match.url!), mode: LaunchMode.externalApplication),
+                        child: Icon(Icons.open_in_new, size: 11, color: colors.onSurface.withValues(alpha: 0.4)),
                       ),
                     ],
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Row(
-                children: [
-                  if (!triggered) _StatusBadge(status: item.alertStatus),
-                  const SizedBox(width: 4),
-                  _IconBtn(icon: Icons.edit_outlined, size: 14, onTap: onEdit),
-                ],
-              ),
-            ],
-          ),
-
-          // Price row
-          const SizedBox(height: 12),
-          Divider(color: dividerColor, height: 1),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _PriceCell(
-                label: 'Target',
-                value: item.targetPrice != null ? '\$${item.targetPrice!.toStringAsFixed(0)}' : null,
-                valueColor: const Color(0xFF800020),
-                valueBold: true,
-              ),
-              _PriceCell(
-                label: 'Best Match',
-                value: item.lastSeenPrice != null ? '\$${item.lastSeenPrice!.toStringAsFixed(2)}' : null,
-                valueColor: triggered ? const Color(0xFF059669) : Colors.black87,
-                valueBold: true,
-                prefix: triggered ? const Icon(Icons.arrow_downward, size: 10, color: Color(0xFF059669)) : null,
-              ),
-              _PriceCell(
-                label: 'Grade',
-                value: item.grade?.isNotEmpty == true ? item.grade! : 'Any',
-                valueColor: Colors.black87,
-              ),
-            ],
-          ),
-
-          // Active listings
-          if (triggered && item.matches.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Divider(color: dividerColor, height: 1),
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: onToggleMatches,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${item.matches.length} Active Listing${item.matches.length == 1 ? '' : 's'}',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
-                        color: Color(0xFF059669), letterSpacing: 0.5),
-                  ),
-                  Icon(
-                    isMatchesExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16, color: const Color(0xFF059669),
-                  ),
-                ],
-              ),
+              ],
             ),
-            if (isMatchesExpanded) ...[
-              const SizedBox(height: 8),
-              for (final match in item.matches)
-                _MatchRow(match: match, onDismiss: () => onDismissMatch(match.id)),
-            ],
-          ],
-
-          // Actions
-          const SizedBox(height: 12),
-          Row(
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onSearchComps,
-                  icon: const Icon(Icons.search, size: 13),
-                  label: const Text('Search Comps', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF6B7280),
-                    side: const BorderSide(color: Color(0xFFE5E7EB)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+              Text('\$${match.price.toStringAsFixed(2)}',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.primary)),
+              const SizedBox(height: 6),
+              GestureDetector(
+                onTap: onDismiss,
+                child: Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: colors.error.withValues(alpha: 0.3)),
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Icon(Icons.close, size: 14, color: colors.error.withValues(alpha: 0.6)),
                 ),
-              ),
-              const SizedBox(width: 8),
-              _IconBtn(
-                icon: item.isPaused ? Icons.play_arrow : Icons.pause,
-                onTap: onTogglePause,
-                color: Colors.white,
-                border: true,
-                borderColor: const Color(0xFFE5E7EB),
-              ),
-              const SizedBox(width: 8),
-              _IconBtn(
-                icon: isDeleting ? null : Icons.delete_outline,
-                loading: isDeleting,
-                onTap: onDelete,
-                color: const Color(0xFFFEF2F2),
-                iconColor: const Color(0xFFF87171),
-                border: true,
-                borderColor: const Color(0xFFFEE2E2),
               ),
             ],
           ),
@@ -568,104 +659,20 @@ class _WishlistCard extends StatelessWidget {
   }
 }
 
-// ── Match row ──────────────────────────────────────────────────────────────────
-
-class _MatchRow extends StatelessWidget {
-  const _MatchRow({required this.match, required this.onDismiss});
-  final WishlistMatch match;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final isAuction = match.listingType == 'AUCTION';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFD1FAE5)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (match.imageUrl != null) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.network(match.imageUrl!, width: 40, height: 56, fit: BoxFit.cover,
-                    errorBuilder: (ctx, err, st) => const SizedBox(width: 40, height: 56)),
-              ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(match.title,
-                      style: const TextStyle(fontSize: 11, color: Colors.black87),
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(isAuction ? 'Auction' : 'Buy Now',
-                          style: TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w700,
-                              color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB))),
-                      if (match.url != null) ...[
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () => launchUrl(Uri.parse(match.url!), mode: LaunchMode.externalApplication),
-                          child: const Icon(Icons.open_in_new, size: 11, color: Color(0xFF9CA3AF)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('\$${match.price.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                        color: Color(0xFF059669))),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: onDismiss,
-                  child: Container(
-                    width: 28, height: 28,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFFECACA)),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ── Small helpers ──────────────────────────────────────────────────────────────
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.status, required this.colors});
   final String status;
+  final ColorScheme colors;
 
   @override
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (status) {
-      'active'    => ('Watching', const Color(0xFFDCFCE7), const Color(0xFF16A34A)),
-      'triggered' => ('Below Target!', const Color(0xFFFEF9C3), const Color(0xFFCA8A04)),
-      'paused'    => ('Paused', const Color(0xFFF3F4F6), const Color(0xFF9CA3AF)),
-      _           => ('Unknown', const Color(0xFFF3F4F6), const Color(0xFF9CA3AF)),
+      'active'    => ('Watching', colors.primary.withValues(alpha: 0.15), colors.primary),
+      'triggered' => ('Below Target!', colors.error.withValues(alpha: 0.15), colors.error),
+      'paused'    => ('Paused', colors.outline.withValues(alpha: 0.1), colors.onSurface.withValues(alpha: 0.5)),
+      _           => ('Unknown', colors.outline.withValues(alpha: 0.1), colors.onSurface.withValues(alpha: 0.5)),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -675,107 +682,35 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _AttrTag extends StatelessWidget {
-  const _AttrTag({required this.tag});
-  final String tag;
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, fg) = switch (tag) {
-      'RC'   => (const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
-      'AUTO' => (const Color(0xFFF3E8FF), const Color(0xFF7E22CE)),
-      'PATCH'=> (const Color(0xFFFEF3C7), const Color(0xFFB45309)),
-      _      => (const Color(0xFFF3F4F6), const Color(0xFF6B7280)),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(tag, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
-    );
-  }
-}
-
-class _PriceCell extends StatelessWidget {
-  const _PriceCell({
+class _PriceBox extends StatelessWidget {
+  const _PriceBox({
+    required this.colors,
     required this.label,
     required this.value,
-    this.valueColor,
-    this.valueBold = false,
-    this.prefix,
+    this.highlight = false,
   });
+  final ColorScheme colors;
   final String label;
-  final String? value;
-  final Color? valueColor;
-  final bool valueBold;
-  final Widget? prefix;
+  final String value;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label.toUpperCase(),
-              style: TextStyle(fontSize: 9, color: Colors.grey.shade400, letterSpacing: 0.5)),
-          const SizedBox(height: 2),
-          if (value != null)
-            Row(
-              children: [
-                if (prefix != null) ...[prefix!, const SizedBox(width: 2)],
-                Text(value!,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: valueBold ? FontWeight.w700 : FontWeight.w600,
-                        color: valueColor ?? Colors.black87)),
-              ],
-            )
-          else
-            Text('—', style: TextStyle(fontSize: 13, color: Colors.grey.shade200)),
-        ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      decoration: BoxDecoration(
+        color: highlight ? colors.primary.withValues(alpha: 0.1) : colors.surface,
+        border: Border.all(color: highlight ? colors.primary.withValues(alpha: 0.3) : colors.outline.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(8),
       ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  const _IconBtn({
-    this.icon,
-    this.loading = false,
-    required this.onTap,
-    this.color,
-    this.iconColor,
-    this.border = false,
-    this.borderColor,
-    this.size = 16,
-  });
-  final IconData? icon;
-  final bool loading;
-  final VoidCallback onTap;
-  final Color? color;
-  final Color? iconColor;
-  final bool border;
-  final Color? borderColor;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(
-          color: color ?? Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: border
-              ? Border.all(color: borderColor ?? Colors.grey.shade200)
-              : null,
-        ),
-        child: Center(
-          child: loading
-              ? const SizedBox(width: 14, height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF87171)))
-              : Icon(icon, size: size, color: iconColor ?? Colors.grey.shade500),
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.2)),
+          const SizedBox(height: 1),
+          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: highlight ? colors.primary : colors.onSurface)),
+        ],
       ),
     );
   }
@@ -883,18 +818,19 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
       return;
     }
     setState(() { _saving = true; _error = null; });
+    String? str(String v) => v.trim().isEmpty ? null : v.trim();
     final data = {
       'player':        player,
       'year':          int.tryParse(_yearCtrl.text),
-      'set_name':      _setCtrl.text.trim(),
-      'parallel':      _parallelCtrl.text.trim(),
-      'card_number':   _cardNumCtrl.text.trim(),
+      'set_name':      str(_setCtrl.text),
+      'parallel':      str(_parallelCtrl.text),
+      'card_number':   str(_cardNumCtrl.text),
       'is_rookie':     _isRookie,
       'is_auto':       _isAuto,
       'is_patch':      _isPatch,
       'serial_max':    int.tryParse(_serialMaxCtrl.text),
-      'grade':         _gradeCtrl.text.trim(),
-      'ebay_query':    _queryCtrl.text.trim(),
+      'grade':         str(_gradeCtrl.text),
+      'ebay_query':    str(_queryCtrl.text),
       'exclude_terms': _excludeTerms,
       'target_price':  double.tryParse(_targetPriceCtrl.text),
     };
@@ -910,6 +846,7 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final isEditing = widget.editing != null;
     return AnimatedPadding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -917,9 +854,9 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
       curve: Curves.easeOut,
       child: Container(
         constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -929,7 +866,7 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
               padding: const EdgeInsets.only(top: 12, bottom: 4),
               child: Container(
                 width: 40, height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(color: colors.outline.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
               ),
             ),
             // Header
@@ -939,7 +876,7 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                 children: [
                   Text(
                     isEditing ? 'Edit Wishlist Item' : 'Add to Wishlist',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.onSurface),
                   ),
                   const Spacer(),
                   GestureDetector(
@@ -947,16 +884,16 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                     child: Container(
                       width: 32, height: 32,
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.close, size: 16, color: Colors.grey.shade400),
+                      child: Icon(Icons.close, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
                     ),
                   ),
                 ],
               ),
             ),
-            Divider(height: 1, color: Colors.grey.shade100),
+            Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
             // Scrollable form
             Flexible(
               child: SingleChildScrollView(
@@ -968,45 +905,45 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFEF2F2),
-                          border: Border.all(color: const Color(0xFFFECACA)),
+                          color: colors.error.withValues(alpha: 0.1),
+                          border: Border.all(color: colors.error.withValues(alpha: 0.3)),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(children: [
-                          const Icon(Icons.error_outline, size: 14, color: Color(0xFFDC2626)),
+                          Icon(Icons.error_outline, size: 14, color: colors.error),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(_error!, style: const TextStyle(fontSize: 13, color: Color(0xFFDC2626)))),
+                          Expanded(child: Text(_error!, style: TextStyle(fontSize: 13, color: colors.error))),
                         ]),
                       ),
                       const SizedBox(height: 16),
                     ],
                     _label('Player', required: true),
-                    _field(_playerCtrl, hint: 'e.g. Connor Bedard', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                    _field(_playerCtrl, colors: colors, hint: 'e.g. Connor Bedard', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
                     const SizedBox(height: 16),
                     Row(children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         _label('Year'),
-                        _field(_yearCtrl, hint: '2024', numeric: true, onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(_yearCtrl, colors: colors, hint: '2024', numeric: true, onChanged: (_) { setState(() {}); _rebuildQuery(); }),
                       ])),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         _label('Card #'),
-                        _field(_cardNumCtrl, hint: 'e.g. 201', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(_cardNumCtrl, colors: colors, hint: 'e.g. 201', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
                       ])),
                     ]),
                     const SizedBox(height: 16),
                     _label('Set'),
-                    _field(_setCtrl, hint: 'e.g. Upper Deck Series 1', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                    _field(_setCtrl, colors: colors, hint: 'e.g. Upper Deck Series 1', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
                     const SizedBox(height: 16),
                     Row(children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         _label('Parallel'),
-                        _field(_parallelCtrl, hint: 'e.g. Silver', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(_parallelCtrl, colors: colors, hint: 'e.g. Silver', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
                       ])),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         _label('Grade'),
-                        _field(_gradeCtrl, hint: 'e.g. PSA 10', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(_gradeCtrl, colors: colors, hint: 'e.g. PSA 10', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
                       ])),
                     ]),
                     const SizedBox(height: 16),
@@ -1021,32 +958,32 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                       _attrChip('PATCH', _isPatch, const Color(0xFFF59E0B),
                           () => setState(() { _isPatch = !_isPatch; _rebuildQuery(); })),
                       const Spacer(),
-                      Text('/', style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontWeight: FontWeight.w600)),
+                      Text('/', style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.4), fontWeight: FontWeight.w600)),
                       const SizedBox(width: 6),
-                      SizedBox(width: 64, child: _field(_serialMaxCtrl, hint: '99', numeric: true,
+                      SizedBox(width: 64, child: _field(_serialMaxCtrl, colors: colors, hint: '99', numeric: true,
                           onChanged: (_) { setState(() {}); _rebuildQuery(); })),
                     ]),
                     const SizedBox(height: 16),
                     Row(children: [
-                      Text('EBAY SEARCH QUERY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade400, letterSpacing: 0.5)),
+                      Text('EBAY SEARCH QUERY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.5)),
                       const SizedBox(width: 6),
-                      Text('auto-built · editable', style: TextStyle(fontSize: 11, color: Colors.grey.shade300)),
+                      Text('auto-built · editable', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.3))),
                     ]),
                     const SizedBox(height: 6),
-                    _field(_queryCtrl, hint: 'e.g. Connor Bedard RC PSA 10',
+                    _field(_queryCtrl, colors: colors, hint: 'e.g. Connor Bedard RC PSA 10',
                         onChanged: (_) => setState(() => _queryEdited = true)),
                     const SizedBox(height: 16),
                     Row(children: [
-                      Text('EXCLUDE TERMS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade400, letterSpacing: 0.5)),
+                      Text('EXCLUDE TERMS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.5)),
                       const SizedBox(width: 6),
-                      Text('press Enter to add', style: TextStyle(fontSize: 11, color: Colors.grey.shade300)),
+                      Text('press Enter to add', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.3))),
                     ]),
                     const SizedBox(height: 6),
                     Container(
                       constraints: const BoxConstraints(minHeight: 42),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Wrap(
@@ -1056,16 +993,16 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFEF2F2),
-                                border: Border.all(color: const Color(0xFFFECACA)),
+                                color: colors.error.withValues(alpha: 0.1),
+                                border: Border.all(color: colors.error.withValues(alpha: 0.3)),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Text(term, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
+                                Text(term, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.error)),
                                 const SizedBox(width: 4),
                                 GestureDetector(
                                   onTap: () => setState(() => _excludeTerms.remove(term)),
-                                  child: Icon(Icons.close, size: 12, color: Colors.red.shade400),
+                                  child: Icon(Icons.close, size: 12, color: colors.error.withValues(alpha: 0.6)),
                                 ),
                               ]),
                             ),
@@ -1076,10 +1013,10 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                               decoration: InputDecoration(
                                 border: InputBorder.none,
                                 hintText: _excludeTerms.isEmpty ? 'e.g. draft picks' : '',
-                                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade300),
+                                hintStyle: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.3)),
                                 contentPadding: const EdgeInsets.symmetric(vertical: 4),
                               ),
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: 13, color: colors.onSurface),
                               textInputAction: TextInputAction.done,
                               onSubmitted: (_) => _addExcludeTerm(),
                             ),
@@ -1095,19 +1032,19 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                       decoration: InputDecoration(
                         hintText: '0.00',
                         prefixText: '\$ ',
-                        hintStyle: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+                        hintStyle: TextStyle(color: colors.onSurface.withValues(alpha: 0.3), fontSize: 14),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade200),
+                          borderSide: BorderSide(color: colors.outline.withValues(alpha: 0.3)),
                         ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: Color(0xFF800020), width: 1.5),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.primary, width: 1.5),
                         ),
                         isDense: true,
                       ),
-                      style: const TextStyle(fontSize: 14),
+                      style: TextStyle(fontSize: 14, color: colors.onSurface),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1115,7 +1052,7 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
               ),
             ),
             // Footer
-            Divider(height: 1, color: Colors.grey.shade100),
+            Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: Row(children: [
@@ -1125,11 +1062,11 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                     child: Container(
                       height: 48,
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(child: Text('Cancel',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade600))),
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.6)))),
                     ),
                   ),
                 ),
@@ -1142,15 +1079,15 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
                       child: Container(
                         height: 48,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF800020),
+                          color: colors.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Center(
                           child: _saving
-                              ? const SizedBox(width: 16, height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              ? SizedBox(width: 16, height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: colors.onPrimary))
                               : Text(isEditing ? 'Save Changes' : 'Add to Wishlist',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.onPrimary)),
                         ),
                       ),
                     ),
@@ -1164,40 +1101,46 @@ class _WishlistFormSheetState extends State<_WishlistFormSheet> {
     );
   }
 
-  Widget _label(String text, {bool required = false}) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(children: [
-      Text(text.toUpperCase(),
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade400, letterSpacing: 0.5)),
-      if (required) const Text(' *', style: TextStyle(fontSize: 11, color: Color(0xFFF87171))),
-    ]),
-  );
+  Widget _label(String text, {bool required = false}) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        Text(text.toUpperCase(),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.5)),
+        if (required) Text(' *', style: TextStyle(fontSize: 11, color: colors.error)),
+      ]),
+    );
+  }
 
-  Widget _field(TextEditingController ctrl, {String? hint, bool numeric = false, void Function(String)? onChanged}) =>
-      TextField(
-        controller: ctrl,
-        keyboardType: numeric ? TextInputType.number : TextInputType.text,
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade300, fontSize: 14),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200),
-          ),
-          focusedBorder: const OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-            borderSide: BorderSide(color: Color(0xFF800020), width: 1.5),
-          ),
-          isDense: true,
+  Widget _field(TextEditingController ctrl, {ColorScheme? colors, String? hint, bool numeric = false, void Function(String)? onChanged}) {
+    final colorScheme = colors ?? Theme.of(context).colorScheme;
+    return TextField(
+      controller: ctrl,
+      keyboardType: numeric ? TextInputType.number : TextInputType.text,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.3), fontSize: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.outline.withValues(alpha: 0.3)),
         ),
-        style: const TextStyle(fontSize: 14),
-      );
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+        ),
+        isDense: true,
+      ),
+      style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
+    );
+  }
 
   Widget _attrChip(String label, bool active, Color activeColor, VoidCallback onTap) {
-    final bg = active ? activeColor : const Color(0xFFF3F4F6);
-    final fg = active ? Colors.white : const Color(0xFF6B7280);
+    final colors = Theme.of(context).colorScheme;
+    final bg = active ? activeColor : colors.outline.withValues(alpha: 0.1);
+    final fg = active ? Colors.white : colors.onSurface.withValues(alpha: 0.6);
     return GestureDetector(
       onTap: onTap,
       child: Container(

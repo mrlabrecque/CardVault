@@ -6,6 +6,8 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/grading_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
 
@@ -61,9 +63,8 @@ class GradingScreen extends ConsumerStatefulWidget {
 class _GradingScreenState extends ConsumerState<GradingScreen> {
   double _gradingFee = 40;
   String _search = '';
-  final Set<String> _activeFilters = {};
+  String _tierFilterKey = 'all'; // 'all', 'grade', 'borderline', 'skip', 'pending'
   String _sortBy = 'value-desc';
-  _Tier? _tierFilter; // null = all
 
   final Map<String, _CardState> _cardStates = {};
   final _searchController = TextEditingController();
@@ -74,8 +75,35 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     super.dispose();
   }
 
+  _Tier? _tierFromKey(String key) => switch (key) {
+    'grade'      => _Tier.grade,
+    'borderline' => _Tier.borderline,
+    'skip'       => _Tier.skip,
+    'pending'    => _Tier.pending,
+    _            => null, // 'all'
+  };
+
+  String _tierFilterLabel(String key) => switch (key) {
+    'grade'      => 'GRADE IT',
+    'borderline' => 'BORDERLINE',
+    'skip'       => 'SKIP IT',
+    'pending'    => 'NOT ANALYZED',
+    _            => 'ALL',
+  };
+
+  String _tierKeyFromLabel(String label) => switch (label) {
+    'GRADE IT'      => 'grade',
+    'BORDERLINE'    => 'borderline',
+    'SKIP IT'       => 'skip',
+    'NOT ANALYZED'  => 'pending',
+    _               => 'all',
+  };
+
+  void _setTierFilter(String key) => setState(() => _tierFilterKey = key);
+
   List<UserCard> _applyFiltersAndSort(List<UserCard> raw) {
     final q = _search.toLowerCase();
+    final tierFilter = _tierFromKey(_tierFilterKey);
 
     var cards = raw.where((c) {
       if (!c.isGraded == false) return false; // only ungraded
@@ -85,12 +113,9 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
           !c.sport.toLowerCase().contains(q)) {
         return false;
       }
-      if (_activeFilters.contains('rookie') && !c.rookie) return false;
-      if (_activeFilters.contains('autograph') && !c.autograph) return false;
-      if (_activeFilters.contains('memorabilia') && !c.memorabilia) return false;
-      if (_tierFilter != null) {
+      if (tierFilter != null) {
         final state = _cardStates[c.id] ?? const _CardState();
-        if (_tier(c, state, _gradingFee) != _tierFilter) return false;
+        if (_tier(c, state, _gradingFee) != tierFilter) return false;
       }
       return true;
     }).toList();
@@ -127,70 +152,87 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(userCardsProvider);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      body: cardsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (allCards) {
-          final ungradedCards = allCards.where((c) => !c.isGraded).toList();
-          final display = _applyFiltersAndSort(ungradedCards);
-          final analyzedCount = _cardStates.values.where((s) => s.result != null).length;
+    return cardsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (allCards) {
+        final ungradedCards = allCards.where((c) => !c.isGraded).toList();
+        final display = _applyFiltersAndSort(ungradedCards);
+        final analyzedCount = _cardStates.values.where((s) => s.result != null).length;
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+        return StickySubHeaderLayout(
+          header: Column(
             children: [
-              // Breadcrumb
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4),
-                      child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
-                    ),
-                    const Text('Grading', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-                  ],
-                ),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
+                  ),
+                  const Text('Grading', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                ],
               ),
+              const SizedBox(height: 12),
               _buildFeeCard(),
               const SizedBox(height: 12),
-              _buildSearch(),
-              const SizedBox(height: 10),
-              _buildAttributeFilters(),
-              const SizedBox(height: 10),
-              _buildTierFilterRow(),
-              if (ungradedCards.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
+            ],
+          ),
+          subHeader: FilterSortActionBar<String>(
+            searchText: _search,
+            onSearchChanged: (v) => setState(() => _search = v),
+            onSearchClear: () {
+              _searchController.clear();
+              setState(() => _search = '');
+            },
+            searchHint: 'Search player, set, sport…',
+            filters: const ['ALL', 'GRADE IT', 'BORDERLINE', 'SKIP IT', 'NOT ANALYZED'],
+            activeFilters: {_tierFilterLabel(_tierFilterKey)},
+            onFilterToggle: (f) => _setTierFilter(_tierKeyFromLabel(f)),
+            sortMenuBuilder: (_) => [
+              PopupMenuItem(value: 'value-desc',   child: _sortItem(Icons.trending_up,   'Value ↓',      _sortBy == 'value-desc')),
+              PopupMenuItem(value: 'player',        child: _sortItem(Icons.sort_by_alpha, 'Player A–Z',   _sortBy == 'player')),
+              PopupMenuItem(value: 'profit-desc',   child: _sortItem(Icons.percent,       'PSA 9 Profit', _sortBy == 'profit-desc')),
+            ],
+            onSortSelected: (s) => setState(() => _sortBy = s),
+            actionButton: const SizedBox.shrink(),
+          ),
+          label: ungradedCards.isNotEmpty
+              ? Align(
+                  alignment: Alignment.centerLeft,
                   child: Text(
                     '${display.length} card${display.length == 1 ? '' : 's'} · $analyzedCount analyzed',
                     style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
                   ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              if (ungradedCards.isEmpty)
-                _buildEmpty()
-              else
-                ...display.map((c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _CardRow(
-                    card: c,
-                    state: _cardStates[c.id] ?? const _CardState(),
-                    gradingFee: _gradingFee,
-                    onAnalyze: () => _analyze(c.id),
-                  ),
-                )),
-            ],
-          );
-        },
-      ),
+                )
+              : null,
+          body: ungradedCards.isEmpty
+              ? _buildEmpty()
+              : display.isEmpty
+                  ? const Center(
+                      child: Text('No cards match your filters.',
+                          style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                      itemCount: display.length,
+                      itemBuilder: (_, i) {
+                        final c = display[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _CardRow(
+                            card: c,
+                            state: _cardStates[c.id] ?? const _CardState(),
+                            gradingFee: _gradingFee,
+                            onAnalyze: () => _analyze(c.id),
+                          ),
+                        );
+                      },
+                    ),
+        );
+      },
     );
   }
 
@@ -254,64 +296,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     );
   }
 
-  Widget _buildSearch() {
-    return TextField(
-      controller: _searchController,
-      onChanged: (v) => setState(() => _search = v),
-      style: const TextStyle(fontSize: 14),
-      decoration: InputDecoration(
-        hintText: 'Search player, set, sport…',
-        hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
-        prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary, width: 1.5)),
-      ),
-    );
-  }
-
-  Widget _buildAttributeFilters() {
-    final filters = [
-      ('rookie', 'RC'),
-      ('autograph', 'AUTO'),
-      ('memorabilia', 'PATCH'),
-    ];
-    return Row(
-      children: [
-        ...filters.map((f) {
-          final active = _activeFilters.contains(f.$1);
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () => setState(() => active ? _activeFilters.remove(f.$1) : _activeFilters.add(f.$1)),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: active ? AppTheme.primary : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: active ? AppTheme.primary : const Color(0xFFE5E7EB)),
-                ),
-                child: Text(f.$2, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF6B7280))),
-              ),
-            ),
-          );
-        }),
-        const Spacer(),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.sort),
-          onSelected: (s) => setState(() => _sortBy = s),
-          itemBuilder: (_) => [
-            PopupMenuItem(value: 'value-desc',   child: _sortItem(Icons.trending_up,   'Value ↓',      _sortBy == 'value-desc')),
-            PopupMenuItem(value: 'player',        child: _sortItem(Icons.sort_by_alpha, 'Player A–Z',   _sortBy == 'player')),
-            PopupMenuItem(value: 'profit-desc',   child: _sortItem(Icons.percent,       'PSA 9 Profit', _sortBy == 'profit-desc')),
-          ],
-        ),
-      ],
-    );
-  }
 
   Widget _sortItem(IconData icon, String label, bool active) {
     return Row(children: [
@@ -321,42 +305,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     ]);
   }
 
-  Widget _buildTierFilterRow() {
-    final opts = <(_Tier?, String)>[
-      (null, 'All'),
-      (_Tier.grade, 'Grade It'),
-      (_Tier.borderline, 'Borderline'),
-      (_Tier.skip, 'Skip It'),
-      (_Tier.pending, 'Not Analyzed'),
-    ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          const Text('SHOW', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFFD1D5DB), letterSpacing: 1)),
-          const SizedBox(width: 8),
-          ...opts.map((o) {
-            final active = _tierFilter == o.$1;
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: GestureDetector(
-                onTap: () => setState(() => _tierFilter = o.$1),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: active ? AppTheme.primary : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: active ? AppTheme.primary : const Color(0xFFE5E7EB)),
-                  ),
-                  child: Text(o.$2, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF6B7280))),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
 
   Widget _buildEmpty() {
     return Padding(

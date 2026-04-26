@@ -6,7 +6,9 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/lot_service.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/serial_tag.dart';
+import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/theme/app_theme.dart';
+import '../collection/widgets/filter_sort_action_bar.dart';
 
 String _sportEmoji(String sport) => switch (sport.toLowerCase()) {
   'basketball' => '🏀',
@@ -16,6 +18,8 @@ String _sportEmoji(String sport) => switch (sport.toLowerCase()) {
   'soccer'     => '⚽',
   _            => '🃏',
 };
+
+enum _SortOption { dateDesc, playerAz, valueDesc }
 
 class LotBuilderScreen extends ConsumerStatefulWidget {
   const LotBuilderScreen({super.key});
@@ -28,6 +32,7 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
   final Set<String> _filters = {};
+  _SortOption _sort = _SortOption.dateDesc;
   bool _showBasket = false;
 
   @override
@@ -50,6 +55,13 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
     if (_filters.contains('RC'))    result = result.where((c) => c.rookie).toList();
     if (_filters.contains('AUTO'))  result = result.where((c) => c.autograph).toList();
     if (_filters.contains('PATCH')) result = result.where((c) => c.memorabilia).toList();
+
+    result.sort((a, b) => switch (_sort) {
+      _SortOption.playerAz  => a.player.compareTo(b.player),
+      _SortOption.valueDesc => (b.currentValue ?? 0).compareTo(a.currentValue ?? 0),
+      _SortOption.dateDesc  => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+    });
+
     return result;
   }
 
@@ -77,6 +89,8 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
                 : _BrowseView(
                     searchCtrl: _searchCtrl,
                     query: _query,
+                    sort: _sort,
+                    onSortChanged: (s) => setState(() => _sort = s),
                     filters: _filters,
                     lot: lot,
                     notifier: notifier,
@@ -206,6 +220,8 @@ class _BrowseView extends ConsumerWidget {
   const _BrowseView({
     required this.searchCtrl,
     required this.query,
+    required this.sort,
+    required this.onSortChanged,
     required this.filters,
     required this.lot,
     required this.notifier,
@@ -216,6 +232,8 @@ class _BrowseView extends ConsumerWidget {
 
   final TextEditingController searchCtrl;
   final String query;
+  final _SortOption sort;
+  final ValueChanged<_SortOption> onSortChanged;
   final Set<String> filters;
   final LotState lot;
   final LotNotifier notifier;
@@ -223,108 +241,71 @@ class _BrowseView extends ConsumerWidget {
   final ValueChanged<String> onFilterToggle;
   final List<UserCard> Function(List<UserCard>) filteredCards;
 
+  Widget _sortItem(IconData icon, String label, bool active, ColorScheme colors) {
+    return Row(children: [
+      Icon(icon, size: 16, color: active ? colors.primary : null),
+      const SizedBox(width: 8),
+      Text(label),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardsAsync = ref.watch(userCardsProvider);
+    final colors = Theme.of(context).colorScheme;
 
     return cardsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Color(0xFFDC2626)))),
       data: (allCards) {
         final cards = filteredCards(allCards);
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-          children: [
-            // Search bar
-            TextField(
-              controller: searchCtrl,
-              onChanged: onQueryChanged,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Search player, set, sport…',
-                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4))),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Filter chips
-            Row(
-              children: [
-                for (final label in ['RC', 'AUTO', 'PATCH']) ...[
-                  _FilterChip(
-                    label: label,
-                    active: filters.contains(label),
-                    onTap: () => onFilterToggle(label),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                const Spacer(),
-                Text('${cards.length} cards', style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (allCards.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 48),
-                child: Center(child: Text('No cards in your collection yet.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14))),
-              )
-            else if (cards.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 48),
-                child: Center(child: Text('No cards match your search.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14))),
-              )
-            else
-              ...cards.map((card) {
-                final inLot = lot.itemIds.contains(card.id);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _BrowseCardRow(
-                    card: card,
-                    inLot: inLot,
-                    onToggle: () => notifier.toggle(card),
-                  ),
-                );
-              }),
-          ],
+        return StickySubHeaderLayout(
+          header: const SizedBox.shrink(),
+          subHeader: FilterSortActionBar<_SortOption>(
+            searchText: query,
+            onSearchChanged: onQueryChanged,
+            onSearchClear: () {
+              searchCtrl.clear();
+              onQueryChanged('');
+            },
+            searchHint: 'Search player, set, sport…',
+            filters: const ['RC', 'AUTO', 'PATCH'],
+            activeFilters: filters,
+            onFilterToggle: onFilterToggle,
+            sortMenuBuilder: (_) => [
+              PopupMenuItem(value: _SortOption.dateDesc,  child: _sortItem(Icons.calendar_today,  'Date Added', sort == _SortOption.dateDesc, colors)),
+              PopupMenuItem(value: _SortOption.playerAz,  child: _sortItem(Icons.sort_by_alpha,  'Player A–Z', sort == _SortOption.playerAz, colors)),
+              PopupMenuItem(value: _SortOption.valueDesc, child: _sortItem(Icons.trending_up,    'Value ↓',   sort == _SortOption.valueDesc, colors)),
+            ],
+            onSortSelected: onSortChanged,
+            actionButton: const SizedBox.shrink(),
+          ),
+          label: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('${cards.length} cards', style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+          ),
+          body: allCards.isEmpty
+              ? const Center(child: Text('No cards in your collection yet.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)))
+              : cards.isEmpty
+                  ? const Center(child: Text('No cards match your search.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                      itemCount: cards.length,
+                      itemBuilder: (_, i) {
+                        final card = cards[i];
+                        final inLot = lot.itemIds.contains(card.id);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _BrowseCardRow(
+                            card: card,
+                            inLot: inLot,
+                            onToggle: () => notifier.toggle(card),
+                          ),
+                        );
+                      },
+                    ),
         );
       },
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.active, required this.onTap});
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: active ? AppTheme.primary.withValues(alpha: 0.1) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: active ? AppTheme.primary.withValues(alpha: 0.4) : const Color(0xFFE5E7EB)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: active ? AppTheme.primary : const Color(0xFF6B7280),
-          ),
-        ),
-      ),
     );
   }
 }
