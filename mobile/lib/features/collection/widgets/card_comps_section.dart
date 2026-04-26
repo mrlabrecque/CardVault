@@ -129,7 +129,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       children: [
         // Grade pills
         Padding(
-          padding: const EdgeInsets.only(top: 0, bottom: 12),
+          padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
               _GradePill(
@@ -177,10 +177,13 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         // Filtered comps list
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            '${_filteredComps.length} ${_filteredComps.length == 1 ? 'listing' : 'listings'}',
-            style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+          padding: const EdgeInsets.only(top: 8, bottom: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${_filteredComps.length} ${_filteredComps.length == 1 ? 'listing' : 'listings'}',
+              style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+            ),
           ),
         ),
         ListView.separated(
