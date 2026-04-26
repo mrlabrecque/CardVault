@@ -11,15 +11,7 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
 ];
 
-// ── Filtering constants (ported from comps.service.ts) ─────────────────────
-
-const PARALLEL_KEYWORDS = [
-  'refractor', 'holo', 'silver', 'gold', 'red', 'blue', 'green', 'orange',
-  'purple', 'pink', 'black', 'white', 'teal', 'yellow', 'brown', 'gray', 'grey',
-  'hyper', 'neon', 'aqua', 'mojo', 'wave', 'velocity', 'stars', 'scope',
-  'cracked ice', 'disco', 'tiger', 'nebula', 'shimmer', 'choice', 'lava',
-  'sp', 'ssp', 'foil', 'logo',
-];
+// ── Filtering constants ─────────────────────────────────────────────────────
 
 const GRADER_KEYWORDS = ['psa', 'bgs', 'sgc', 'cgc', 'csg', 'beckett'];
 
@@ -67,16 +59,28 @@ function buildCardEbayQuery(card: Record<string, unknown>): string {
   return [...parts, ...attrs].filter(Boolean).join(' ');
 }
 
-// ── Filtering ──────────────────────────────────────────────────────────────
+// ── Parallel filtering with DB-driven list ─────────────────────────────────
 
-function noUnexpectedParallels(title: string, query: string): boolean {
-  const t = title.toLowerCase();
-  const q = query.toLowerCase();
-  return !PARALLEL_KEYWORDS.some(k => {
-    const re = new RegExp(`\\b${k.replace(/\s+/g, '\\s+')}\\b`);
-    return re.test(t) && !q.includes(k);
-  });
+function buildParallelExclusionList(selectedParallelName: string, allParallelNames: string[]): Set<string> {
+  if (selectedParallelName === 'Base') {
+    // Base: reject any card with ANY known parallel name
+    return new Set(allParallelNames.filter(p => p !== 'Base'));
+  }
+  // Named parallel: reject cards with OTHER parallel names
+  return new Set(allParallelNames.filter(p => p !== 'Base' && p !== selectedParallelName));
 }
+
+function titleHasExcludedParallel(title: string, exclusionList: Set<string>): boolean {
+  if (exclusionList.size === 0) return false;
+  const t = title.toLowerCase();
+  for (const parallel of exclusionList) {
+    const re = new RegExp(`\\b${parallel.replace(/\s+/g, '\\s+').toLowerCase()}\\b`, 'i');
+    if (re.test(t)) return true;
+  }
+  return false;
+}
+
+// ── Filtering ──────────────────────────────────────────────────────────────
 
 function noUnexpectedWords(title: string, query: string): boolean {
   const t = title.toLowerCase();
@@ -85,14 +89,16 @@ function noUnexpectedWords(title: string, query: string): boolean {
   return titleWords.every((word: string) => q.includes(word) || LISTING_NOISE.has(word));
 }
 
-function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
+function parseAndFilter(
+  raw: any[],
+  query: string,
+  selectedParallelName: string,
+  allParallelNames: string[],
+  setName?: string,
+): any[] {
   const yearMatch    = query.match(/\b(19|20)\d{2}\b/);
   const cardNumMatch = query.match(/(?:^|\s)#?(\d{1,4})(?:\s|$)/);
   const serialMatch  = query.match(/\/(\d{1,4})\b/);
-  const graderFound  = GRADER_KEYWORDS.find(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
-
-  const parallelsInQuery = PARALLEL_KEYWORDS.filter(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
-  const parallelFromQuery = parallelsInQuery.length ? parallelsInQuery.join(' ') : null;
 
   const noisePattern = new RegExp(`\\b(${[...LISTING_NOISE].join('|')})\\b`, 'gi');
   const playerGuess = query
@@ -100,8 +106,6 @@ function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
     .replace(/(?:^|\s)#?\d{1,4}(?:\s|$)/, ' ')
     .replace(/\/\d{1,4}\b/, '')
     .replace(setName ? new RegExp(setName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi') : /(?:)/, '')
-    .replace(new RegExp(`\\b(${PARALLEL_KEYWORDS.join('|')})\\b`, 'gi'), '')
-    .replace(new RegExp(`\\b(${GRADER_KEYWORDS.join('|')})\\b`, 'gi'), '')
     .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
     .replace(noisePattern, '')
     .replace(/\s{2,}/g, ' ').trim();
@@ -109,11 +113,10 @@ function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
   const year       = yearMatch ? parseInt(yearMatch[0]) : null;
   const serial_max = serialMatch ? parseInt(serialMatch[1]) : null;
   const playerWords = playerGuess.toLowerCase().split(/\s+/).filter(Boolean);
-  const parallelStr = parallelFromQuery ?? '';
   const is_auto    = /\bauto(graph)?\b/i.test(query);
   const is_patch   = /\b(patch|relic|jersey)\b/i.test(query);
-  const is_graded  = !!graderFound;
-  const grader     = graderFound ?? null;
+
+  const parallelExclusionList = buildParallelExclusionList(selectedParallelName, allParallelNames);
 
   return raw.filter(item => {
     const title = (item.title ?? '').toLowerCase();
@@ -124,9 +127,6 @@ function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
     const hasSerial = /\/\d{1,4}\b/.test(title);
     if (!serial_max && hasSerial) return false;
     if (serial_max && !new RegExp(`\\/${serial_max}\\b`).test(title)) return false;
-    if (is_graded && grader && !title.includes(grader)) return false;
-    const hasGrader = GRADER_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`, 'i').test(title));
-    if (!is_graded && hasGrader) return false;
     const hasAuto  = /\bauto(graph)?\b/.test(title);
     const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
     if (is_auto  && !hasAuto)  return false;
@@ -135,11 +135,8 @@ function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
     if (!is_patch && hasPatch) return false;
     if (/\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) return false;
     if (/\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) return false;
-    if (parallelStr) {
-      const parallelWords = parallelStr.toLowerCase().split(/\s+/).filter(Boolean);
-      if (parallelWords.some((w: string) => !title.includes(w))) return false;
-    }
-    if (!noUnexpectedParallels(item.title, query)) return false;
+    // DB-driven parallel check: reject if title has an excluded parallel
+    if (titleHasExcludedParallel(item.title, parallelExclusionList)) return false;
     if (!noUnexpectedWords(item.title, query)) return false;
     return true;
   });
@@ -150,6 +147,18 @@ function resolveSaleType(buying_format: string | null): string {
   if (fmt.includes('auction')) return 'auction';
   if (fmt.includes('best offer') || fmt.includes('best_offer')) return 'best_offer';
   return 'fixed_price';
+}
+
+function parseGrade(title: string): string {
+  const t = title.toLowerCase();
+  if (/\bpsa\s*10\b/.test(t)) return 'PSA 10';
+  if (/\bpsa\s*9\.5\b/.test(t)) return 'PSA 9.5';
+  if (/\bpsa\s*9\b/.test(t)) return 'PSA 9';
+  if (/\bbgs\s*9\.5\b/.test(t)) return 'BGS 9.5';
+  if (/\bbgs\s*10\b/.test(t)) return 'BGS 10';
+  if (/\bsgc\s*10\b/.test(t)) return 'SGC 10';
+  if (/\b(psa|bgs|sgc|cgc|csg)\b/.test(t)) return 'Graded';
+  return 'Raw';
 }
 
 // ── Scrapechain fetch ──────────────────────────────────────────────────────
@@ -191,7 +200,12 @@ async function fetchSoldListings(query: string): Promise<any[]> {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' } });
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      },
+    });
   }
 
   const authHeader = req.headers.get('Authorization');
@@ -199,7 +213,6 @@ Deno.serve(async (req) => {
 
   const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const anonKey        = Deno.env.get('SUPABASE_ANON_KEY')!;
 
   // Verify caller is authenticated
   function b64urlToBytes(b64url: string): Uint8Array {
@@ -242,62 +255,147 @@ Deno.serve(async (req) => {
     } catch { return null; }
   }
 
-  const supabaseUrl2 = Deno.env.get('SUPABASE_URL')!;
   const token = authHeader.replace(/^Bearer\s+/i, '');
-  const userId = await verifyJwt(token, supabaseUrl2);
+  const userId = await verifyJwt(token, supabaseUrl);
   if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
-  const { cardId } = await req.json();
-  if (!cardId) return new Response(JSON.stringify({ error: 'cardId required' }), { status: 400 });
-
-  // Use service role for DB writes
-  const admin = createClient(supabaseUrl, serviceRoleKey);
-
-  // Fetch the card row with all joined data
-  const { data: card, error: cardError } = await admin
-    .from('user_cards')
-    .select(`
-      id, is_graded, grader, grade_value, parallel_name,
-      master_card_definitions ( player, card_number, is_rookie, is_auto, is_patch, serial_max,
-        sets ( name, releases ( year, name, sport ) )
-      )
-    `)
-    .eq('id', cardId)
-    .eq('user_id', userId)
-    .single();
-
-  if (cardError || !card) {
-    return new Response(JSON.stringify({ error: 'Card not found' }), { status: 404 });
+  const { masterCardId, parallelName } = await req.json();
+  if (!masterCardId || !parallelName) {
+    return new Response(JSON.stringify({ error: 'masterCardId and parallelName required' }), { status: 400 });
   }
 
-  const mcd     = (card as any).master_card_definitions ?? {};
-  const masterCardId = mcd.id;
-  const parallelName = (card as any).parallel_name ?? 'Base';
+  const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  if (!masterCardId) {
+  // Fetch the master card row with all joined data
+  const { data: masterCard, error: mcError } = await admin
+    .from('master_card_definitions')
+    .select(`
+      id, player, card_number, is_rookie, is_auto, is_patch, serial_max,
+      sets ( id, name, releases ( year, name, sport ) )
+    `)
+    .eq('id', masterCardId)
+    .single();
+
+  if (mcError || !masterCard) {
     return new Response(JSON.stringify({ error: 'Master card not found' }), { status: 404 });
   }
 
-  // Delegate to get-card-comps logic via edge function invoke
-  // (reuse the same implementation instead of duplicating)
-  const getCardCompsRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-card-comps`, {
-    method: 'POST',
-    headers: {
-      'Authorization': authHeader,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ masterCardId, parallelName }),
-  });
+  // Fetch all parallel names in this set for exclusion filtering
+  const { data: allParallels } = await admin
+    .from('set_parallels')
+    .select('name')
+    .eq('set_id', (masterCard as any).sets.id);
 
-  if (!getCardCompsRes.ok) {
-    const error = await getCardCompsRes.text();
-    return new Response(JSON.stringify({ error: `get-card-comps failed: ${error}` }), { status: getCardCompsRes.status });
+  const allParallelNames = (allParallels as any[])?.map((p: any) => p.name) ?? [];
+
+  const mcd     = masterCard as any;
+  const setData = mcd.sets ?? {};
+  const release = setData.releases ?? {};
+
+  const cardRow = {
+    year:          release.year,
+    release_name:  release.name,
+    set_name:      setData.name,
+    player:        mcd.player,
+    card_number:   mcd.card_number,
+    parallel_type: parallelName,
+    is_auto:       mcd.is_auto,
+    is_patch:      mcd.is_patch,
+    is_rookie:     mcd.is_rookie,
+    serial_max:    mcd.serial_max,
+    is_graded:     false, // catalog doesn't grade; we get all comps
+    grader:        null,
+    grade_value:   null,
+  };
+
+  const query = buildCardEbayQuery(cardRow);
+  console.log(`[get-card-comps] query: "${query}", parallel: "${parallelName}"`);
+
+  let raw: any[];
+  try {
+    raw = await fetchSoldListings(query);
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: `Scrapechain error: ${e.message}` }), { status: 502 });
   }
 
-  const result = await getCardCompsRes.json();
+  const items = parseAndFilter(raw, query, parallelName, allParallelNames, setData.name ?? undefined);
+  console.log(`[get-card-comps] ${raw.length} raw → ${items.length} filtered`);
+
+  // Delete old comps for this master_card + parallel
+  await admin.from('card_sold_comps')
+    .delete()
+    .eq('master_card_id', masterCardId)
+    .eq('parallel_name', parallelName);
+
+  // Insert new comps with grade tags
+  if (items.length > 0) {
+    const rows = items.map((item: any) => ({
+      master_card_id: masterCardId,
+      parallel_name: parallelName,
+      grade: parseGrade(item.title),
+      ebay_item_id: item.itemId ?? null,
+      title: item.title ?? '',
+      price: parseFloat(item.price?.value ?? '0'),
+      currency: item.price?.currency ?? 'USD',
+      sale_type: typeof item.buyingOptions === 'string' ? item.buyingOptions : 'fixed_price',
+      sold_at: item.itemEndDate ?? null,
+      url: item.itemWebUrl ?? null,
+    }));
+    await admin.from('card_sold_comps').insert(rows);
+  }
+
+  // Compute grade averages
+  const { data: allCompsData } = await admin
+    .from('card_sold_comps')
+    .select('price, grade')
+    .eq('master_card_id', masterCardId)
+    .eq('parallel_name', parallelName);
+
+  const allComps = (allCompsData as any[]) ?? [];
+  const rawComps = allComps.filter((c: any) => c.grade === 'Raw');
+  const psa10Comps = allComps.filter((c: any) => c.grade === 'PSA 10');
+  const psa9Comps = allComps.filter((c: any) => c.grade === 'PSA 9');
+
+  const rawAvg = rawComps.length > 0
+    ? rawComps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / rawComps.length
+    : 0;
+  const psa10Avg = psa10Comps.length > 0
+    ? psa10Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa10Comps.length
+    : 0;
+  const psa9Avg = psa9Comps.length > 0
+    ? psa9Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa9Comps.length
+    : 0;
+
+  // Update user_cards with matching master_card_id + parallel_name
+  const { data: userCards } = await admin
+    .from('user_cards')
+    .select('id, is_graded, grade')
+    .eq('master_card_id', masterCardId)
+    .eq('parallel_name', parallelName);
+
+  for (const card of (userCards as any[]) ?? []) {
+    let currentValue = 0;
+    if (!card.is_graded) {
+      currentValue = rawAvg;
+    } else if (card.grade === '10' || card.grade === '10.0') {
+      currentValue = psa10Avg;
+    } else if (card.grade === '9' || card.grade === '9.0') {
+      currentValue = psa9Avg;
+    } else {
+      // Other grades default to raw
+      currentValue = rawAvg;
+    }
+
+    await admin.from('user_cards')
+      .update({
+        current_value: currentValue,
+        value_refreshed_at: new Date().toISOString(),
+      })
+      .eq('id', card.id);
+  }
 
   return new Response(
-    JSON.stringify(result),
+    JSON.stringify({ rawAvg, psa10Avg, psa9Avg, totalCount: items.length, query }),
     { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
   );
 });

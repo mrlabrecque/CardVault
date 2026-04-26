@@ -8,6 +8,7 @@ class Comp {
   final SaleType saleType;
   final String? url;
   final String? imageUrl;
+  final String? grade; // 'Raw', 'PSA 10', 'PSA 9', 'PSA 9.5', 'BGS 9.5', 'Graded', etc.
 
   const Comp({
     required this.title,
@@ -17,6 +18,7 @@ class Comp {
     required this.saleType,
     this.url,
     this.imageUrl,
+    this.grade,
   });
 
   factory Comp.fromJson(Map<String, dynamic> json) => Comp(
@@ -27,6 +29,7 @@ class Comp {
         saleType: _parseSaleType(json['sale_type'] as String?),
         url: json['url'] as String?,
         imageUrl: json['image_url'] as String?,
+        grade: json['grade'] as String?,
       );
 
   static double _parsePrice(dynamic raw) {

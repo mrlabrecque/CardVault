@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_card.dart';
-import '../../core/models/comp.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/auth/auth_service.dart';
-import '../../core/services/comps_service.dart';
-import '../../core/widgets/serial_tag.dart';
-import '../../core/widgets/attr_tag.dart';
-import '../../core/widgets/info_box.dart';
+import '../../core/widgets/app_breadcrumb.dart';
+import 'widgets/card_detail_view.dart';
+import 'widgets/card_comps_section.dart';
 
 class ItemDetailScreen extends ConsumerStatefulWidget {
   const ItemDetailScreen({super.key, required this.card});
@@ -33,76 +28,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
   late String _selectedParallelName = widget.card.parallel;
   bool get _isOtherParallel => _selectedParallelId == '__other__';
 
-  List<Comp>? _comps;
-  bool _compsLoading = false;
-  bool _refreshing = false;
-  String? _compsError;
-  int _compsWindow = 90;
-  double? _currentValue;
-  int _valueTrend = 0; // 1 up, -1 down, 0 flat
-
-  late final AnimationController _spinCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 800),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _currentValue = widget.card.currentValue;
-    _valueTrend = widget.card.valueTrend;
-    _fetchComps();
-  }
-
-  @override
-  void dispose() {
-    _spinCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _fetchComps({bool refresh = false}) async {
-    setState(() {
-      _compsLoading = true;
-      _compsError = null;
-      if (refresh) {
-        _refreshing = true;
-        _spinCtrl.repeat();
-      }
-    });
-    try {
-      final svc = ref.read(compsServiceProvider);
-      if (refresh) {
-        await svc.refreshCardValue(widget.card.id);
-        final data = await ref.read(supabaseProvider)
-            .from('user_cards')
-            .select('current_value, previous_value')
-            .eq('id', widget.card.id)
-            .single();
-        if (mounted) {
-          final newValue = (data['current_value'] as num?)?.toDouble();
-          final prevValue = (data['previous_value'] as num?)?.toDouble();
-          setState(() {
-            _currentValue = newValue;
-            if (prevValue != null && newValue != null && newValue != prevValue) {
-              _valueTrend = newValue > prevValue ? 1 : -1;
-            }
-          });
-          ref.invalidate(userCardsProvider);
-        }
-      }
-      final results = await svc.getCardComps(widget.card.id);
-      if (mounted) { setState(() => _comps = results); }
-    } catch (e) {
-      if (mounted) { setState(() => _compsError = e.toString()); }
-    } finally {
-      if (mounted) setState(() {
-        _compsLoading = false;
-        _refreshing = false;
-        _spinCtrl.stop();
-        _spinCtrl.reset();
-      });
-    }
-  }
 
   void _startEdit() => setState(() {
     _editing = true;
@@ -144,6 +69,14 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     'soccer'     => '⚽',
     _            => '🃏',
   };
+
+  String _resolveDefaultGrade() {
+    if (!widget.card.isGraded) return 'Raw';
+    final grade = widget.card.grade ?? '';
+    if (grade == '10' || grade == '10.0') return 'PSA 10';
+    if (grade == '9' || grade == '9.0') return 'PSA 9';
+    return 'Raw';
+  }
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -241,101 +174,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
           IconButton(icon: Icon(Icons.delete_outline, color: colors.error), onPressed: _delete),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          // Maroon gradient hero
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF800020), Color(0xFF3D0010)],
+          AppBreadcrumb(
+            items: [
+              BreadcrumbItem(
+                label: card.set ?? 'Set',
+                onTap: () => Navigator.pop(context),
               ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Card image
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: card.imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: card.imageUrl!,
-                          width: 72, height: 100,
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          width: 72, height: 100,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 32))),
-                        ),
-                ),
-                const SizedBox(width: 16),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text.rich(
-                        TextSpan(children: [
-                          TextSpan(
-                            text: card.player,
-                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          if (card.cardNumber != null)
-                            TextSpan(
-                              text: '  #${card.cardNumber}',
-                              style: const TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w400),
-                            ),
-                        ]),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        [
-                          if (card.year != null) '${card.year}',
-                          if (card.set != null) card.set!,
-                          if (card.checklist != null) card.checklist!,
-                        ].join(' · '),
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (card.parallel != 'Base') ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          card.parallel,
-                          style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          if (card.rookie)      AttrTag('RC', color: const Color(0xFF16A34A)),
-                          if (card.autograph)   AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-                          if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-                          if (card.ssp)         AttrTag('SSP', color: const Color(0xFFB45309)),
-                          if (card.isGraded)    AttrTag('${card.grader ?? 'PSA'} ${card.grade ?? ''}'),
-                          SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              BreadcrumbItem(label: card.player),
+            ],
           ),
-
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+          CardDetailView(
+            userCard: card,
+            sections: const [CardDetailSection.hero],
+          ),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 16),
@@ -345,8 +202,8 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
             children: [
               Expanded(child: _InfoBox(
                 label: 'Current Value',
-                value: '\$${(_currentValue ?? 0).toStringAsFixed(2)}',
-                trend: _valueTrend,
+                value: '\$${(widget.card.currentValue ?? 0).toStringAsFixed(2)}',
+                trend: widget.card.valueTrend,
               )),
               const SizedBox(width: 8),
               Expanded(
@@ -556,232 +413,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
           const Divider(),
           const SizedBox(height: 8),
 
-          // Sold Comps header + 30/90 toggle
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Recent eBay Sales', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-              Row(
-                children: [
-                  // 30d / 90d toggle
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: colors.outlineVariant),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Row(
-                      children: [30, 90].map((days) {
-                        final active = _compsWindow == days;
-                        return GestureDetector(
-                          onTap: () => setState(() => _compsWindow = days),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            color: active ? const Color(0xFF800020) : Colors.transparent,
-                            child: Text(
-                              '${days}d',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: active ? Colors.white : colors.onSurface.withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  RotationTransition(
-                    turns: _spinCtrl,
-                    child: IconButton(
-                      icon: Icon(Icons.refresh, size: 18,
-                          color: _refreshing
-                              ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8)
-                              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
-                      onPressed: _compsLoading ? null : () => _fetchComps(refresh: true),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          if (_compsLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(strokeWidth: 2)))
-          else if (_compsError != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(_compsError!, style: TextStyle(color: colors.error, fontSize: 13)),
+          // Comps section
+          if (widget.card.masterCardId != null)
+            CardCompsSection(
+              masterCardId: widget.card.masterCardId!,
+              parallelName: widget.card.parallel,
+              initialGrade: _resolveDefaultGrade(),
             )
-          else if (_comps == null || _comps!.isEmpty)
-            _CompsEmptyState(message: 'No comps yet — tap refresh to fetch sales data.', icon: Icons.show_chart)
-          else ...[
-            Builder(builder: (context) {
-              final cutoff = _compsWindow == 30
-                  ? DateTime.now().subtract(const Duration(days: 30))
-                  : null;
-              final filtered = cutoff == null
-                  ? _comps!
-                  : _comps!.where((c) => c.soldAt == null || c.soldAt!.isAfter(cutoff)).toList();
-
-              if (filtered.isEmpty) {
-                return _CompsEmptyState(message: 'No sales in the last $_compsWindow days.', icon: Icons.calendar_today);
-              }
-
-              final hasBestOffer = filtered.any((c) => c.saleType == SaleType.bestOffer);
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Best offer caveat
-                  if (hasBestOffer)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: InfoBox(
-                        color: const Color(0xFFFCD34D),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        borderRadius: 10,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.info_outline, size: 13, color: Color(0xFFB45309)),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Best Offer prices shown are the listing ask, not the accepted offer — actual sold price may differ.',
-                                style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  // Comp rows
-                  Container(
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.5)),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: filtered.indexed.map(((int, Comp) entry) {
-                        final (i, comp) = entry;
-                        return Column(
-                          children: [
-                            if (i > 0) Divider(height: 1, color: colors.outlineVariant.withValues(alpha: 0.3)),
-                            _CompRow(comp: comp),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ],
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'No master card info available',
+                style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5)),
+              ),
+            ),
 
           const SizedBox(height: 100),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompsEmptyState extends StatelessWidget {
-  const _CompsEmptyState({required this.message, required this.icon});
-  final String message;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 28, color: colors.onSurface.withValues(alpha: 0.3)),
-          const SizedBox(height: 8),
-          Text(message, style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)), textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompRow extends StatelessWidget {
-  const _CompRow({required this.comp});
-  final Comp comp;
-
-  String _dateLabel() {
-    if (comp.soldAt == null) return '';
-    final daysAgo = DateTime.now().difference(comp.soldAt!).inDays;
-    if (daysAgo == 0) return 'Today';
-    if (daysAgo == 1) return 'Yesterday';
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${months[comp.soldAt!.month - 1]} ${comp.soldAt!.day}, ${comp.soldAt!.year}';
-  }
-
-  (String label, Color bg, Color fg) _saleTypeBadge() => switch (comp.saleType) {
-    SaleType.auction    => ('Auction',    const Color(0xFFEFF6FF), const Color(0xFF1D4ED8)),
-    SaleType.bestOffer  => ('Best Offer', const Color(0xFFFFFBEB), const Color(0xFFB45309)),
-    SaleType.fixedPrice => ('Buy It Now', const Color(0xFFF0FDF4), const Color(0xFF15803D)),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final (label, bg, fg) = _saleTypeBadge();
-    final dateLabel = _dateLabel();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(comp.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, height: 1.3)),
-                if (dateLabel.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(dateLabel, style: TextStyle(fontSize: 10, color: colors.onSurface.withValues(alpha: 0.45))),
-                ],
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('\$${comp.price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-                    child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: fg)),
-                  ),
-                  if (comp.url != null) ...[
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () => launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication),
-                      child: Icon(Icons.open_in_new, size: 12, color: colors.onSurface.withValues(alpha: 0.4)),
-                    ),
-                  ],
-                ],
-              ),
-            ],
           ),
         ],
       ),

@@ -19,12 +19,38 @@ class CompsService {
   }
 
   Future<List<Comp>> getCardComps(String cardId) async {
+    // Resolve master_card_id + parallel_name from user_card, then fetch comps
+    final cardData = await _supabase
+        .from('user_cards')
+        .select('master_card_id, parallel_name')
+        .eq('id', cardId)
+        .single();
+
+    final masterId = (cardData as Map)['master_card_id'] as String?;
+    final parallelName = ((cardData as Map)['parallel_name'] as String?) ?? 'Base';
+
+    if (masterId == null) {
+      return [];
+    }
+
+    return getMasterCardComps(masterId, parallelName);
+  }
+
+  Future<List<Comp>> getMasterCardComps(String masterCardId, String parallelName) async {
     final data = await _supabase
         .from('card_sold_comps')
-        .select('title, price, currency, sale_type, sold_at, url')
-        .eq('user_card_id', cardId)
+        .select('title, price, currency, sale_type, sold_at, url, grade')
+        .eq('master_card_id', masterCardId)
+        .eq('parallel_name', parallelName)
         .order('sold_at', ascending: false, nullsFirst: false);
     return (data as List).map((r) => Comp.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> refreshMasterCardComps(String masterCardId, String parallelName) async {
+    await _supabase.functions.invoke(
+      'get-card-comps',
+      body: {'masterCardId': masterCardId, 'parallelName': parallelName},
+    );
   }
 
   Future<void> refreshCardValue(String cardId) async {

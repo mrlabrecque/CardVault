@@ -8,6 +8,8 @@ import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/wishlist_form_sheet.dart';
+import 'widgets/card_detail_view.dart';
+import 'widgets/card_comps_section.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -24,8 +26,7 @@ const _catalogSports = [
   ('Hockey', 'Hockey'),
 ];
 
-enum _CatalogStep { browsing, sets, card }
-enum _CardAction { none, toCollection, toWishlist }
+enum _CatalogStep { browsing, sets, card, detail, addCopy }
 
 class AddCardScreen extends ConsumerStatefulWidget {
   const AddCardScreen({super.key});
@@ -35,7 +36,6 @@ class AddCardScreen extends ConsumerStatefulWidget {
 }
 
 class _AddCardScreenState extends ConsumerState<AddCardScreen> {
-  _CardAction _cardAction = _CardAction.none;
   // ── Catalog step ─────────────────────────────────────────────
   _CatalogStep _catalogStep = _CatalogStep.browsing;
   String _catalogFilterYear = '';
@@ -64,7 +64,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   final _cardCtrl = TextEditingController();
   List<MasterCard> _cardResults = [];
   List<MasterCard> _allCards = [];
-  bool _loadingCards = false;
+  final _loadingCards = false;
   MasterCard? _selectedCard;
   bool _isNewCard = false;
   int _cardPage = 0;
@@ -82,7 +82,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
 
   // ── Your Copy ────────────────────────────────────────────────
   List<SetParallel> _parallels = [];
-  bool _loadingParallels = false;
+  final _loadingParallels = false;
   SetParallel? _selectedParallel;
   String _parallelName = 'Base';
   final _pricePaidCtrl = TextEditingController();
@@ -249,6 +249,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _cardHasMore = false;
       _cardPage = 0;
       _isNewCard = false;
+      _catalogStep = _CatalogStep.detail;
     });
   }
 
@@ -259,6 +260,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _cardResults = [];
       _cardHasMore = false;
       _cardPage = 0;
+      _catalogStep = _CatalogStep.addCopy;
     });
   }
 
@@ -313,7 +315,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           _isNewCard = false;
           _selectedRelease = null;
           _selectedSet = null;
-          _cardAction = _CardAction.none;
           _pricePaidCtrl.clear();
           _serialNumberCtrl.clear();
           _isGraded = false;
@@ -378,7 +379,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       body: switch (_catalogStep) {
         _CatalogStep.browsing => _buildBrowseView(colors),
         _CatalogStep.sets     => _buildSetsView(colors),
-        _CatalogStep.card     => _buildCardForm(colors),
+        _CatalogStep.card     => _buildCardSearchView(colors),
+        _CatalogStep.detail   => _buildCardDetailView(colors),
+        _CatalogStep.addCopy  => _buildYourCopyFormView(colors),
       },
     );
   }
@@ -600,21 +603,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     );
   }
 
-  // ── Card form (persistent single view — no switching, preserves focus) ──────
+  // ── Card search view ─────────────────────────────────────────────────────
 
-  Widget _buildCardForm(ColorScheme colors) {
-    final showingForm = _selectedCard != null || _isNewCard;
-
-    void onBack() => setState(() {
-      _catalogStep = _CatalogStep.sets;
-      _selectedCard = null;
-      _cardCtrl.clear();
-      _cardResults = [];
-      _isNewCard = false;
-      _selectedRelease = null;
-      _selectedSet = null;
-    });
-
+  Widget _buildCardSearchView(ColorScheme colors) {
     return Column(
       children: [
         AppBreadcrumb(
@@ -641,36 +632,31 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           }),
           current: _selectedSet?.name ?? '',
         ),
-        // Search field — always in the tree so the TextField keeps focus
-        if (!showingForm)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _cardCtrl,
-              onChanged: _searchCards,
-              decoration: InputDecoration(
-                hintText: 'Search player name…',
-                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                suffixIcon: _loadingCards
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
+        // Search field
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: TextField(
+            controller: _cardCtrl,
+            onChanged: _searchCards,
+            decoration: InputDecoration(
+              hintText: 'Search player name…',
+              hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+              prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+              suffixIcon: _loadingCards
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              isDense: true,
             ),
           ),
-        // Content area fills remaining space
-        Expanded(
-          child: showingForm
-              ? _buildYourCopyArea(colors)
-              : _buildCardResultsArea(colors),
         ),
+        // Content area fills remaining space
+        Expanded(child: _buildCardResultsArea(colors)),
         // "Add manually" shown whenever cards are visible
-        if (!showingForm && _cardResults.isNotEmpty)
+        if (_cardResults.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: OutlinedButton.icon(
@@ -680,6 +666,241 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               style: OutlinedButton.styleFrom(textStyle: const TextStyle(fontSize: 13)),
             ),
           ),
+      ],
+    );
+  }
+
+  // ── Card detail view (read-only, showing Add to Collection/Wishlist buttons) ──
+
+  Widget _buildCardDetailView(ColorScheme colors) {
+    return Column(
+      children: [
+        AppBreadcrumb(
+          grandparent: 'Catalog',
+          onGrandparentBack: () => setState(() {
+            _catalogStep = _CatalogStep.browsing;
+            _browseSelectedRelease = null;
+            _browseSets = [];
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = [];
+            _isNewCard = false;
+            _selectedRelease = null;
+            _selectedSet = null;
+          }),
+          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+          onBack: () => setState(() {
+            _catalogStep = _CatalogStep.card;
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = [];
+            _isNewCard = false;
+            _selectedSet = null;
+          }),
+          current: _selectedSet?.name ?? '',
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            children: [
+              CardDetailView(
+                masterCard: _selectedCard,
+                setName: _selectedSet?.name,
+                releaseName: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName,
+                parallelName: _selectedParallel?.name ?? 'Base',
+                year: _selectedRelease?.year != null ? int.tryParse(_selectedRelease!.year.toString()) : null,
+                sections: const [CardDetailSection.hero],
+              ),
+              const SizedBox(height: 16),
+              // Parallel selector
+              if (_parallels.isNotEmpty)
+                DropdownButtonFormField<SetParallel?>(
+                  initialValue: _selectedParallel,
+                  decoration: InputDecoration(
+                    labelText: 'Parallel',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Base')),
+                    ..._parallels.map((p) => DropdownMenuItem(value: p, child: Text(p.name))),
+                  ],
+                  onChanged: (p) => setState(() {
+                    _selectedParallel = p;
+                  }),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No parallels for this set',
+                    style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.6)),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              // Comps section
+              if (_selectedCard != null)
+                CardCompsSection(
+                  masterCardId: _selectedCard!.id,
+                  parallelName: _selectedParallel?.name ?? 'Base',
+                  initialGrade: 'Raw',
+                ),
+              const SizedBox(height: 24),
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => setState(() => _catalogStep = _CatalogStep.addCopy),
+                      child: const Text('Add to Collection'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _showAddToWishlist(),
+                      child: const Text('Add to Wishlist'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Your Copy form view ───────────────────────────────────────────────────
+
+  Widget _buildYourCopyFormView(ColorScheme colors) {
+    return Column(
+      children: [
+        AppBreadcrumb(
+          grandparent: 'Catalog',
+          onGrandparentBack: () => setState(() {
+            _catalogStep = _CatalogStep.browsing;
+            _browseSelectedRelease = null;
+            _browseSets = [];
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = [];
+            _isNewCard = false;
+            _selectedRelease = null;
+            _selectedSet = null;
+          }),
+          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+          onBack: () => setState(() {
+            _catalogStep = _CatalogStep.detail;
+            _pricePaidCtrl.clear();
+            _serialNumberCtrl.clear();
+            _isGraded = false;
+            _grader = 'PSA';
+            _gradeValueCtrl.clear();
+            _parallelName = 'Base';
+            _selectedParallel = null;
+          }),
+          current: _selectedSet?.name ?? '',
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              // Selected card chip or new card indicator
+              if (_selectedCard != null) ...[
+                _SelectedChip(
+                  label: _selectedCard!.displayName,
+                  onClear: () => setState(() {
+                    _selectedCard = null;
+                    _cardCtrl.clear();
+                    _cardResults = [];
+                    _catalogStep = _CatalogStep.card;
+                  }),
+                ),
+                const SizedBox(height: 16),
+              ] else if (_isNewCard) ...[
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('New Card',
+                          style: TextStyle(fontSize: 13, color: colors.primary, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _isNewCard = false;
+                        _newPlayerCtrl.clear();
+                        _newCardNumberCtrl.clear();
+                        _newSerialMaxCtrl.clear();
+                        _newIsRookie = false;
+                        _newIsAuto = false;
+                        _newIsPatch = false;
+                        _newIsSSP = false;
+                        _catalogStep = _CatalogStep.card;
+                      }),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+              // New card definition fields
+              if (_isNewCard) ...[
+                _sectionHeader('Card Definition', colors),
+                const SizedBox(height: 8),
+                _NewCardFields(
+                  playerCtrl: _newPlayerCtrl,
+                  cardNumberCtrl: _newCardNumberCtrl,
+                  serialMaxCtrl: _newSerialMaxCtrl,
+                  isRookie: _newIsRookie,
+                  isAuto: _newIsAuto,
+                  isPatch: _newIsPatch,
+                  isSSP: _newIsSSP,
+                  onToggleRookie: (v) => setState(() => _newIsRookie = v),
+                  onToggleAuto: (v) => setState(() => _newIsAuto = v),
+                  onTogglePatch: (v) => setState(() => _newIsPatch = v),
+                  onToggleSSP: (v) => setState(() => _newIsSSP = v),
+                ),
+                const SizedBox(height: 20),
+              ],
+              // Your Copy section
+              _sectionHeader('Your Copy', colors),
+              const SizedBox(height: 8),
+              _YourCopyFields(
+                parallels: _parallels,
+                loadingParallels: _loadingParallels,
+                selectedParallel: _selectedParallel,
+                parallelName: _parallelName,
+                pricePaidCtrl: _pricePaidCtrl,
+                serialNumberCtrl: _serialNumberCtrl,
+                isGraded: _isGraded,
+                grader: _grader,
+                gradeValueCtrl: _gradeValueCtrl,
+                onParallelChanged: _selectParallel,
+                onParallelNameChanged: (v) => setState(() => _parallelName = v),
+                onGradedChanged: (v) => setState(() => _isGraded = v),
+                onGraderChanged: (v) => setState(() => _grader = v),
+              ),
+              const SizedBox(height: 24),
+              // Save button
+              FilledButton(
+                onPressed: _canSave ? _save : null,
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Add to Collection'),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -733,127 +954,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     );
   }
 
-  // ── Your Copy area ────────────────────────────────────────────
-
-  Widget _buildYourCopyArea(ColorScheme colors) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        // Selected card chip or new card indicator
-        if (_selectedCard != null) ...[
-          _SelectedChip(
-            label: _selectedCard!.displayName,
-            onClear: () => setState(() {
-              _selectedCard = null;
-              _cardCtrl.clear();
-              _cardResults = [];
-            }),
-          ),
-          const SizedBox(height: 16),
-        ] else if (_isNewCard) ...[
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text('New Card',
-                    style: TextStyle(fontSize: 13, color: colors.primary, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => setState(() {
-                  _isNewCard = false;
-                  _newPlayerCtrl.clear();
-                  _newCardNumberCtrl.clear();
-                  _newSerialMaxCtrl.clear();
-                  _newIsRookie = false;
-                  _newIsAuto = false;
-                  _newIsPatch = false;
-                  _newIsSSP = false;
-                }),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
-        // New card definition fields
-        if (_isNewCard) ...[
-          _sectionHeader('Card Definition', colors),
-          const SizedBox(height: 8),
-          _NewCardFields(
-            playerCtrl: _newPlayerCtrl,
-            cardNumberCtrl: _newCardNumberCtrl,
-            serialMaxCtrl: _newSerialMaxCtrl,
-            isRookie: _newIsRookie,
-            isAuto: _newIsAuto,
-            isPatch: _newIsPatch,
-            isSSP: _newIsSSP,
-            onToggleRookie: (v) => setState(() => _newIsRookie = v),
-            onToggleAuto: (v) => setState(() => _newIsAuto = v),
-            onTogglePatch: (v) => setState(() => _newIsPatch = v),
-            onToggleSSP: (v) => setState(() => _newIsSSP = v),
-          ),
-          const SizedBox(height: 20),
-        ],
-        // Your Copy section
-        // Action buttons
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                onPressed: () => setState(() => _cardAction = _CardAction.toCollection),
-                child: const Text('Add to Collection'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _showAddToWishlist(),
-                child: const Text('Add to Wishlist'),
-              ),
-            ),
-          ],
-        ),
-        // Your Copy section (shown after action chosen)
-        if (_cardAction == _CardAction.toCollection) ...[
-          const SizedBox(height: 24),
-          _sectionHeader('Your Copy', colors),
-          const SizedBox(height: 8),
-          _YourCopyFields(
-            parallels: _parallels,
-            loadingParallels: _loadingParallels,
-            selectedParallel: _selectedParallel,
-            parallelName: _parallelName,
-            pricePaidCtrl: _pricePaidCtrl,
-            serialNumberCtrl: _serialNumberCtrl,
-            isGraded: _isGraded,
-            grader: _grader,
-            gradeValueCtrl: _gradeValueCtrl,
-            onParallelChanged: _selectParallel,
-            onParallelNameChanged: (v) => setState(() => _parallelName = v),
-            onGradedChanged: (v) => setState(() => _isGraded = v),
-            onGraderChanged: (v) => setState(() => _grader = v),
-          ),
-          const SizedBox(height: 24),
-          // Save button
-          FilledButton(
-            onPressed: _canSave ? _save : null,
-            child: _saving
-                ? const SizedBox(
-                    width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('Add to Collection'),
-          ),
-        ],
-      ],
-    );
-  }
 
   // ── Shared helpers ────────────────────────────────────────────
 

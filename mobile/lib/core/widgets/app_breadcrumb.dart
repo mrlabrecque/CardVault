@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Compact sub-page header with up to 3 levels: [grandparent ›] [parent ›] current.
-/// Navigation is text-only — no back arrow. Ancestor labels are tappable.
+/// Multi-level breadcrumb with flexible depth. All ancestor labels are tappable
+/// for direct navigation. Navigation is text-only — no back arrow.
 /// Adds status-bar safe area automatically.
 class AppBreadcrumb extends StatelessWidget {
   const AppBreadcrumb({
@@ -9,21 +9,19 @@ class AppBreadcrumb extends StatelessWidget {
     this.grandparent,
     this.onGrandparentBack,
     this.parent,
-    required this.current,
+    this.current,
     this.onBack,
     this.trailing,
+    this.items,
   });
 
   final String? grandparent;
   final VoidCallback? onGrandparentBack;
   final String? parent;
-  final String current;
-
-  /// Tapped on parent label. Defaults to [Navigator.pop] when null.
+  final String? current;
   final VoidCallback? onBack;
-
-  /// Optional widget placed at the trailing end (e.g. delete or info button).
   final Widget? trailing;
+  final List<BreadcrumbItem>? items;
 
   static const _ancestorStyle = TextStyle(
     fontSize: 13,
@@ -42,10 +40,30 @@ class AppBreadcrumb extends StatelessWidget {
     child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
   );
 
+  List<BreadcrumbItem> _buildItems(BuildContext context) {
+    if (items != null) return items!;
+
+    final builtItems = <BreadcrumbItem>[];
+    if (grandparent != null) {
+      builtItems.add(BreadcrumbItem(label: grandparent!, onTap: onGrandparentBack));
+    }
+    if (parent != null) {
+      builtItems.add(BreadcrumbItem(
+        label: parent!,
+        onTap: onBack ?? () => Navigator.of(context).pop(),
+      ));
+    }
+    if (current != null) {
+      builtItems.add(BreadcrumbItem(label: current!));
+    }
+    return builtItems;
+  }
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final back = onBack ?? () => Navigator.of(context).pop();
+    final breadcrumbItems = _buildItems(context);
+
     return Container(
       padding: EdgeInsets.fromLTRB(16, top + 12, 16, 12),
       decoration: const BoxDecoration(
@@ -54,29 +72,42 @@ class AppBreadcrumb extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Grandparent level
-          if (grandparent != null) ...[
-            GestureDetector(
-              onTap: onGrandparentBack,
-              child: Text(grandparent!, style: _ancestorStyle),
-            ),
-            _sep,
-          ],
-          // Parent level
-          if (parent != null) ...[
-            GestureDetector(
-              onTap: back,
-              child: Text(parent!, style: _ancestorStyle),
-            ),
-            _sep,
-          ],
-          // Current level
           Expanded(
-            child: Text(current, style: _currentStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Row(
+              children: [
+                for (int i = 0; i < breadcrumbItems.length; i++) ...[
+                  if (i > 0) _sep,
+                  if (i < breadcrumbItems.length - 1)
+                    GestureDetector(
+                      onTap: breadcrumbItems[i].onTap,
+                      child: Text(breadcrumbItems[i].label, style: _ancestorStyle),
+                    )
+                  else
+                    Expanded(
+                      child: Text(
+                        breadcrumbItems[i].label,
+                        style: _currentStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ],
+            ),
           ),
           if (trailing != null) trailing!,
         ],
       ),
     );
   }
+}
+
+class BreadcrumbItem {
+  const BreadcrumbItem({
+    required this.label,
+    this.onTap,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
 }
