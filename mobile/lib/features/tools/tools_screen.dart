@@ -11,6 +11,20 @@ class ToolsScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _ToolCard(
+          icon: Icons.add_a_photo_outlined,
+          title: 'Scan a Card',
+          subtitle: 'Use your camera to identify and add cards',
+          onTap: () => context.push('/scan'),
+        ),
+        const SizedBox(height: 12),
+        _ToolCard(
+          icon: Icons.list_alt,
+          title: 'Bulk Add',
+          subtitle: 'Add multiple cards from the same release at once',
+          onTap: () => context.push('/bulk-add'),
+        ),
+        const SizedBox(height: 12),
+        _ToolCard(
           icon: Icons.search,
           title: 'Comps',
           subtitle: 'Search eBay sold listings for market value',

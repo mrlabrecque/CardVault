@@ -10,22 +10,47 @@ class AppShell extends ConsumerWidget {
   final Widget child;
 
   static const _tabs = [
-    (path: '/dashboard',  icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'Dashboard'),
-    (path: '/collection', icon: Icons.style_outlined,    activeIcon: Icons.style,    label: 'Collection'),
-    (path: '/scan',       icon: Icons.camera_alt_outlined, activeIcon: Icons.camera_alt, label: ''),
-    (path: '/tools',      icon: Icons.handyman_outlined,  activeIcon: Icons.handyman, label: 'Tools'),
-    (path: '/wishlist',   icon: Icons.bookmark_outline,   activeIcon: Icons.bookmark, label: 'Wishlist'),
+    (
+      path: '/dashboard',
+      icon: Icons.bar_chart_outlined,
+      activeIcon: Icons.bar_chart,
+      label: 'Dashboard',
+    ),
+    (
+      path: '/catalog',
+      icon: Icons.travel_explore_outlined,
+      activeIcon: Icons.travel_explore,
+      label: 'Catalog',
+    ),
+    (
+      path: '/collection',
+      icon: Icons.style_outlined,
+      activeIcon: Icons.style,
+      label: 'Collection',
+    ),
+    (
+      path: '/wishlist',
+      icon: Icons.bookmark_outline,
+      activeIcon: Icons.bookmark,
+      label: 'Wishlist',
+    ),
+    (
+      path: '/tools',
+      icon: Icons.handyman_outlined,
+      activeIcon: Icons.handyman,
+      label: 'Tools',
+    ),
   ];
 
   static const _tabTitles = {
-    '/dashboard':                 'Dashboard',
-    '/collection':                'Collection',
-    '/scan':                      'Scan',
-    '/tools':                     'Tools',
-    '/wishlist':                  'Wishlist',
-    '/admin/catalog-import':      'Catalog Import',
-    '/admin/releases':            'Manage Releases',
-    '/admin/pending-parallels':   'Pending Parallels',
+    '/dashboard': 'Dashboard',
+    '/catalog': 'Catalog',
+    '/collection': 'Collection',
+    '/tools': 'Tools',
+    '/wishlist': 'Wishlist',
+    '/admin/catalog-import': 'Catalog Import',
+    '/admin/releases': 'Manage Releases',
+    '/admin/pending-parallels': 'Pending Parallels',
   };
 
   int _selectedIndex(String location) {
@@ -34,7 +59,8 @@ class AppShell extends ConsumerWidget {
   }
 
   bool _isTabRoute(String location) =>
-    _tabTitles.keys.any((p) => location == p) || location.startsWith('/admin');
+      _tabTitles.keys.any((p) => location == p) ||
+      location.startsWith('/admin');
 
   String _pageTitle(String location) {
     for (final entry in _tabTitles.entries) {
@@ -70,14 +96,7 @@ class AppShell extends ConsumerWidget {
         backgroundColor: AppTheme.primary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        destinations: _tabs.mapIndexed((i, t) {
-          if (t.path == '/scan') {
-            return NavigationDestination(
-              icon: _ScanFab(active: selectedIdx == i, selected: false),
-              selectedIcon: _ScanFab(active: selectedIdx == i, selected: true),
-              label: t.label,
-            );
-          }
+        destinations: _tabs.map((t) {
           return NavigationDestination(
             icon: Icon(t.icon),
             selectedIcon: Icon(t.activeIcon),
@@ -164,15 +183,21 @@ class _ShellHeader extends StatelessWidget {
           GestureDetector(
             onTap: onAvatarTap,
             child: Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: const BoxDecoration(
                 color: Color(0xFF800020),
                 shape: BoxShape.circle,
               ),
               child: Center(
-                child: Text(initial,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
               ),
             ),
           ),
@@ -185,7 +210,11 @@ class _ShellHeader extends StatelessWidget {
 // ── Avatar bottom sheet ────────────────────────────────────────────────────────
 
 class _AvatarSheet extends ConsumerWidget {
-  const _AvatarSheet({this.email, required this.onNavigate, required this.onSignOut});
+  const _AvatarSheet({
+    this.email,
+    required this.onNavigate,
+    required this.onSignOut,
+  });
   final String? email;
   final void Function(String path) onNavigate;
   final VoidCallback onSignOut;
@@ -206,23 +235,54 @@ class _AvatarSheet extends ConsumerWidget {
           children: [
             Center(
               child: Container(
-                width: 36, height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(2)),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black87)),
+            const Text(
+              'Account',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
             const SizedBox(height: 16),
             if (email != null) ...[
-              Text(email!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+              Text(
+                email!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
               const SizedBox(height: 16),
               Divider(color: Colors.grey.shade100),
               const SizedBox(height: 8),
             ],
             if (isAdmin) ...[
-              _AdminLink(label: 'Catalog Import',     icon: Icons.download_outlined,     onTap: () => onNavigate('/admin/catalog-import')),
-              _AdminLink(label: 'Manage Releases',    icon: Icons.library_books_outlined, onTap: () => onNavigate('/admin/releases')),
-              _AdminLink(label: 'Pending Parallels',  icon: Icons.pending_outlined,       badge: pendingCount > 0 ? pendingCount : null, onTap: () => onNavigate('/admin/pending-parallels')),
+              _AdminLink(
+                label: 'Catalog Import',
+                icon: Icons.download_outlined,
+                onTap: () => onNavigate('/admin/catalog-import'),
+              ),
+              _AdminLink(
+                label: 'Manage Releases',
+                icon: Icons.library_books_outlined,
+                onTap: () => onNavigate('/admin/releases'),
+              ),
+              _AdminLink(
+                label: 'Pending Parallels',
+                icon: Icons.pending_outlined,
+                badge: pendingCount > 0 ? pendingCount : null,
+                onTap: () => onNavigate('/admin/pending-parallels'),
+              ),
               const SizedBox(height: 4),
               Divider(color: Colors.grey.shade100),
               const SizedBox(height: 4),
@@ -232,10 +292,19 @@ class _AvatarSheet extends ConsumerWidget {
               child: TextButton.icon(
                 onPressed: onSignOut,
                 icon: Icon(Icons.logout, size: 16, color: Colors.red.shade400),
-                label: Text('Sign Out', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w600)),
+                label: Text(
+                  'Sign Out',
+                  style: TextStyle(
+                    color: Colors.red.shade400,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 style: TextButton.styleFrom(
                   alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ),
@@ -247,7 +316,12 @@ class _AvatarSheet extends ConsumerWidget {
 }
 
 class _AdminLink extends StatelessWidget {
-  const _AdminLink({required this.label, required this.icon, required this.onTap, this.badge});
+  const _AdminLink({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.badge,
+  });
   final String label;
   final IconData icon;
   final VoidCallback onTap;
@@ -260,60 +334,40 @@ class _AdminLink extends StatelessWidget {
       child: TextButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 16, color: AppTheme.primary),
-        label: Row(children: [
-          Expanded(child: Text(label, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500))),
-          if (badge != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(color: Colors.amber.shade600, borderRadius: BorderRadius.circular(10)),
-              child: Text('$badge', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w700)),
+        label: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
-        ]),
+            if (badge != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade600,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$badge',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
         style: TextButton.styleFrom(
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
         ),
       ),
     );
-  }
-}
-
-// ── FAB scan button ────────────────────────────────────────────────────────────
-
-class _ScanFab extends StatelessWidget {
-  const _ScanFab({required this.active, required this.selected});
-  final bool active;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.scale(
-      scale: 1.5,
-      child: Transform.translate(
-        offset: const Offset(0, -12),
-        child: Container(
-          width: 48, height: 48,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Icon(Icons.camera_alt, color: AppTheme.primary, size: 24),
-        ),
-      ),
-    );
-  }
-}
-
-extension<T> on List<T> {
-  Iterable<R> mapIndexed<R>(R Function(int index, T item) fn) sync* {
-    for (var i = 0; i < length; i++) { yield fn(i, this[i]); }
   }
 }

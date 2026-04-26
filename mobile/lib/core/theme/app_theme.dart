@@ -114,6 +114,15 @@ class AppTheme {
         ),
       ),
 
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primary,
+          side: const BorderSide(color: primary, width: 1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+        ),
+      ),
+
       chipTheme: ChipThemeData(
         backgroundColor: Colors.white,
         selectedColor: primary.withValues(alpha: 0.12),
@@ -182,6 +191,15 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primaryLight,
+          side: BorderSide(color: primaryLight, width: 1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
         ),
       ),
     );

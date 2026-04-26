@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
@@ -165,11 +164,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                       PopupMenuItem(value: SortOption.movingUp,  child: _sortItem(Icons.arrow_upward,    'Moving Up',    _sort == SortOption.movingUp,  colors)),
                     ],
                     onSortSelected: (s) => setState(() => _sort = s),
-                    actionButton: _AddMenuButton(
-                      onAddCard: () => context.push('/add-card'),
-                      onBulkAdd: () => context.push('/bulk-add'),
-                      colors: colors,
-                    ),
+                    actionButton: null,
                   ),
                   label: Align(
                     alignment: Alignment.centerLeft,
@@ -335,73 +330,5 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       const SizedBox(width: 8),
       Text(label),
     ]);
-  }
-}
-
-class _AddMenuButton extends StatelessWidget {
-  const _AddMenuButton({
-    required this.onAddCard,
-    required this.onBulkAdd,
-    required this.colors,
-  });
-
-  final VoidCallback onAddCard;
-  final VoidCallback onBulkAdd;
-  final ColorScheme colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: () {
-        final RenderBox button = context.findRenderObject() as RenderBox;
-        final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-        final RelativeRect position = RelativeRect.fromRect(
-          Rect.fromPoints(
-            button.localToGlobal(Offset.zero, ancestor: overlay),
-            button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
-          ),
-          Offset.zero & overlay.size,
-        );
-
-        showMenu(
-          context: context,
-          position: position,
-          items: [
-            PopupMenuItem(
-              onTap: onAddCard,
-              child: const Row(
-                children: [
-                  Icon(Icons.add, size: 18),
-                  SizedBox(width: 12),
-                  Text('Add Card'),
-                ],
-              ),
-            ),
-            PopupMenuItem(
-              onTap: onBulkAdd,
-              child: const Row(
-                children: [
-                  Icon(Icons.list, size: 18),
-                  SizedBox(width: 12),
-                  Text('Bulk Add'),
-                ],
-              ),
-            ),
-          ],
-          color: Colors.white,
-        );
-      },
-      icon: const Icon(Icons.add, size: 14),
-      label: const Text('Add'),
-      style: FilledButton.styleFrom(
-        backgroundColor: colors.primary,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        minimumSize: const Size(90, 36),
-        tapTargetSize: MaterialTapTargetSize.padded,
-        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
   }
 }

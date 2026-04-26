@@ -6,6 +6,8 @@ import '../../core/services/comps_service.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
+import '../wishlist/wishlist_screen.dart';
+import '../wishlist/wishlist_form_sheet.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -23,6 +25,7 @@ const _catalogSports = [
 ];
 
 enum _CatalogStep { browsing, sets, card }
+enum _CardAction { none, toCollection, toWishlist }
 
 class AddCardScreen extends ConsumerStatefulWidget {
   const AddCardScreen({super.key});
@@ -32,6 +35,7 @@ class AddCardScreen extends ConsumerStatefulWidget {
 }
 
 class _AddCardScreenState extends ConsumerState<AddCardScreen> {
+  _CardAction _cardAction = _CardAction.none;
   // ── Catalog step ─────────────────────────────────────────────
   _CatalogStep _catalogStep = _CatalogStep.browsing;
   String _catalogFilterYear = '';
@@ -301,7 +305,30 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
         );
-        context.pop();
+        setState(() {
+          _catalogStep = _CatalogStep.sets;
+          _selectedCard = null;
+          _cardCtrl.clear();
+          _cardResults = [];
+          _isNewCard = false;
+          _selectedRelease = null;
+          _selectedSet = null;
+          _cardAction = _CardAction.none;
+          _pricePaidCtrl.clear();
+          _serialNumberCtrl.clear();
+          _isGraded = false;
+          _grader = 'PSA';
+          _gradeValueCtrl.clear();
+          _parallelName = 'Base';
+          _selectedParallel = null;
+          _newPlayerCtrl.clear();
+          _newCardNumberCtrl.clear();
+          _newSerialMaxCtrl.clear();
+          _newIsRookie = false;
+          _newIsAuto = false;
+          _newIsPatch = false;
+          _newIsSSP = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -312,6 +339,34 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _showAddToWishlist() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => WishlistFormSheet(
+        prefill: {
+          'player': _selectedCard?.player ?? (_isNewCard ? _newPlayerCtrl.text.trim() : ''),
+          'year': _selectedRelease?.year,
+          'set_name': _selectedRelease?.name,
+          'card_number': _selectedCard?.cardNumber ?? (_isNewCard ? _newCardNumberCtrl.text.trim() : ''),
+          'isRookie': _selectedCard?.isRookie ?? _newIsRookie,
+          'isAuto': _selectedCard?.isAuto ?? _newIsAuto,
+          'isPatch': _selectedCard?.isPatch ?? _newIsPatch,
+          'serialMax': _selectedCard?.serialMax ?? (_isNewCard ? int.tryParse(_newSerialMaxCtrl.text.trim()) : null),
+        },
+        onSave: (data) async {
+          try {
+            await ref.read(wishlistProvider.notifier).add(data);
+            return null;
+          } catch (e) {
+            return e.toString();
+          }
+        },
+      ),
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────────
@@ -341,8 +396,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     return Column(
       children: [
         AppBreadcrumb(
-          parent: 'Collection',
-          current: 'Add Card',
+          current: 'Catalog',
           onBack: () => context.pop(),
         ),
         // Filter row
@@ -482,8 +536,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     return Column(
       children: [
         AppBreadcrumb(
-          grandparent: 'Collection',
-          parent: 'Add Card',
+          parent: 'Catalog',
           current: _browseSelectedRelease?.displayName ?? '',
           onBack: () => setState(() {
             _catalogStep = _CatalogStep.browsing;
@@ -565,17 +618,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     return Column(
       children: [
         AppBreadcrumb(
-          grandparent: 'Add Card',
+          grandparent: 'Catalog',
           onGrandparentBack: () => setState(() {
-            _catalogStep = _CatalogStep.sets;
-            _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = [];
-            _isNewCard = false;
-            _selectedSet = null;
-          }),
-          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-          onBack: () => setState(() {
             _catalogStep = _CatalogStep.browsing;
             _browseSelectedRelease = null;
             _browseSets = [];
@@ -584,6 +628,15 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             _cardResults = [];
             _isNewCard = false;
             _selectedRelease = null;
+            _selectedSet = null;
+          }),
+          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+          onBack: () => setState(() {
+            _catalogStep = _CatalogStep.sets;
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = [];
+            _isNewCard = false;
             _selectedSet = null;
           }),
           current: _selectedSet?.name ?? '',
@@ -747,34 +800,57 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           const SizedBox(height: 20),
         ],
         // Your Copy section
-        _sectionHeader('Your Copy', colors),
-        const SizedBox(height: 8),
-        _YourCopyFields(
-          parallels: _parallels,
-          loadingParallels: _loadingParallels,
-          selectedParallel: _selectedParallel,
-          parallelName: _parallelName,
-          pricePaidCtrl: _pricePaidCtrl,
-          serialNumberCtrl: _serialNumberCtrl,
-          isGraded: _isGraded,
-          grader: _grader,
-          gradeValueCtrl: _gradeValueCtrl,
-          onParallelChanged: _selectParallel,
-          onParallelNameChanged: (v) => setState(() => _parallelName = v),
-          onGradedChanged: (v) => setState(() => _isGraded = v),
-          onGraderChanged: (v) => setState(() => _grader = v),
+        // Action buttons
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton(
+                onPressed: () => setState(() => _cardAction = _CardAction.toCollection),
+                child: const Text('Add to Collection'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _showAddToWishlist(),
+                child: const Text('Add to Wishlist'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 24),
-        // Save button
-        FilledButton(
-          onPressed: _canSave ? _save : null,
-          child: _saving
-              ? const SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Add to Collection'),
-        ),
+        // Your Copy section (shown after action chosen)
+        if (_cardAction == _CardAction.toCollection) ...[
+          const SizedBox(height: 24),
+          _sectionHeader('Your Copy', colors),
+          const SizedBox(height: 8),
+          _YourCopyFields(
+            parallels: _parallels,
+            loadingParallels: _loadingParallels,
+            selectedParallel: _selectedParallel,
+            parallelName: _parallelName,
+            pricePaidCtrl: _pricePaidCtrl,
+            serialNumberCtrl: _serialNumberCtrl,
+            isGraded: _isGraded,
+            grader: _grader,
+            gradeValueCtrl: _gradeValueCtrl,
+            onParallelChanged: _selectParallel,
+            onParallelNameChanged: (v) => setState(() => _parallelName = v),
+            onGradedChanged: (v) => setState(() => _isGraded = v),
+            onGraderChanged: (v) => setState(() => _grader = v),
+          ),
+          const SizedBox(height: 24),
+          // Save button
+          FilledButton(
+            onPressed: _canSave ? _save : null,
+            child: _saving
+                ? const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Add to Collection'),
+          ),
+        ],
       ],
     );
   }

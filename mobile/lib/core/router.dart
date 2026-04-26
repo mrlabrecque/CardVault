@@ -49,7 +49,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/collection/:id',
             builder: (context, state) => ItemDetailScreen(card: state.extra as UserCard),
           ),
-          GoRoute(path: '/add-card', builder: (context, state) => const AddCardScreen()),
+          GoRoute(path: '/catalog', builder: (context, state) => const AddCardScreen()),
           GoRoute(path: '/bulk-add', builder: (context, state) => const BulkAddScreen()),
           GoRoute(path: '/tools', builder: (context, state) => const ToolsScreen()),
           GoRoute(path: '/comps', builder: (context, state) => const CompsScreen()),
