@@ -177,13 +177,12 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         // Filtered comps list
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 12),
           child: Text(
-            '${_filteredComps.length} listings',
-            style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
+            '${_filteredComps.length} ${_filteredComps.length == 1 ? 'listing' : 'listings'}',
+            style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
           ),
         ),
-        const SizedBox(height: 8),
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -287,15 +286,30 @@ class _PriceChart extends StatelessWidget {
 
     return LineChart(
       LineChartData(
-        gridData: const FlGridData(show: false),
+        gridData: FlGridData(
+          show: true,
+          drawHorizontalLine: true,
+          drawVerticalLine: false,
+          horizontalInterval: (maxPrice - minPrice) / 4,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: const Color(0xFFF3F4F6),
+              strokeWidth: 1,
+              dashArray: [4, 2],
+            );
+          },
+        ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                return Text('\$${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: Color(0xFF9CA3AF)));
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text('\$${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500)),
+                );
               },
-              reservedSize: 40,
+              reservedSize: 50,
             ),
           ),
           bottomTitles: const AxisTitles(
@@ -304,7 +318,13 @@ class _PriceChart extends StatelessWidget {
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        borderData: FlBorderData(show: false),
+        borderData: FlBorderData(
+          show: true,
+          border: const Border(
+            left: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+            bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+          ),
+        ),
         minY: minPrice - priceRange * 0.1,
         maxY: maxPrice + priceRange * 0.1,
         lineBarsData: [
@@ -312,11 +332,21 @@ class _PriceChart extends StatelessWidget {
             spots: spots,
             isCurved: true,
             color: const Color(0xFF800020),
-            barWidth: 2,
-            dotData: const FlDotData(show: true),
+            barWidth: 2.5,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) {
+                return FlDotCirclePainter(
+                  radius: 4,
+                  color: const Color(0xFF800020),
+                  strokeWidth: 2,
+                  strokeColor: Colors.white,
+                );
+              },
+            ),
             belowBarData: BarAreaData(
               show: true,
-              color: const Color(0xFF800020).withValues(alpha: 0.1),
+              color: const Color(0xFF800020).withValues(alpha: 0.08),
             ),
           ),
         ],
