@@ -129,7 +129,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       children: [
         // Grade pills
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.only(top: 0, bottom: 12),
           child: Row(
             children: [
               _GradePill(
@@ -159,7 +159,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         // Chart (if enough data)
         if (_getChartData().length >= 2) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.only(bottom: 16),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -177,7 +177,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         // Filtered comps list
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.only(bottom: 8),
           child: Text(
             '${_filteredComps.length} listings',
             style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
@@ -189,16 +189,13 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           physics: const NeverScrollableScrollPhysics(),
           itemCount: _filteredComps.length,
           separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFF3F4F6)),
-              ),
-              child: _CompRow(comp: _filteredComps[i]),
+          itemBuilder: (_, i) => Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF3F4F6)),
             ),
+            child: _CompRow(comp: _filteredComps[i]),
           ),
         ),
       ],

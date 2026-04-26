@@ -690,7 +690,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           }),
           parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
           onBack: () => setState(() {
-            _catalogStep = _CatalogStep.card;
+            _catalogStep = _CatalogStep.sets;
             _selectedCard = null;
             _cardCtrl.clear();
             _cardResults = [];
