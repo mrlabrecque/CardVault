@@ -309,12 +309,9 @@ class _PriceChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Text('\$${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500)),
-                );
+                return Text('\$${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500));
               },
-              reservedSize: 50,
+              reservedSize: 40,
             ),
           ),
           bottomTitles: AxisTitles(
@@ -348,6 +345,14 @@ class _PriceChart extends StatelessWidget {
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (touchedSpot) => Colors.white,
             tooltipBorder: const BorderSide(color: Color(0xFFF3F4F6)),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                return LineTooltipItem(
+                  '\$${spot.y.toStringAsFixed(2)}',
+                  const TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w600, fontSize: 12),
+                );
+              }).toList();
+            },
           ),
         ),
         minY: minPrice - priceRange * 0.1,

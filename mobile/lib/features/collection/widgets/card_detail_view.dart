@@ -59,7 +59,6 @@ class CardDetailView extends StatelessWidget {
   String? get _checklist => userCard?.checklist;
   String? get _releaseName => releaseName;
   String? get _parallelName => userCard?.parallel ?? (parallelName != 'Base' ? parallelName : null);
-  int? get _year => userCard?.year ?? year;
   bool get _isRookie => userCard?.rookie ?? masterCard?.isRookie ?? false;
   bool get _isAuto => userCard?.autograph ?? masterCard?.isAuto ?? false;
   bool get _isPatch => userCard?.memorabilia ?? masterCard?.isPatch ?? false;
@@ -146,7 +145,6 @@ class CardDetailView extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   [
-                    if (_year != null) '$_year',
                     if (_releaseName != null) _releaseName,
                     if (_set != null && _set != _releaseName) _set,
                     if (_checklist != null) _checklist,
