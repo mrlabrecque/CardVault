@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/models/wishlist_item.dart';
-import '../../core/widgets/attr_tag.dart';
-import '../../core/widgets/serial_tag.dart';
+import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
@@ -269,7 +267,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 100),
+              padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
               itemCount: filtered.length,
               itemBuilder: (_, i) {
                 final item = filtered[i];
@@ -282,14 +280,9 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                         ? _expandedMatches.remove(item.id)
                         : _expandedMatches.add(item.id);
                   }),
-                  onEdit: () => _showWishlistForm(context, ref, editing: item),
-                  onSearchComps: () {
-                    final base = item.ebayQuery ?? item.player ?? '';
-                    final exclusions = item.excludeTerms.map((t) => '-"$t"').join(' ');
-                    final q = exclusions.isNotEmpty ? '$base $exclusions' : base;
-                    context.go('/comps?q=${Uri.encodeComponent(q)}');
-                  },
-                  onTogglePause: () => ref.read(wishlistProvider.notifier).togglePause(item.id),
+                  onEdit: () {},
+                  onSearchComps: () {},
+                  onTogglePause: () {},
                   onDelete: () async {
                     setState(() => _deletingId = item.id);
                     await ref.read(wishlistProvider.notifier).remove(item.id);
@@ -359,7 +352,7 @@ class _WishlistCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final triggered = item.isTriggered;
 
-    return Container(
+    final card = Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: triggered ? colors.surface : Colors.white,
@@ -397,77 +390,39 @@ class _WishlistCard extends StatelessWidget {
             const Divider(height: 1),
           ],
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Main content row: left (info) + right (badge/edit + prices)
+                // Main content row: left (info) + right (badge + prices)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Left side: player, set, parallel, attributes
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text.rich(
-                            TextSpan(children: [
-                              TextSpan(text: item.player ?? 'Unknown', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                              if (item.cardNumber != null)
-                                TextSpan(
-                                  text: '  #${item.cardNumber}',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5)),
-                                ),
-                            ]),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
-                          ),
-                          if (item.year != null || item.setName != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              [if (item.year != null) '${item.year}', if (item.setName != null) item.setName!].join(' · '),
-                              style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5)),
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                          if (item.parallel != null || item.attrs.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 4, runSpacing: 4,
-                              children: [
-                                if (item.parallel != null && item.parallel != 'Base')
-                                  Text(item.parallel!, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: colors.primary)),
-                                for (final tag in item.attrs)
-                                  AttrTag(tag, color: _attrColor(tag)),
-                                if (item.serialMax != null)
-                                  SerialTag(serialMax: item.serialMax),
-                              ],
-                            ),
-                          ],
-                        ],
+                      child: CardInfoSection(
+                        player: item.player ?? 'Unknown',
+                        cardNumber: item.cardNumber,
+                        year: item.year,
+                        set: item.setName,
+                        parallel: item.parallel,
+                        attrs: item.attrs.where((a) => !a.startsWith('/')).toList(),
+                        serialMax: item.serialMax,
+                        imageUrl: null,
+                        grade: item.grade,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    // Right side: badge + edit, then prices
+                    const SizedBox(width: 10),
+                    // Right side: badge + prices
                     SizedBox(
-                      width: 130,
+                      width: 105,
                       child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // Top: badge + edit
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (!triggered)
-                              _StatusBadge(status: item.alertStatus, colors: colors),
-                            if (!triggered)
-                              const SizedBox(width: 6),
-                            GestureDetector(
-                              onTap: onEdit,
-                              child: Icon(Icons.edit_outlined, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
+                        // Top: badge only
+                        if (!triggered)
+                          _StatusBadge(status: item.alertStatus, colors: colors),
+                        if (!triggered)
+                          const SizedBox(height: 8),
                         // Price boxes (inline)
                         Wrap(
                           spacing: 4,
@@ -476,14 +431,13 @@ class _WishlistCard extends StatelessWidget {
                           children: [
                             if (item.targetPrice != null)
                               _PriceBox(colors: colors, label: 'Target', value: '\$${item.targetPrice!.toStringAsFixed(2)}'),
-                            if (item.lastSeenPrice != null)
+                            if (triggered && item.lastSeenPrice != null)
                               _PriceBox(
                                 colors: colors,
                                 label: 'Best',
                                 value: '\$${item.lastSeenPrice!.toStringAsFixed(2)}',
-                                highlight: triggered,
+                                highlight: true,
                               ),
-                            _PriceBox(colors: colors, label: 'Grade', value: item.grade?.isNotEmpty == true ? item.grade! : 'Any'),
                           ],
                         ),
                       ],
@@ -530,66 +484,31 @@ class _WishlistCard extends StatelessWidget {
                     ),
                   ],
                 ],
-
-                // Action buttons
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onSearchComps,
-                        icon: Icon(Icons.search, size: 13, color: colors.onSurface.withValues(alpha: 0.6)),
-                        label: Text('Comps', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.7))),
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          side: BorderSide(color: colors.outline.withValues(alpha: 0.3)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: onTogglePause,
-                      child: Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(item.isPaused ? Icons.play_arrow : Icons.pause, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: onDelete,
-                      child: Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: colors.error.withValues(alpha: 0.3)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: isDeleting
-                            ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: colors.error))
-                            : Icon(Icons.delete_outline, size: 16, color: colors.error.withValues(alpha: 0.6)),
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
         ],
       ),
     );
+
+    return Dismissible(
+      key: ValueKey(item.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: colors.error,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        child: Icon(Icons.delete_outline, color: colors.onError, size: 20),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: card,
+    );
   }
 
-  Color _attrColor(String tag) => switch (tag) {
-    'RC'   => const Color(0xFF16A34A),
-    'AUTO' => const Color(0xFF7C3AED),
-    'PATCH'=> const Color(0xFF0369A1),
-    _      => const Color(0xFF6B7280),
-  };
 }
 
 // ── Match row ──────────────────────────────────────────────────────────────────

@@ -149,7 +149,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
             if (stack.autograph)   AttrTag('AUTO', color: const Color(0xFF7C3AED)),
             if (stack.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
             if (stack.ssp)         AttrTag('SSP', color: const Color(0xFFB45309)),
-            if (stack.isGraded)    AttrTag(stack.gradeLabel),
+            if (stack.isGraded)    AttrTag(stack.gradeLabel, color: const Color(0xFF9CA3AF)),
             SerialTag(serialMax: stack.serialMax),
           ],
         ),
