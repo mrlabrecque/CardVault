@@ -438,7 +438,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
+      builder: (sheetContext) => StatefulBuilder(
         builder: (context, setState) => CardSheet(
           title: 'Add to Wishlist',
           card: _selectedCard,
@@ -461,22 +461,30 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           onGraderChanged: (g) => setState(() => grader = g ?? 'PSA'),
           onSave: (data) async {
             try {
+              final grade = isGraded && gradeValueCtrl.text.trim().isNotEmpty
+                  ? '$grader ${gradeValueCtrl.text.trim()}'
+                  : null;
               await ref.read(wishlistProvider.notifier).add({
-                'player': _selectedCard?.player ?? '',
+                'player': (_selectedCard?.player ?? '').trim(),
                 'year': _selectedRelease?.year,
                 'set_name': _selectedRelease?.name,
-                'card_number': _selectedCard?.cardNumber,
-                'parallel': selectedParallel?.name,
+                'card_number': (_selectedCard?.cardNumber ?? '').trim(),
+                'parallel': (selectedParallel?.name ?? 'Base').trim(),
                 'is_rookie': _selectedCard?.isRookie ?? false,
                 'is_auto': _selectedCard?.isAuto ?? false,
                 'is_patch': _selectedCard?.isPatch ?? false,
                 'serial_max': _selectedCard?.serialMax,
-                'grade': isGraded && gradeValueCtrl.text.trim().isNotEmpty ? gradeValueCtrl.text.trim() : null,
-                'grader': isGraded ? grader : null,
+                'grade': grade,
                 'ebay_query': null,
                 'exclude_terms': [],
                 'target_price': double.tryParse(targetPriceCtrl.text),
               });
+              ref.invalidate(wishlistProvider);
+              if (sheetContext.mounted) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(content: Text('Added to Wishlist!'), duration: Duration(seconds: 2)),
+                );
+              }
               return null;
             } catch (e) {
               return e.toString();
@@ -860,19 +868,90 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: FilledButton(
-                      onPressed: _showAddCopySheet,
-                      child: const Text('Add to Collection'),
+                    child: Consumer(
+                      builder: (context, ref, child) {
+                        final userCardsAsync = ref.watch(userCardsProvider);
+                        final copyCount = userCardsAsync.whenData((allCards) {
+                          if (_selectedCard == null) return 0;
+                          final selectedParallelName = _selectedParallel?.name ?? 'Base';
+                          return allCards.where((card) {
+                            final cardMatch = card.masterCardId == _selectedCard?.id;
+                            final cardNumberMatch = (card.cardNumber?.trim() ?? '') ==
+                                (_selectedCard?.cardNumber?.trim() ?? '');
+                            final parallelMatch = card.parallel.trim() == selectedParallelName.trim();
+                            return cardMatch && cardNumberMatch && parallelMatch;
+                          }).length;
+                        }).value ?? 0;
+
+                        return copyCount > 0
+                            ? FilledButton.icon(
+                                onPressed: null,
+                                icon: TweenAnimationBuilder<double>(
+                                  tween: Tween(begin: 0.0, end: 1.0),
+                                  duration: const Duration(milliseconds: 800),
+                                  curve: Curves.elasticOut,
+                                  builder: (context, scale, child) {
+                                    return Transform.scale(
+                                      scale: scale,
+                                      child: child,
+                                    );
+                                  },
+                                  child: const Icon(Icons.check_circle, size: 18),
+                                ),
+                                label: Text('In Collection ($copyCount)'),
+                              )
+                            : FilledButton(
+                                onPressed: _showAddCopySheet,
+                                child: const Text('Add to Collection'),
+                              );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _showAddToWishlist(),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                      ),
-                      child: const Text('Add to Wishlist'),
+                    child: Consumer(
+                      builder: (context, ref, child) {
+                        final wishlistAsync = ref.watch(wishlistProvider);
+                        final isInWishlist = wishlistAsync.whenData((wishlist) {
+                          if (_selectedCard == null) return false;
+                          final selectedParallelName = _selectedParallel?.name ?? 'Base';
+                          return wishlist.any((item) {
+                            final playerMatch = (item.player?.trim().toLowerCase() ?? '') ==
+                                (_selectedCard?.player.trim().toLowerCase() ?? '');
+                            final cardNumberMatch = (item.cardNumber?.trim() ?? '') ==
+                                (_selectedCard?.cardNumber?.trim() ?? '');
+                            final parallelMatch = (item.parallel?.trim() ?? 'Base') ==
+                                selectedParallelName.trim();
+                            return playerMatch && cardNumberMatch && parallelMatch;
+                          });
+                        }).value ?? false;
+
+                        return isInWishlist
+                            ? FilledButton.icon(
+                                onPressed: null,
+                                icon: TweenAnimationBuilder<double>(
+                                  tween: Tween(begin: 0.0, end: 1.0),
+                                  duration: const Duration(milliseconds: 800),
+                                  curve: Curves.elasticOut,
+                                  builder: (context, scale, child) {
+                                    return Transform.scale(
+                                      scale: scale,
+                                      child: child,
+                                    );
+                                  },
+                                  child: const Icon(Icons.favorite, size: 18),
+                                ),
+                                label: const Text('In Wishlist'),
+                              )
+                            : OutlinedButton.icon(
+                                onPressed: () => _showAddToWishlist(),
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.favorite_border, size: 18),
+                                label: const Text('Add to Wishlist'),
+                              );
+                      },
                     ),
                   ),
                 ],

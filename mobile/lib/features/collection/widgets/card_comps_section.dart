@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/services/comps_service.dart';
-import '../../../core/widgets/info_box.dart';
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -139,19 +138,32 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
 
     if (_allComps.isEmpty) {
-      return InfoBox(
-        color: const Color(0xFFF59E0B),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF3C7),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFDBB726)),
+        ),
+        child: Row(
           children: [
-            Text(
-              'No comps found',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'No recent eBay sales data available for this card.',
-              style: const TextStyle(fontSize: 13),
+            const Icon(Icons.search_off, size: 16, color: Color(0xFFF59E0B)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'No comps found',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'No recent eBay sales data available for this card.',
+                    style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
