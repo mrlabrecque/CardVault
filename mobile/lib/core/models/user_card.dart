@@ -1,3 +1,20 @@
+int? _tryParseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  if (value is num) return value.toInt();
+  return null;
+}
+
+double? _tryParseDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  if (value is num) return value.toDouble();
+  return null;
+}
+
 class UserCard {
   final String id;
   final String? masterCardId;
@@ -75,20 +92,20 @@ class UserCard {
       sport: release?['sport'] as String? ?? '',
       set: release?['name'] as String?,        // release name e.g. "Topps Chrome"
       checklist: setData?['name'] as String?,  // set name e.g. "Base Set"
-      year: release?['year'] as int?,
+      year: _tryParseInt(release?['year']),
       setId: setData?['id'] as String?,
-      setCardCount: setData?['card_count'] as int?,
+      setCardCount: _tryParseInt(setData?['card_count']),
       parallel: json['parallel_name'] as String? ?? 'Base',
       parallelId: json['parallel_id'] as String?,
       grade: json['grade_value'] as String?,
       isGraded: json['is_graded'] as bool? ?? false,
       grader: json['grader'] as String?,
-      gradeValue: (json['grade_value'] as num?)?.toDouble(),
+      gradeValue: _tryParseDouble(json['grade_value']),
       serialNumber: json['serial_number'] as String?,
-      serialMax: parallel?['serial_max'] as int? ?? master?['serial_max'] as int?,
-      pricePaid: (json['price_paid'] as num?)?.toDouble(),
-      currentValue: (json['current_value'] as num?)?.toDouble(),
-      previousValue: (json['previous_value'] as num?)?.toDouble(),
+      serialMax: _tryParseInt(parallel?['serial_max'] ?? master?['serial_max']),
+      pricePaid: _tryParseDouble(json['price_paid']),
+      currentValue: _tryParseDouble(json['current_value']),
+      previousValue: _tryParseDouble(json['previous_value']),
       rookie: master?['is_rookie'] as bool? ?? false,
       autograph: master?['is_auto'] as bool? ?? false,
       memorabilia: master?['is_patch'] as bool? ?? false,

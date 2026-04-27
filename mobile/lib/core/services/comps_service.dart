@@ -47,10 +47,14 @@ class CompsService {
   }
 
   Future<void> refreshMasterCardComps(String masterCardId, String parallelName) async {
-    await _supabase.functions.invoke(
+    final res = await _supabase.functions.invoke(
       'get-card-comps',
       body: {'masterCardId': masterCardId, 'parallelName': parallelName},
     );
+    if (res.status != 200) {
+      final error = (res.data as Map<String, dynamic>?)?['error'] ?? 'Unknown error';
+      throw Exception('Refresh comps failed: $error');
+    }
   }
 
   Future<void> refreshCardValue(String cardId) async {

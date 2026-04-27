@@ -2,6 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
 
+int _tryParseInt(dynamic value) {
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value) ?? 0;
+  if (value is num) return value.toInt();
+  return 0;
+}
+
+double _tryParseDouble(dynamic value) {
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0;
+  if (value is num) return value.toDouble();
+  return 0;
+}
+
 class GradingResult {
   const GradingResult({
     required this.psa9Avg,
@@ -19,10 +34,10 @@ class GradingResult {
     final psa9  = json['psa9']  as Map<String, dynamic>? ?? {};
     final psa10 = json['psa10'] as Map<String, dynamic>? ?? {};
     return GradingResult(
-      psa9Avg:   (psa9['avg']   as num?)?.toDouble() ?? 0,
-      psa10Avg:  (psa10['avg']  as num?)?.toDouble() ?? 0,
-      psa9Count: (psa9['count'] as num?)?.toInt()    ?? 0,
-      psa10Count:(psa10['count']as num?)?.toInt()    ?? 0,
+      psa9Avg:   _tryParseDouble(psa9['avg']),
+      psa10Avg:  _tryParseDouble(psa10['avg']),
+      psa9Count: _tryParseInt(psa9['count']),
+      psa10Count: _tryParseInt(psa10['count']),
     );
   }
 }

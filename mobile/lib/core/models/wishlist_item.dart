@@ -1,3 +1,20 @@
+int? _tryParseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  if (value is num) return value.toInt();
+  return null;
+}
+
+double? _tryParseDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  if (value is num) return value.toDouble();
+  return null;
+}
+
 class WishlistMatch {
   final String id;
   final String wishlistId;
@@ -24,7 +41,7 @@ class WishlistMatch {
         wishlistId: json['wishlist_id'] as String? ?? '',
         ebayItemId: json['ebay_item_id'] as String?,
         title: json['title'] as String? ?? '',
-        price: (json['price'] as num?)?.toDouble() ?? 0,
+        price: _tryParseDouble(json['price']) ?? 0,
         listingType: json['listing_type'] as String? ?? 'FIXED_PRICE',
         url: json['url'] as String?,
         imageUrl: json['image_url'] as String?,
@@ -92,20 +109,20 @@ class WishlistItem {
     return WishlistItem(
       id: json['id'] as String,
       player: json['player'] as String?,
-      year: json['year'] as int?,
+      year: _tryParseInt(json['year']),
       setName: json['set_name'] as String?,
       parallel: json['parallel'] as String?,
       cardNumber: json['card_number'] as String?,
       isRookie: json['is_rookie'] as bool? ?? false,
       isAuto: json['is_auto'] as bool? ?? false,
       isPatch: json['is_patch'] as bool? ?? false,
-      serialMax: json['serial_max'] as int?,
+      serialMax: _tryParseInt(json['serial_max']),
       grade: json['grade'] as String?,
       ebayQuery: json['ebay_query'] as String?,
       excludeTerms: (json['exclude_terms'] as List?)?.cast<String>() ?? [],
-      targetPrice: (json['target_price'] as num?)?.toDouble(),
+      targetPrice: _tryParseDouble(json['target_price']),
       alertStatus: json['alert_status'] as String? ?? 'active',
-      lastSeenPrice: (json['last_seen_price'] as num?)?.toDouble(),
+      lastSeenPrice: _tryParseDouble(json['last_seen_price']),
       lastCheckedAt: json['last_checked_at'] != null
           ? DateTime.tryParse(json['last_checked_at'] as String)
           : null,

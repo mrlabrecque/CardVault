@@ -3,6 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
 import '../models/user_card.dart';
 
+int? _tryParseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  if (value is num) return value.toInt();
+  return null;
+}
+
 class SetParallel {
   const SetParallel({required this.id, required this.name, this.serialMax, this.isAuto = false});
   final String id;
@@ -13,7 +21,7 @@ class SetParallel {
   factory SetParallel.fromJson(Map<String, dynamic> j) => SetParallel(
     id: j['id'] as String,
     name: j['name'] as String,
-    serialMax: j['serial_max'] as int?,
+    serialMax: _tryParseInt(j['serial_max']),
     isAuto: j['is_auto'] as bool? ?? false,
   );
 }
@@ -29,7 +37,7 @@ class ReleaseRecord {
   factory ReleaseRecord.fromJson(Map<String, dynamic> j) => ReleaseRecord(
     id:          j['id'] as String,
     name:        j['name'] as String,
-    year:        j['year'] as int?,
+    year:        _tryParseInt(j['year']),
     sport:       j['sport'] as String?,
     cardsightId: j['cardsight_id'] as String?,
   );
@@ -47,7 +55,7 @@ class SetRecord {
   factory SetRecord.fromJson(Map<String, dynamic> j) => SetRecord(
     id:          j['id'] as String,
     name:        j['name'] as String,
-    cardCount:   j['card_count'] as int?,
+    cardCount:   _tryParseInt(j['card_count']),
     cardsightId: j['cardsight_id'] as String?,
   );
 }
@@ -82,7 +90,7 @@ class MasterCard {
     isAuto: j['is_auto'] as bool? ?? false,
     isPatch: j['is_patch'] as bool? ?? false,
     isSSP: j['is_ssp'] as bool? ?? false,
-    serialMax: j['serial_max'] as int?,
+    serialMax: _tryParseInt(j['serial_max']),
     imageUrl: j['image_url'] as String?,
   );
 
@@ -116,8 +124,8 @@ class CatalogSetSummary {
   factory CatalogSetSummary.fromJson(Map<String, dynamic> j) => CatalogSetSummary(
     id:            j['id'] as String,
     name:          j['name'] as String,
-    parallelCount: (j['parallelCount'] as int?) ?? 0,
-    cardCount:     j['cardCount'] as int?,
+    parallelCount: _tryParseInt(j['parallelCount']) ?? 0,
+    cardCount:     _tryParseInt(j['cardCount']),
   );
 }
 
@@ -612,7 +620,7 @@ class PendingParallel {
       id:              j['id'] as String,
       setId:           j['set_id'] as String,
       name:            j['name'] as String,
-      submissionCount: j['submission_count'] as int? ?? 1,
+      submissionCount: _tryParseInt(j['submission_count']) ?? 1,
       status:          j['status'] as String? ?? 'pending',
       setName:         set?['name'] as String?,
       releaseName:     release?['name'] as String?,

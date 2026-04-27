@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/widgets/app_breadcrumb.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 
@@ -176,19 +175,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
       ),
       body: Column(
         children: [
-          AppBreadcrumb(
-            items: [
-              BreadcrumbItem(
-                label: card.set ?? 'Release',
-                onTap: () => Navigator.pop(context),
-              ),
-              BreadcrumbItem(
-                label: card.checklist ?? 'Set',
-                onTap: () => Navigator.pop(context),
-              ),
-              BreadcrumbItem(label: card.player),
-            ],
-          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16),

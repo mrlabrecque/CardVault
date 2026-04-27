@@ -145,6 +145,7 @@ class CardDetailView extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   [
+                    if (userCard?.year != null) userCard!.year.toString(),
                     if (_releaseName != null) _releaseName,
                     if (_set != null && _set != _releaseName) _set,
                     if (_checklist != null) _checklist,

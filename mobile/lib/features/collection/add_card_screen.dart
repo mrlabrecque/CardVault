@@ -253,17 +253,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     });
   }
 
-  void _startNewCardFromResults() {
-    setState(() {
-      _isNewCard = true;
-      _selectedCard = null;
-      _cardResults = [];
-      _cardHasMore = false;
-      _cardPage = 0;
-      _catalogStep = _CatalogStep.addCopy;
-    });
-  }
-
   void _selectParallel(SetParallel? p) {
     setState(() {
       _selectedParallel = p;
@@ -330,6 +319,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           _newIsPatch = false;
           _newIsSSP = false;
         });
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
@@ -340,6 +330,164 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _showAddCopySheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SingleChildScrollView(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _buildAddCopySheetContent(setSheetState),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildAddCopySheetContent(StateSetter? setSheetState) {
+    final colors = Theme.of(context).colorScheme;
+    final setState = setSheetState ?? this.setState;
+    return [
+      Center(
+        child: Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: colors.outline.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Align(
+        alignment: Alignment.topLeft,
+        child: Text(
+          'Add to Your Collection',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+      ),
+      const SizedBox(height: 16),
+      // Parallel selector
+      if (_parallels.isNotEmpty)
+        DropdownButtonFormField<SetParallel?>(
+          initialValue: _selectedParallel,
+          decoration: InputDecoration(
+            labelText: 'Parallel',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            isDense: true,
+          ),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('Base')),
+            ..._parallels.map((p) => DropdownMenuItem(value: p, child: Text(p.name))),
+          ],
+          onChanged: (p) => setState(() {
+            _selectedParallel = p;
+          }),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'No parallels for this set',
+            style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.6)),
+          ),
+        ),
+      const SizedBox(height: 16),
+      // Price Paid
+      TextField(
+        controller: _pricePaidCtrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: 'Price Paid',
+          hintText: '\$0.00',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          isDense: true,
+        ),
+      ),
+      if ((_selectedParallel?.name ?? _parallelName).contains('/')) ...[
+        const SizedBox(height: 12),
+        // Serial Number
+        TextField(
+          controller: _serialNumberCtrl,
+          decoration: InputDecoration(
+            labelText: 'Serial #',
+            hintText: 'e.g., 45 (from 45/99)',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            isDense: true,
+          ),
+        ),
+      ],
+      const SizedBox(height: 12),
+      // Grade toggle + fields
+      SwitchListTile(
+        title: const Text('Graded?'),
+        value: _isGraded,
+        onChanged: (v) {
+          setState(() => _isGraded = v);
+          if (setSheetState != null) setSheetState(() {});
+        },
+        contentPadding: EdgeInsets.zero,
+      ),
+      if (_isGraded) ...[
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _grader,
+                decoration: InputDecoration(
+                  labelText: 'Grader',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  isDense: true,
+                ),
+                items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                onChanged: (g) => setState(() => _grader = g ?? 'PSA'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _gradeValueCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Grade',
+                  hintText: '10',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 20),
+      // Save button
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          onPressed: _canSave ? _save : null,
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Save'),
+        ),
+      ),
+    ];
   }
 
   void _showAddToWishlist() {
@@ -655,17 +803,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         ),
         // Content area fills remaining space
         Expanded(child: _buildCardResultsArea(colors)),
-        // "Add manually" shown whenever cards are visible
-        if (_cardResults.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: OutlinedButton.icon(
-              onPressed: _startNewCardFromResults,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Not in checklist? Add manually'),
-              style: OutlinedButton.styleFrom(textStyle: const TextStyle(fontSize: 13)),
-            ),
-          ),
       ],
     );
   }
@@ -676,28 +813,40 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     return Column(
       children: [
         AppBreadcrumb(
-          grandparent: 'Catalog',
-          onGrandparentBack: () => setState(() {
-            _catalogStep = _CatalogStep.browsing;
-            _browseSelectedRelease = null;
-            _browseSets = [];
-            _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = [];
-            _isNewCard = false;
-            _selectedRelease = null;
-            _selectedSet = null;
-          }),
-          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-          onBack: () => setState(() {
-            _catalogStep = _CatalogStep.sets;
-            _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = [];
-            _isNewCard = false;
-            _selectedSet = null;
-          }),
-          current: _selectedSet?.name ?? '',
+          items: [
+            BreadcrumbItem(label: 'Catalog', onTap: () => setState(() {
+              _catalogStep = _CatalogStep.browsing;
+              _browseSelectedRelease = null;
+              _browseSets = [];
+              _selectedCard = null;
+              _cardCtrl.clear();
+              _cardResults = [];
+              _isNewCard = false;
+              _selectedRelease = null;
+              _selectedSet = null;
+            })),
+            BreadcrumbItem(
+              label: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+              onTap: () => setState(() {
+                _catalogStep = _CatalogStep.sets;
+                _selectedCard = null;
+                _cardCtrl.clear();
+                _cardResults = [];
+                _isNewCard = false;
+              }),
+            ),
+            BreadcrumbItem(
+              label: _selectedSet?.name ?? '',
+              onTap: () => setState(() {
+                _catalogStep = _CatalogStep.card;
+                _selectedCard = null;
+                _cardCtrl.clear();
+                _cardResults = _allCards;
+                _isNewCard = false;
+              }),
+            ),
+            BreadcrumbItem(label: _selectedCard?.player ?? ''),
+          ],
         ),
         Expanded(
           child: ListView(
@@ -738,20 +887,12 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                   ),
                 ),
               const SizedBox(height: 16),
-              // Comps section
-              if (_selectedCard != null)
-                CardCompsSection(
-                  masterCardId: _selectedCard!.id,
-                  parallelName: _selectedParallel?.name ?? 'Base',
-                  initialGrade: 'Raw',
-                ),
-              const SizedBox(height: 24),
               // Action buttons
               Row(
                 children: [
                   Expanded(
                     child: FilledButton(
-                      onPressed: () => setState(() => _catalogStep = _CatalogStep.addCopy),
+                      onPressed: _showAddCopySheet,
                       child: const Text('Add to Collection'),
                     ),
                   ),
@@ -759,11 +900,22 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _showAddToWishlist(),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                      ),
                       child: const Text('Add to Wishlist'),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+              // Comps section
+              if (_selectedCard != null)
+                CardCompsSection(
+                  masterCardId: _selectedCard!.id,
+                  parallelName: _selectedParallel?.name ?? 'Base',
+                  initialGrade: 'Raw',
+                ),
             ],
           ),
         ),
@@ -925,12 +1077,40 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (_, i) {
               final c = _cardResults[i];
-              return ListTile(
-                title: Text(c.displayName,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                subtitle: _cardAttributePills(c),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => _selectCard(c),
+              final attrs = _cardAttributePills(c);
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _selectCard(c),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  c.displayName,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                ),
+                                if (attrs != null) ...[
+                                  const SizedBox(height: 4),
+                                  attrs,
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
+                      ],
+                    ),
+                  ),
+                ),
               );
             },
           ),

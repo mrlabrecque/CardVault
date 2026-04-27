@@ -10,6 +10,14 @@ import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
+int? _tryParseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  if (value is num) return value.toInt();
+  return null;
+}
+
 // ── eBay query builder ─────────────────────────────────────────────────────────
 
 String buildEbayQuery({
@@ -118,8 +126,8 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
       final body = res.data as Map<String, dynamic>;
       await reload();
       return (
-        checked: body['checked'] as int? ?? 0,
-        triggered: body['triggered'] as int? ?? 0,
+        checked: _tryParseInt(body['checked']) ?? 0,
+        triggered: _tryParseInt(body['triggered']) ?? 0,
         error: null,
       );
     } catch (e) {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/services/comps_service.dart';
+import '../../../core/widgets/info_box.dart';
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -24,6 +25,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   late List<Comp> _allComps = [];
   late bool _loading = true;
   late String _selectedGrade = widget.initialGrade;
+  late int _selectedDays = 0; // 0 = all, 7 = 7 days, 30 = 30 days
 
   @override
   void initState() {
@@ -48,7 +50,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             widget.masterCardId,
             widget.parallelName,
           );
+      print('[CardCompsSection] Initial fetch: ${comps.length} comps for ${widget.masterCardId} / ${widget.parallelName}');
       if (comps.isEmpty) {
+        print('[CardCompsSection] No comps found, refreshing...');
         await ref.read(compsServiceProvider).refreshMasterCardComps(
               widget.masterCardId,
               widget.parallelName,
@@ -57,9 +61,17 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               widget.masterCardId,
               widget.parallelName,
             );
+        print('[CardCompsSection] After refresh: ${comps.length} comps');
       }
+      print('[CardCompsSection] About to setState with ${comps.length} comps, mounted=$mounted');
       if (mounted) {
-        setState(() => _allComps = comps);
+        setState(() {
+          _allComps = comps;
+          final grades = _allComps.map((c) => c.grade).toSet();
+          print('[CardCompsSection] setState complete, _allComps.length=${_allComps.length}, grades=$grades, selectedGrade=$_selectedGrade');
+          final filtered = _allComps.where((c) => c.grade == _selectedGrade).length;
+          print('[CardCompsSection] Filtered by $_selectedGrade: $filtered comps');
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -72,10 +84,23 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
   }
 
-  List<Comp> get _filteredComps => _allComps.where((c) => c.grade == _selectedGrade).toList();
+  bool _isWithinDateRange(DateTime? soldAt) {
+    if (_selectedDays == 0) return true; // 'All' selected
+    if (soldAt == null) return false;
+    final cutoff = DateTime.now().subtract(Duration(days: _selectedDays));
+    return soldAt.isAfter(cutoff);
+  }
+
+  List<Comp> get _filteredComps {
+    final normalizedGrade = _selectedGrade;
+    return _allComps.where((c) {
+      final compGrade = c.grade ?? 'Raw'; // Default null grades to 'Raw'
+      return compGrade == normalizedGrade && _isWithinDateRange(c.soldAt);
+    }).toList();
+  }
 
   double? _getGradeAverage(String grade) {
-    final comps = _allComps.where((c) => c.grade == grade).toList();
+    final comps = _allComps.where((c) => (c.grade ?? 'Raw') == grade).toList();
     if (comps.isEmpty) return null;
     final total = comps.fold<double>(0, (s, c) => s + c.price);
     return total / comps.length;
@@ -114,19 +139,74 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
 
     if (_allComps.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: Text(
-            'No comps found',
-            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
-          ),
+      return InfoBox(
+        color: const Color(0xFFF59E0B),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'No comps found',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'No recent eBay sales data available for this card.',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
         ),
       );
     }
 
     return Column(
       children: [
+        // Date range filter
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: colors.outline.withValues(alpha: 0.3), width: 1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    _DateRangeButton(
+                      label: '7d',
+                      isSelected: _selectedDays == 7,
+                      onTap: () => setState(() => _selectedDays = 7),
+                      isFirst: true,
+                    ),
+                    Container(
+                      width: 1,
+                      height: 32,
+                      color: colors.outline.withValues(alpha: 0.2),
+                    ),
+                    _DateRangeButton(
+                      label: '30d',
+                      isSelected: _selectedDays == 30,
+                      onTap: () => setState(() => _selectedDays = 30),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 32,
+                      color: colors.outline.withValues(alpha: 0.2),
+                    ),
+                    _DateRangeButton(
+                      label: 'All',
+                      isSelected: _selectedDays == 0,
+                      onTap: () => setState(() => _selectedDays = 0),
+                      isLast: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
         // Grade pills
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -256,6 +336,53 @@ class _GradePill extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Date range button ──────────────────────────────────────────────────────
+
+class _DateRangeButton extends StatelessWidget {
+  const _DateRangeButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.isFirst = false,
+    this.isLast = false,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final bool isFirst;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF800020) : Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(isFirst ? 7 : 0),
+            bottomLeft: Radius.circular(isFirst ? 7 : 0),
+            topRight: Radius.circular(isLast ? 7 : 0),
+            bottomRight: Radius.circular(isLast ? 7 : 0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : colors.onSurface,
           ),
         ),
       ),

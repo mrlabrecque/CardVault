@@ -329,18 +329,23 @@ Deno.serve(async (req) => {
 
   // Insert new comps with grade tags
   if (items.length > 0) {
-    const rows = items.map((item: any) => ({
-      master_card_id: masterCardId,
-      parallel_name: parallelName,
-      grade: parseGrade(item.title),
-      ebay_item_id: item.itemId ?? null,
-      title: item.title ?? '',
-      price: parseFloat(item.price?.value ?? '0'),
-      currency: item.price?.currency ?? 'USD',
-      sale_type: typeof item.buyingOptions === 'string' ? item.buyingOptions : 'fixed_price',
-      sold_at: item.itemEndDate ?? null,
-      url: item.itemWebUrl ?? null,
-    }));
+    const rows = items.map((item: any) => {
+      const grade = parseGrade(item.title);
+      console.log(`[insert] title="${item.title}" → grade="${grade}"`);
+      return {
+        master_card_id: masterCardId,
+        parallel_name: parallelName,
+        grade: grade,
+        ebay_item_id: item.itemId ?? null,
+        title: item.title ?? '',
+        price: parseFloat(item.price?.value ?? '0'),
+        currency: item.price?.currency ?? 'USD',
+        sale_type: typeof item.buyingOptions === 'string' ? item.buyingOptions : 'fixed_price',
+        sold_at: item.itemEndDate ?? null,
+        url: item.itemWebUrl ?? null,
+      };
+    });
+    console.log(`[insert] Inserting ${rows.length} rows with grades: ${rows.map((r: any) => r.grade).join(', ')}`);
     await admin.from('card_sold_comps').insert(rows);
   }
 

@@ -72,18 +72,27 @@ class AppBreadcrumb extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
+          Flexible(
             child: Row(
               children: [
                 for (int i = 0; i < breadcrumbItems.length; i++) ...[
                   if (i > 0) _sep,
                   if (i < breadcrumbItems.length - 1)
-                    GestureDetector(
-                      onTap: breadcrumbItems[i].onTap,
-                      child: Text(breadcrumbItems[i].label, style: _ancestorStyle),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: GestureDetector(
+                        onTap: breadcrumbItems[i].onTap,
+                        child: Text(
+                          breadcrumbItems[i].label,
+                          style: _ancestorStyle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     )
                   else
-                    Expanded(
+                    Flexible(
+                      fit: FlexFit.loose,
                       child: Text(
                         breadcrumbItems[i].label,
                         style: _currentStyle,
@@ -95,7 +104,7 @@ class AppBreadcrumb extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          if (trailing case final t?) t,
         ],
       ),
     );

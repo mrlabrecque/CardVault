@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
 
+int? _tryParseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  if (value is num) return value.toInt();
+  return null;
+}
+
 const _years = ['2026','2025','2024','2023','2022','2021','2020','2019','2018','2017'];
 
 const _sports = [
@@ -36,7 +44,7 @@ class _CatalogImportScreenState extends ConsumerState<CatalogImportScreen> {
       );
       setState(() {
         _lastResult = result;
-        if ((result['imported'] as int? ?? 0) > 0) _skip += 100;
+        if ((_tryParseInt(result['imported']) ?? 0) > 0) _skip += 100;
       });
     } catch (e) {
       if (mounted) {
@@ -52,8 +60,8 @@ class _CatalogImportScreenState extends ConsumerState<CatalogImportScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final imported = _lastResult?['imported'] as int?;
-    final total    = _lastResult?['total'] as int?;
+    final imported = _tryParseInt(_lastResult?['imported']);
+    final total    = _tryParseInt(_lastResult?['total']);
 
     return Scaffold(
       body: Column(

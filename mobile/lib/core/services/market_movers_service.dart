@@ -3,6 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
 import '../models/market_mover.dart';
 
+int _tryParseInt(dynamic value) {
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value) ?? 0;
+  if (value is num) return value.toInt();
+  return 0;
+}
+
 class MarketMoversService {
   MarketMoversService(this._supabase);
   final SupabaseClient _supabase;
@@ -30,7 +37,7 @@ class MarketMoversService {
     for (final row in rows) {
       final topPlayerId = row['top_player_id'] as String;
       final avgPrice = double.parse((row['avg_price'] ?? 0).toString());
-      final compCount = row['comp_count'] as int;
+      final compCount = _tryParseInt(row['comp_count']);
       final snapshotWeek = row['snapshot_week'] as String;
       final playerData = row['top_players'] as Map<String, dynamic>;
       final playerName = playerData['name'] as String;
