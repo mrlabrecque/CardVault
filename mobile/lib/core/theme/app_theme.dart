@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const primary       = Color(0xFF800020);
@@ -26,7 +27,8 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: base,
-      fontFamily: 'Inter',
+      fontFamily: GoogleFonts.oswald().fontFamily,
+      textTheme: GoogleFonts.oswaldTextTheme(),
       scaffoldBackgroundColor: const Color(0xFFF9FAFB),
 
       appBarTheme: const AppBarTheme(
@@ -41,7 +43,6 @@ class AppTheme {
           systemNavigationBarIconBrightness: Brightness.light,
         ),
         titleTextStyle: TextStyle(
-          fontFamily: 'Inter',
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: textMain,
@@ -65,7 +66,6 @@ class AppTheme {
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           return TextStyle(
-            fontFamily: 'Inter',
             fontSize: 10,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.2,
@@ -110,7 +110,7 @@ class AppTheme {
           backgroundColor: primary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
 
@@ -119,7 +119,7 @@ class AppTheme {
           foregroundColor: primary,
           side: const BorderSide(color: primary, width: 1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
 
@@ -132,15 +132,6 @@ class AppTheme {
       ),
 
       dividerTheme: const DividerThemeData(color: border, space: 1),
-
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700, color: textMain),
-        headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700, color: textMain),
-        titleMedium:   TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: textMain),
-        titleSmall:    TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: textMuted, fontSize: 12),
-        bodyMedium:    TextStyle(fontFamily: 'Inter', color: textMain),
-        bodySmall:     TextStyle(fontFamily: 'Inter', color: textMuted),
-      ),
     );
   }
 
@@ -158,7 +149,8 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: base,
-      fontFamily: 'Inter',
+      fontFamily: GoogleFonts.oswald().fontFamily,
+      textTheme: GoogleFonts.oswaldTextTheme(ThemeData.dark().textTheme),
       scaffoldBackgroundColor: const Color(0xFF111827),
 
       appBarTheme: AppBarTheme(
@@ -167,7 +159,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle.light,
-        titleTextStyle: const TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+        titleTextStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
         shape: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
       ),
 
@@ -179,7 +171,7 @@ class AppTheme {
           size: 22,
         )),
         labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-          fontFamily: 'Inter', fontSize: 10, fontWeight: FontWeight.w500,
+          fontSize: 10, fontWeight: FontWeight.w500,
           color: states.contains(WidgetState.selected) ? Colors.white : Colors.white.withValues(alpha: 0.5),
         )),
         height: 72,
@@ -199,7 +191,7 @@ class AppTheme {
           foregroundColor: primaryLight,
           side: BorderSide(color: primaryLight, width: 1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
     );

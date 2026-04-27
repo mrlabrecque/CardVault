@@ -278,20 +278,52 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           ),
         ),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _filteredComps.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => Container(
+        if (_filteredComps.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFFECEFF5),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFF3F4F6)),
+              border: Border.all(color: const Color(0xFFC7D2E8)),
             ),
-            child: _CompRow(comp: _filteredComps[i]),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 16, color: Color(0xFF6366F1)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No recent sales',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.onSurface),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'No recent eBay sales found at $_selectedGrade grade.',
+                        style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _filteredComps.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) => Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFF3F4F6)),
+              ),
+              child: _CompRow(comp: _filteredComps[i]),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -341,7 +373,7 @@ class _GradePill extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                price != null ? '\$${price!.toStringAsFixed(2)}' : '—',
+                price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
                 style: TextStyle(
                   fontSize: 11,
                   color: isSelected ? Colors.white70 : colors.onSurface.withValues(alpha: 0.6),

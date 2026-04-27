@@ -6,6 +6,7 @@ import '../../core/services/comps_service.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
+import '../../core/widgets/card_fan_loader.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import 'widgets/card_detail_view.dart';
@@ -608,7 +609,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         // Release list
         Expanded(
           child: _browseLoading && _browseResults.isEmpty
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: CardFanLoader())
               : filtered.isEmpty
                   ? Center(
                       child: Text(
@@ -699,7 +700,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         ),
         Expanded(
           child: _browseSetsLoading || _lazyImporting
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: CardFanLoader())
               : filtered.isEmpty
                   ? Center(
                       child: Text(

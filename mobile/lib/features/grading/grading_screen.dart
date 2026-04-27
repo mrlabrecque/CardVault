@@ -7,6 +7,7 @@ import '../../core/services/grading_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
@@ -153,7 +154,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     final cardsAsync = ref.watch(userCardsProvider);
 
     return cardsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: CardFanLoader()),
       error: (e, _) => Center(child: Text('Error: $e')),
       data: (allCards) {
         final ungradedCards = allCards.where((c) => !c.isGraded).toList();

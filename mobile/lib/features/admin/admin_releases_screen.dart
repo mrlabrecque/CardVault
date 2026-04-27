@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/widgets/card_fan_loader.dart';
 
 class AdminReleasesScreen extends ConsumerStatefulWidget {
   const AdminReleasesScreen({super.key});
@@ -83,7 +84,7 @@ class _AdminReleasesScreenState extends ConsumerState<AdminReleasesScreen> {
           ),
           Expanded(
             child: _loading && _results.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CardFanLoader())
                 : _results.isEmpty
                     ? Center(child: Text('No releases found.',
                         style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))))

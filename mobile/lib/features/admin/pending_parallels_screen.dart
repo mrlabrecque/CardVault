@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/widgets/card_fan_loader.dart';
 
 final _pendingParallelsProvider = FutureProvider<List<PendingParallel>>((ref) {
   return ref.watch(cardsServiceProvider).getPendingParallels();
@@ -83,7 +84,7 @@ class _PendingParallelsScreenState extends ConsumerState<PendingParallelsScreen>
         children: [
           Expanded(
             child: async.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CardFanLoader()),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (list) => list.isEmpty
                   ? Center(

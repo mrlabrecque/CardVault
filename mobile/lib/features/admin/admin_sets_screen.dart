@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/widgets/app_breadcrumb.dart';
+import '../../core/widgets/card_fan_loader.dart';
 
 class AdminSetsScreen extends ConsumerStatefulWidget {
   const AdminSetsScreen({super.key, required this.release});
@@ -75,7 +76,7 @@ class _AdminSetsScreenState extends ConsumerState<AdminSetsScreen> {
             const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: _loading && _sets.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CardFanLoader())
                 : _sets.isEmpty
                     ? Center(
                         child: Column(

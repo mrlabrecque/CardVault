@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';
 import '../../../core/widgets/serial_tag.dart';
 import '../../../core/widgets/attr_tag.dart';
 import '../item_detail_screen.dart';
 
 class CardStackTile extends StatefulWidget {
-  const CardStackTile({super.key, required this.stack, this.onDelete, this.onRefresh, this.isRefreshing = false});
+  const CardStackTile({
+    super.key,
+    required this.stack,
+    this.onDelete,
+    this.onRefresh,
+    this.isRefreshing = false,
+    this.index = 0,
+  });
   final CardStack stack;
   final void Function(String cardId)? onDelete;
   final void Function(CardStack)? onRefresh;
   final bool isRefreshing;
+  final int index;
 
   @override
   State<CardStackTile> createState() => _CardStackTileState();
@@ -55,6 +64,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final stack = widget.stack;
+    final staggerDelay = Duration(milliseconds: widget.index.clamp(0, 8) * 60);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -83,7 +93,10 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
                 ],
               ),
             ),
-          ),
+          )
+              .animate(delay: staggerDelay)
+              .fadeIn(duration: const Duration(milliseconds: 200))
+              .slideY(begin: 0.08, end: 0, duration: const Duration(milliseconds: 200)),
           if (_expanded) ...[
             const Divider(height: 1, color: Color(0xFFF3F4F6)),
             ...stack.cards.map((c) => _IndividualCardRow(card: c, onDelete: widget.onDelete)),

@@ -7,6 +7,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/info_box.dart';
+import '../../core/widgets/card_fan_loader.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -432,7 +433,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
           // Release list
           Expanded(
             child: _browseLoading && _browseResults.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CardFanLoader())
                 : _browseResults.isEmpty
                     ? Center(
                         child: Text(

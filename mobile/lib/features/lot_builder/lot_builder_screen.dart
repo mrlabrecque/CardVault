@@ -7,6 +7,7 @@ import '../../core/services/lot_service.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/serial_tag.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/app_theme.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
@@ -255,7 +256,7 @@ class _BrowseView extends ConsumerWidget {
     final colors = Theme.of(context).colorScheme;
 
     return cardsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: CardFanLoader()),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Color(0xFFDC2626)))),
       data: (allCards) {
         final cards = filteredCards(allCards);

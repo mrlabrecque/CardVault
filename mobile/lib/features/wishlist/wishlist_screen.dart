@@ -6,6 +6,7 @@ import '../../core/models/wishlist_item.dart';
 import '../../core/widgets/card_count_label.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
@@ -194,7 +195,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
 
     return Scaffold(
       body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CardFanLoader()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (items) => RefreshIndicator(
           onRefresh: () => ref.read(wishlistProvider.notifier).reload(),

@@ -4,6 +4,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/card_fan_loader.dart';
 import 'widgets/card_stack_tile.dart';
 import 'widgets/set_row_tile.dart';
 import 'widgets/filter_sort_action_bar.dart';
@@ -134,7 +135,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           // ── Content ───────────────────────────────────────
           Expanded(
             child: cardsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CardFanLoader()),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (allCards) {
                 final stacks = CardStack.fromCards(allCards);
@@ -189,6 +190,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                             padding: const EdgeInsets.only(bottom: 100),
                             itemCount: filtered.length,
                             itemBuilder: (_, i) => CardStackTile(
+                              index: i,
                               stack: filtered[i],
                               onDelete: _deleteCard,
                               onRefresh: _refreshStack,
