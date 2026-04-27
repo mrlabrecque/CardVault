@@ -172,7 +172,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
                   height: 26,
                   margin: const EdgeInsets.only(right: 4),
                   decoration: BoxDecoration(
-                    border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(

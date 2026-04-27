@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/models/wishlist_item.dart';
+import '../../core/widgets/card_count_label.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
@@ -257,7 +258,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
         onFilterToggle: _toggleFilter,
         actionButton: const SizedBox.shrink(),
       ),
-      label: null,
+      label: CardCountLabel(total: items.length, shown: filtered.length),
       body: filtered.isEmpty
           ? Center(
               child: Text(
@@ -358,7 +359,7 @@ class _WishlistCard extends StatelessWidget {
         color: triggered ? colors.surface : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: triggered ? colors.primary : colors.outline.withValues(alpha: 0.2),
+          color: triggered ? colors.primary : const Color(0xFFE5E7EB),
           width: 1,
         ),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
@@ -449,7 +450,7 @@ class _WishlistCard extends StatelessWidget {
                 // Active listings section
                 if (triggered && item.matches.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
                   const SizedBox(height: 10),
                   GestureDetector(
                     onTap: onToggleMatches,
@@ -477,7 +478,7 @@ class _WishlistCard extends StatelessWidget {
                               onDismiss: () => onDismissMatch(item.matches[i].id),
                             ),
                             if (i < item.matches.length - 1)
-                              Divider(height: 1, color: colors.outline.withValues(alpha: 0.1)),
+                              const Divider(height: 1, color: Color(0xFFF3F4F6)),
                           ],
                         ],
                       ),
@@ -629,7 +630,7 @@ class _PriceBox extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
         color: highlight ? colors.primary.withValues(alpha: 0.1) : colors.surface,
-        border: Border.all(color: highlight ? colors.primary.withValues(alpha: 0.3) : colors.outline.withValues(alpha: 0.2)),
+        border: Border.all(color: highlight ? colors.primary.withValues(alpha: 0.3) : const Color(0xFFE5E7EB)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

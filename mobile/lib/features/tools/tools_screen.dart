@@ -8,7 +8,7 @@ class ToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       children: [
         _ToolCard(
           icon: Icons.add_a_photo_outlined,

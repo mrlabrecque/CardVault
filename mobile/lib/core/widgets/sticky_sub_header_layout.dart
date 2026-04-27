@@ -16,7 +16,7 @@ class StickySubHeaderLayout extends StatelessWidget {
     this.label,
     this.headerPadding = const EdgeInsets.fromLTRB(16, 8, 16, 0),
     this.subHeaderPadding = const EdgeInsets.fromLTRB(16, 0, 16, 0),
-    this.labelPadding = const EdgeInsets.fromLTRB(16, 10, 16, 12),
+    this.labelPadding = const EdgeInsets.fromLTRB(16, 6, 16, 0),
     this.bodyTopPadding = 0,
     this.backgroundColor = const Color(0xFFF9FAFB),
     this.useScaffold = true,
