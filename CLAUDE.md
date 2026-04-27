@@ -225,6 +225,17 @@ card-vault/
 
 ---
 
+## Code Quality & Principles
+
+- **DRY (Don't Repeat Yourself)** — consolidate duplicate code into reusable components, utilities, or helper functions. When you see the same pattern appearing in multiple places, extract it into a shared component or service.
+  - Example: Instead of duplicating sheet/dialog code, create a single configurable component with parameters to control behavior (`CardSheet` handles both "Add to Collection" and "Add to Wishlist").
+  - UI components should be reusable. If two screens need similar layouts, extract them into a shared widget.
+  - Helper functions and constants should live in one place, not scattered across files.
+- **Readability over cleverness** — code should be clear and maintainable. Simple and straightforward is better than compact or clever.
+- **Avoid leftover code** — don't keep unused imports, dead code, or old versions. Delete unused files and methods cleanly.
+
+---
+
 ## UI / Styling Conventions
 
 - **Tailwind CSS v4** — use utility classes for all layout, spacing, typography, and color. Config lives in `frontend/.postcssrc.json`.

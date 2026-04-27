@@ -7,7 +7,7 @@ import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../wishlist/wishlist_screen.dart';
-import '../wishlist/wishlist_form_sheet.dart';
+import '../wishlist/card_sheet.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 
@@ -337,183 +337,152 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SingleChildScrollView(
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: _buildAddCopySheetContent(setSheetState),
-              ),
-            ),
-          ),
-        ),
+      builder: (_) => CardSheet(
+        title: 'Add to Your Collection',
+        card: _selectedCard,
+        setName: _selectedSet?.name,
+        releaseName: _selectedRelease?.displayName,
+        showParallel: true,
+        parallels: _parallels,
+        selectedParallel: _selectedParallel,
+        onParallelChanged: (p) => setState(() => _selectedParallel = p),
+        showPricePaid: true,
+        pricePaidCtrl: _pricePaidCtrl,
+        showSerialNumber: (_selectedParallel?.name ?? _parallelName).contains('/'),
+        serialNumberCtrl: _serialNumberCtrl,
+        showGraded: true,
+        isGraded: _isGraded,
+        grader: _grader,
+        gradeValueCtrl: _gradeValueCtrl,
+        onGradedChanged: (v) => setState(() => _isGraded = v),
+        onGraderChanged: (g) => setState(() => _grader = g ?? 'PSA'),
+        onSave: (data) async {
+          if (!_canSave) return 'Unable to save';
+          setState(() => _saving = true);
+          try {
+            final form = AddCardFormData(
+              masterCardId: _selectedCard?.id,
+              setId: _selectedSet?.id,
+              player: _isNewCard ? _newPlayerCtrl.text.trim() : (_selectedCard?.player ?? ''),
+              cardNumber: _isNewCard ? (_newCardNumberCtrl.text.trim().isEmpty ? null : _newCardNumberCtrl.text.trim()) : null,
+              serialMax: _isNewCard ? int.tryParse(_newSerialMaxCtrl.text.trim()) : null,
+              isRookie: _isNewCard ? _newIsRookie : false,
+              isAuto: _isNewCard ? _newIsAuto : false,
+              isPatch: _isNewCard ? _newIsPatch : false,
+              isSSP: _isNewCard ? _newIsSSP : false,
+              parallelId: _selectedParallel?.id,
+              parallelName: _parallelName,
+              pricePaid: double.tryParse(_pricePaidCtrl.text.trim()),
+              serialNumber: _serialNumberCtrl.text.trim().isEmpty ? null : _serialNumberCtrl.text.trim(),
+              isGraded: _isGraded,
+              grader: _isGraded ? _grader : 'PSA',
+              gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
+            );
+            await ref.read(cardsServiceProvider).addCard(form);
+            await ref.read(compsServiceProvider).refreshCardValue(_selectedCard?.id ?? '');
+            ref.invalidate(userCardsProvider);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
+              );
+              setState(() {
+                _catalogStep = _CatalogStep.sets;
+                _selectedCard = null;
+                _cardCtrl.clear();
+                _cardResults = [];
+                _isNewCard = false;
+                _selectedRelease = null;
+                _selectedSet = null;
+                _pricePaidCtrl.clear();
+                _serialNumberCtrl.clear();
+                _isGraded = false;
+                _grader = 'PSA';
+                _gradeValueCtrl.clear();
+                _parallelName = 'Base';
+                _selectedParallel = null;
+                _newPlayerCtrl.clear();
+                _newCardNumberCtrl.clear();
+                _newSerialMaxCtrl.clear();
+                _newIsRookie = false;
+                _newIsAuto = false;
+                _newIsPatch = false;
+                _newIsSSP = false;
+              });
+              Navigator.of(context).pop();
+            }
+            return null;
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+              );
+            }
+            return e.toString();
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        },
       ),
     );
   }
 
-  List<Widget> _buildAddCopySheetContent(StateSetter? setSheetState) {
-    final colors = Theme.of(context).colorScheme;
-    final setState = setSheetState ?? this.setState;
-    return [
-      Center(
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: colors.outline.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      Align(
-        alignment: Alignment.topLeft,
-        child: Text(
-          'Add to Your Collection',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-      ),
-      const SizedBox(height: 16),
-      // Parallel selector
-      if (_parallels.isNotEmpty)
-        DropdownButtonFormField<SetParallel?>(
-          initialValue: _selectedParallel,
-          decoration: InputDecoration(
-            labelText: 'Parallel',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            isDense: true,
-          ),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('Base')),
-            ..._parallels.map((p) => DropdownMenuItem(value: p, child: Text(p.name))),
-          ],
-          onChanged: (p) => setState(() {
-            _selectedParallel = p;
-          }),
-        )
-      else
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'No parallels for this set',
-            style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.6)),
-          ),
-        ),
-      const SizedBox(height: 16),
-      // Price Paid
-      TextField(
-        controller: _pricePaidCtrl,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: InputDecoration(
-          labelText: 'Price Paid',
-          hintText: '\$0.00',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          isDense: true,
-        ),
-      ),
-      if ((_selectedParallel?.name ?? _parallelName).contains('/')) ...[
-        const SizedBox(height: 12),
-        // Serial Number
-        TextField(
-          controller: _serialNumberCtrl,
-          decoration: InputDecoration(
-            labelText: 'Serial #',
-            hintText: 'e.g., 45 (from 45/99)',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            isDense: true,
-          ),
-        ),
-      ],
-      const SizedBox(height: 12),
-      // Grade toggle + fields
-      SwitchListTile(
-        title: const Text('Graded?'),
-        value: _isGraded,
-        onChanged: (v) {
-          setState(() => _isGraded = v);
-          if (setSheetState != null) setSheetState(() {});
-        },
-        contentPadding: EdgeInsets.zero,
-      ),
-      if (_isGraded) ...[
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _grader,
-                decoration: InputDecoration(
-                  labelText: 'Grader',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  isDense: true,
-                ),
-                items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                onChanged: (g) => setState(() => _grader = g ?? 'PSA'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _gradeValueCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Grade',
-                  hintText: '10',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  isDense: true,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-      const SizedBox(height: 20),
-      // Save button
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: _canSave ? _save : null,
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Save'),
-        ),
-      ),
-    ];
-  }
-
   void _showAddToWishlist() {
+    final watchWordsCtrl = TextEditingController();
+    final targetPriceCtrl = TextEditingController();
+    final gradeValueCtrl = TextEditingController();
+    var selectedParallel = _selectedParallel;
+    var isGraded = false;
+    var grader = 'PSA';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => WishlistFormSheet(
-        prefill: {
-          'player': _selectedCard?.player ?? (_isNewCard ? _newPlayerCtrl.text.trim() : ''),
-          'year': _selectedRelease?.year,
-          'set_name': _selectedRelease?.name,
-          'card_number': _selectedCard?.cardNumber ?? (_isNewCard ? _newCardNumberCtrl.text.trim() : ''),
-          'isRookie': _selectedCard?.isRookie ?? _newIsRookie,
-          'isAuto': _selectedCard?.isAuto ?? _newIsAuto,
-          'isPatch': _selectedCard?.isPatch ?? _newIsPatch,
-          'serialMax': _selectedCard?.serialMax ?? (_isNewCard ? int.tryParse(_newSerialMaxCtrl.text.trim()) : null),
-        },
-        onSave: (data) async {
-          try {
-            await ref.read(wishlistProvider.notifier).add(data);
-            return null;
-          } catch (e) {
-            return e.toString();
-          }
-        },
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => CardSheet(
+          title: 'Add to Wishlist',
+          card: _selectedCard,
+          year: _selectedRelease?.year,
+          setName: _selectedRelease?.name,
+          releaseName: _selectedRelease?.displayName,
+          showParallel: true,
+          parallels: _parallels,
+          selectedParallel: selectedParallel,
+          onParallelChanged: (p) => setState(() => selectedParallel = p),
+          showWatchWords: true,
+          watchWordsCtrl: watchWordsCtrl,
+          showTargetPrice: true,
+          targetPriceCtrl: targetPriceCtrl,
+          showGraded: true,
+          isGraded: isGraded,
+          grader: grader,
+          gradeValueCtrl: gradeValueCtrl,
+          onGradedChanged: (v) => setState(() => isGraded = v),
+          onGraderChanged: (g) => setState(() => grader = g ?? 'PSA'),
+          onSave: (data) async {
+            try {
+              await ref.read(wishlistProvider.notifier).add({
+                'player': _selectedCard?.player ?? '',
+                'year': _selectedRelease?.year,
+                'set_name': _selectedRelease?.name,
+                'card_number': _selectedCard?.cardNumber,
+                'parallel': selectedParallel?.name,
+                'is_rookie': _selectedCard?.isRookie ?? false,
+                'is_auto': _selectedCard?.isAuto ?? false,
+                'is_patch': _selectedCard?.isPatch ?? false,
+                'serial_max': _selectedCard?.serialMax,
+                'grade': isGraded && gradeValueCtrl.text.trim().isNotEmpty ? gradeValueCtrl.text.trim() : null,
+                'grader': isGraded ? grader : null,
+                'ebay_query': null,
+                'exclude_terms': [],
+                'target_price': double.tryParse(targetPriceCtrl.text),
+              });
+              return null;
+            } catch (e) {
+              return e.toString();
+            }
+          },
+        ),
       ),
     );
   }
@@ -1136,43 +1105,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
 
 
   // ── Shared helpers ────────────────────────────────────────────
-
-  Widget _buildPaginationBar({
-    required int page,
-    required int? totalPages,
-    required VoidCallback? onPrev,
-    required VoidCallback? onNext,
-  }) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: colors.outline.withValues(alpha: 0.2))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          TextButton.icon(
-            onPressed: onPrev,
-            icon: const Icon(Icons.chevron_left, size: 18),
-            label: const Text('Prev'),
-            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          ),
-          Text(
-            totalPages != null ? 'Page ${page + 1} of $totalPages' : 'Page ${page + 1}',
-            style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5)),
-          ),
-          TextButton.icon(
-            onPressed: onNext,
-            iconAlignment: IconAlignment.end,
-            icon: const Icon(Icons.chevron_right, size: 18),
-            label: const Text('Next'),
-            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _sectionHeader(String title, ColorScheme colors) {
     return Text(
