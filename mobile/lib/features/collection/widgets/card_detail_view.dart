@@ -16,6 +16,7 @@ class CardDetailView extends StatelessWidget {
     this.releaseName,
     this.parallelName,
     this.year,
+    this.sport,
     this.sections = const [CardDetailSection.hero],
     this.onAddToCollection,
     this.onAddToWishlist,
@@ -33,6 +34,7 @@ class CardDetailView extends StatelessWidget {
   final String? releaseName;
   final String? parallelName;
   final int? year;
+  final String? sport;
   final List<CardDetailSection> sections;
   final VoidCallback? onAddToCollection;
   final VoidCallback? onAddToWishlist;
@@ -43,7 +45,7 @@ class CardDetailView extends StatelessWidget {
   final Widget? yourCopyChild;
   final List<Widget> children;
 
-  String get _sportEmoji => switch ((userCard?.sport ?? '').toLowerCase()) {
+  String get _sportEmoji => switch ((userCard?.sport ?? sport ?? '').toLowerCase()) {
     'basketball' => '🏀',
     'baseball' => '⚾',
     'football' => '🏈',

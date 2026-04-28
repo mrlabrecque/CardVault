@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/cards_service.dart';
@@ -189,14 +191,14 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       }
 
       // Lazy-load cards if needed
-      var cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '');
+      var cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '', limit: 10000);
       if (cards.isEmpty && set.cardsightId != null && release.cardsightId != null) {
         await ref.read(cardsServiceProvider).importCardsForSet(
           cardsightReleaseId: release.cardsightId!,
           cardsightSetId: set.cardsightId!,
           setId: set.id,
         );
-        cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '');
+        cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '', limit: 10000);
       }
 
       setState(() {
@@ -293,7 +295,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
       );
       final newCardId = await ref.read(cardsServiceProvider).addCard(form);
-      await ref.read(compsServiceProvider).refreshCardValue(newCardId);
+      unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
+        ref.invalidate(userCardsProvider);
+      }).catchError((_) {}));
       ref.invalidate(userCardsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -322,7 +326,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           _newIsPatch = false;
           _newIsSSP = false;
         });
-        Navigator.of(context).pop();
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (mounted) context.pop();
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -348,7 +354,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         showParallel: true,
         parallels: _parallels,
         selectedParallel: _selectedParallel,
-        onParallelChanged: (p) => setState(() => _selectedParallel = p),
+        onParallelChanged: (p) => setState(() {
+          _selectedParallel = p;
+          _parallelName = p?.name ?? 'Base';
+        }),
         showPricePaid: true,
         pricePaidCtrl: _pricePaidCtrl,
         showSerialNumber: (_selectedParallel?.name ?? _parallelName).contains('/'),
@@ -381,8 +390,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               grader: _isGraded ? _grader : 'PSA',
               gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
             );
-            await ref.read(cardsServiceProvider).addCard(form);
-            await ref.read(compsServiceProvider).refreshCardValue(_selectedCard?.id ?? '');
+            final newCardId = await ref.read(cardsServiceProvider).addCard(form);
+            unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
+              ref.invalidate(userCardsProvider);
+            }).catchError((_) {}));
             ref.invalidate(userCardsProvider);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -411,7 +422,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                 _newIsPatch = false;
                 _newIsSSP = false;
               });
-              Navigator.of(context).pop();
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                if (mounted) context.pop();
+              });
             }
             return null;
           } catch (e) {
@@ -456,7 +469,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
           showParallel: true,
           parallels: _parallels,
           selectedParallel: selectedParallel,
-          onParallelChanged: (p) => setState(() => selectedParallel = p),
+          onParallelChanged: (p) => setState(() {
+            selectedParallel = p;
+          }),
           showWatchWords: true,
           watchWordsCtrl: watchWordsCtrl,
           showTargetPrice: true,
@@ -847,6 +862,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                 releaseName: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName,
                 parallelName: _selectedParallel?.name ?? 'Base',
                 year: _selectedRelease?.year != null ? int.tryParse(_selectedRelease!.year.toString()) : null,
+                sport: _selectedRelease?.sport,
                 sections: const [CardDetailSection.hero],
               ),
               const SizedBox(height: 16),
@@ -865,6 +881,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                   ],
                   onChanged: (p) => setState(() {
                     _selectedParallel = p;
+                    _parallelName = p?.name ?? 'Base';
                   }),
                 )
               else

@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
   const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -257,11 +257,11 @@ Deno.serve(async (req) => {
 
   const token = authHeader.replace(/^Bearer\s+/i, '');
   const userId = await verifyJwt(token, supabaseUrl);
-  if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
   const { masterCardId, parallelName } = await req.json();
   if (!masterCardId || !parallelName) {
-    return new Response(JSON.stringify({ error: 'masterCardId and parallelName required' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'masterCardId and parallelName required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
     .single();
 
   if (mcError || !masterCard) {
-    return new Response(JSON.stringify({ error: 'Master card not found' }), { status: 404 });
+    return new Response(JSON.stringify({ error: 'Master card not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
   // Fetch all parallel names in this set for exclusion filtering
@@ -315,7 +315,7 @@ Deno.serve(async (req) => {
   try {
     raw = await fetchSoldListings(query);
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: `Scrapechain error: ${e.message}` }), { status: 502 });
+    return new Response(JSON.stringify({ error: `Scrapechain error: ${e.message}` }), { status: 502, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
   const items = parseAndFilter(raw, query, parallelName, allParallelNames, setData.name ?? undefined);
@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
   // Update user_cards with matching master_card_id + parallel_name
   const { data: userCards } = await admin
     .from('user_cards')
-    .select('id, is_graded, grade')
+    .select('id, is_graded, grade_value')
     .eq('master_card_id', masterCardId)
     .eq('parallel_name', parallelName);
 
@@ -382,9 +382,9 @@ Deno.serve(async (req) => {
     let currentValue = 0;
     if (!card.is_graded) {
       currentValue = rawAvg;
-    } else if (card.grade === '10' || card.grade === '10.0') {
+    } else if (card.grade_value === '10' || card.grade_value === '10.0') {
       currentValue = psa10Avg;
-    } else if (card.grade === '9' || card.grade === '9.0') {
+    } else if (card.grade_value === '9' || card.grade_value === '9.0') {
       currentValue = psa9Avg;
     } else {
       // Other grades default to raw

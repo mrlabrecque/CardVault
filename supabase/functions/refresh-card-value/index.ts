@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
   const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -245,10 +245,10 @@ Deno.serve(async (req) => {
   const supabaseUrl2 = Deno.env.get('SUPABASE_URL')!;
   const token = authHeader.replace(/^Bearer\s+/i, '');
   const userId = await verifyJwt(token, supabaseUrl2);
-  if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
   const { cardId } = await req.json();
-  if (!cardId) return new Response(JSON.stringify({ error: 'cardId required' }), { status: 400 });
+  if (!cardId) return new Response(JSON.stringify({ error: 'cardId required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
   // Use service role for DB writes
   const admin = createClient(supabaseUrl, serviceRoleKey);
@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
     .from('user_cards')
     .select(`
       id, is_graded, grader, grade_value, parallel_name,
-      master_card_definitions ( player, card_number, is_rookie, is_auto, is_patch, serial_max,
+      master_card_definitions ( id, player, card_number, is_rookie, is_auto, is_patch, serial_max,
         sets ( name, releases ( year, name, sport ) )
       )
     `)
@@ -267,7 +267,7 @@ Deno.serve(async (req) => {
     .single();
 
   if (cardError || !card) {
-    return new Response(JSON.stringify({ error: 'Card not found' }), { status: 404 });
+    return new Response(JSON.stringify({ error: 'Card not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
   const mcd     = (card as any).master_card_definitions ?? {};
@@ -275,7 +275,7 @@ Deno.serve(async (req) => {
   const parallelName = (card as any).parallel_name ?? 'Base';
 
   if (!masterCardId) {
-    return new Response(JSON.stringify({ error: 'Master card not found' }), { status: 404 });
+    return new Response(JSON.stringify({ error: 'Master card not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
   // Delegate to get-card-comps logic via edge function invoke
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
 
   if (!getCardCompsRes.ok) {
     const error = await getCardCompsRes.text();
-    return new Response(JSON.stringify({ error: `get-card-comps failed: ${error}` }), { status: getCardCompsRes.status });
+    return new Response(JSON.stringify({ error: `get-card-comps failed: ${error}` }), { status: getCardCompsRes.status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
   const result = await getCardCompsRes.json();

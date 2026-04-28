@@ -58,10 +58,14 @@ class CompsService {
   }
 
   Future<void> refreshCardValue(String cardId) async {
-    await _supabase.functions.invoke(
+    final res = await _supabase.functions.invoke(
       'refresh-card-value',
       body: {'cardId': cardId},
     );
+    if (res.status != 200) {
+      final error = (res.data as Map<String, dynamic>?)?['error'] ?? 'Unknown error';
+      throw Exception('Refresh value failed: $error (${res.status})');
+    }
   }
 
   Future<List<LookupHistory>> getHistory() async {

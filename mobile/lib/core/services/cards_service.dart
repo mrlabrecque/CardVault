@@ -277,7 +277,7 @@ class CardsService {
     if (sport != null && sport.isNotEmpty) q = q.eq('sport', sport);
     final data = await q
         .order('year', ascending: false)
-        .order('name')
+        .order('name', ascending: true)
         .range(offset, offset + limit - 1);
     return (data as List).map((r) => ReleaseRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
@@ -313,7 +313,7 @@ class CardsService {
         .from('sets')
         .select('id, name, card_count, cardsight_id')
         .eq('release_id', releaseId)
-        .order('name');
+        .order('name', ascending: true);
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
 
@@ -342,7 +342,7 @@ class CardsService {
     if (query.trim().isNotEmpty) {
       q = q.ilike('player', '%${query.trim()}%');
     }
-    final data = await q.order('player').range(offset, offset + limit - 1);
+    final data = await q.order('player', ascending: true).range(offset, offset + limit - 1);
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
   }
 
