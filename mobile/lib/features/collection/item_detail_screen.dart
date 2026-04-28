@@ -66,7 +66,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     'football'   => '🏈',
     'hockey'     => '🏒',
     'soccer'     => '⚽',
-    _            => '🃏',
+    _            => '🏀',
   };
 
   String _resolveDefaultGrade() {

@@ -72,6 +72,24 @@ class CompsService {
         .limit(50);
     return (data as List).map((r) => LookupHistory.fromJson(r as Map<String, dynamic>)).toList();
   }
+
+  /// Lazily fetches a card image from CardSight and caches it.
+  /// Safe to call multiple times — returns immediately if already cached.
+  Future<String?> fetchCardImage(String masterCardId) async {
+    try {
+      final res = await _supabase.functions.invoke(
+        'fetch-card-image',
+        body: {'masterCardId': masterCardId},
+      );
+      if (res.status == 200) {
+        final data = res.data as Map<String, dynamic>?;
+        return data?['image_url'] as String?;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 final compsServiceProvider = Provider<CompsService>((ref) {

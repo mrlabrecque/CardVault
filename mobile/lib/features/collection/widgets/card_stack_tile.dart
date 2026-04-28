@@ -55,7 +55,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
     'football'   => '🏈',
     'hockey'     => '🏒',
     'soccer'     => '⚽',
-    _            => '🃏',
+    _            => '🏀',
   };
 
   Color get _plColor => widget.stack.pl >= 0 ? Colors.green : Colors.red;

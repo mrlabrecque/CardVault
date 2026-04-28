@@ -252,6 +252,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _isNewCard = false;
       _catalogStep = _CatalogStep.detail;
     });
+    // Lazily fetch card image from CardSight
+    ref.read(compsServiceProvider).fetchCardImage(card.id);
   }
 
   void _selectParallel(SetParallel? p) {
@@ -435,6 +437,11 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     var isGraded = false;
     var grader = 'PSA';
 
+    // Fetch card image if not already cached
+    if (_selectedCard?.id != null) {
+      ref.read(compsServiceProvider).fetchCardImage(_selectedCard!.id);
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -479,6 +486,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                 'ebay_query': null,
                 'exclude_terms': [],
                 'target_price': double.tryParse(targetPriceCtrl.text),
+                'master_card_id': _selectedCard?.id,
+                'release_id': _selectedRelease?.id,
+                'set_id': _selectedSet?.id,
+                'sport': _selectedRelease?.sport,
               });
               ref.invalidate(wishlistProvider);
               if (sheetContext.mounted) {

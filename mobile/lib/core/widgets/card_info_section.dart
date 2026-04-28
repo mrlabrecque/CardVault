@@ -35,7 +35,7 @@ class CardInfoSection extends StatelessWidget {
     'football'   => '🏈',
     'hockey'     => '🏒',
     'soccer'     => '⚽',
-    _            => '🃏',
+    _            => '🏀',
   };
 
   @override

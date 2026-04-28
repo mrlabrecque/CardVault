@@ -6,6 +6,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/grading_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/serial_tag.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
@@ -342,7 +343,7 @@ class _CardRow extends StatelessWidget {
     'football'   => '🏈',
     'hockey'     => '🏒',
     'soccer'     => '⚽',
-    _            => '🃏',
+    _            => '🏀',
   };
 
   @override
@@ -407,8 +408,6 @@ class _CardRow extends StatelessWidget {
       if (card.checklist != null) card.checklist!,
     ].join(' · ');
 
-    final hasAttrs = card.rookie || card.autograph || card.memorabilia;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -448,16 +447,16 @@ class _CardRow extends StatelessWidget {
           Text(card.parallel, style: TextStyle(fontSize: 12, color: AppTheme.primary)),
         ],
         const SizedBox(height: 4),
-        if (hasAttrs)
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              if (card.rookie)      AttrTag('RC',    color: const Color(0xFF16A34A)),
-              if (card.autograph)   AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
-              if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-            ],
-          ),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            if (card.rookie)      AttrTag('RC',    color: const Color(0xFF16A34A)),
+            if (card.autograph)   AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
+            if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
+            if (card.serialMax != null) SerialTag(serialMax: card.serialMax),
+          ],
+        ),
         const SizedBox(height: 4),
         Text(
           '\$${(card.pricePaid ?? 0).toStringAsFixed(2)} paid · \$${(card.currentValue ?? 0).toStringAsFixed(2)} raw',

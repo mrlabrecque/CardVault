@@ -49,7 +49,7 @@ class CardDetailView extends StatelessWidget {
     'football' => '🏈',
     'hockey' => '🏒',
     'soccer' => '⚽',
-    _ => '🃏',
+    _ => '🏀',
   };
 
   String get _player => userCard?.player ?? masterCard?.player ?? '';

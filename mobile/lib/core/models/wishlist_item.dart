@@ -50,8 +50,12 @@ class WishlistMatch {
 
 class WishlistItem {
   final String id;
+  final String? masterCardId;
+  final String? releaseId;
+  final String? setId;
   final String? player;
   final int? year;
+  final String? sport;
   final String? setName;
   final String? parallel;
   final String? cardNumber;
@@ -60,6 +64,7 @@ class WishlistItem {
   final bool isPatch;
   final int? serialMax;
   final String? grade;
+  final String? imageUrl;
   final String? ebayQuery;
   final List<String> excludeTerms;
   final double? targetPrice;
@@ -71,8 +76,12 @@ class WishlistItem {
 
   const WishlistItem({
     required this.id,
+    this.masterCardId,
+    this.releaseId,
+    this.setId,
     this.player,
     this.year,
+    this.sport,
     this.setName,
     this.parallel,
     this.cardNumber,
@@ -81,6 +90,7 @@ class WishlistItem {
     required this.isPatch,
     this.serialMax,
     this.grade,
+    this.imageUrl,
     this.ebayQuery,
     required this.excludeTerms,
     this.targetPrice,
@@ -106,10 +116,22 @@ class WishlistItem {
 
   factory WishlistItem.fromJson(Map<String, dynamic> json) {
     final rawMatches = json['wishlist_matches'] as List? ?? [];
+
+    // Try to get image_url from master_card_definitions join, fall back to direct field
+    String? imageUrl = json['image_url'] as String?;
+    if (imageUrl == null) {
+      final masterCard = json['master_card_definitions'] as Map<String, dynamic>?;
+      imageUrl = masterCard?['image_url'] as String?;
+    }
+
     return WishlistItem(
       id: json['id'] as String,
+      masterCardId: json['master_card_id'] as String?,
+      releaseId: json['release_id'] as String?,
+      setId: json['set_id'] as String?,
       player: json['player'] as String?,
       year: _tryParseInt(json['year']),
+      sport: json['sport'] as String?,
       setName: json['set_name'] as String?,
       parallel: json['parallel'] as String?,
       cardNumber: json['card_number'] as String?,
@@ -118,6 +140,7 @@ class WishlistItem {
       isPatch: json['is_patch'] as bool? ?? false,
       serialMax: _tryParseInt(json['serial_max']),
       grade: json['grade'] as String?,
+      imageUrl: imageUrl,
       ebayQuery: json['ebay_query'] as String?,
       excludeTerms: (json['exclude_terms'] as List?)?.cast<String>() ?? [],
       targetPrice: _tryParseDouble(json['target_price']),

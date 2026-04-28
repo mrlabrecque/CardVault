@@ -17,7 +17,7 @@ String _sportEmoji(String sport) => switch (sport.toLowerCase()) {
   'football'   => '🏈',
   'hockey'     => '🏒',
   'soccer'     => '⚽',
-  _            => '🃏',
+  _            => '🏀',
 };
 
 enum _SortOption { dateDesc, playerAz, valueDesc }

@@ -60,7 +60,7 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
     final supabase = ref.read(supabaseProvider);
     final data = await supabase
         .from('wishlist')
-        .select('*, wishlist_matches(*)')
+        .select('*, wishlist_matches(*), master_card_definitions(image_url)')
         .order('created_at', ascending: false);
     return (data as List)
         .map((r) => WishlistItem.fromJson(r as Map<String, dynamic>))
@@ -409,7 +409,8 @@ class _WishlistCard extends StatelessWidget {
                         parallel: item.parallel,
                         attrs: item.attrs.where((a) => !a.startsWith('/')).toList(),
                         serialMax: item.serialMax,
-                        imageUrl: null,
+                        imageUrl: item.imageUrl,
+                        sport: item.sport ?? 'Unknown',
                         grade: item.grade,
                       ),
                     ),

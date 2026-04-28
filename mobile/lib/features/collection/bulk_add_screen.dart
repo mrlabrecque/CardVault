@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/services/comps_service.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/app_breadcrumb.dart';
@@ -224,6 +225,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
         }
         _resolvingCard = false;
       });
+      // Lazily fetch card image from CardSight
+      ref.read(compsServiceProvider).fetchCardImage(result.masterCardId);
     } catch (_) {
       if (!mounted) return;
       setState(() { _resolvingCard = false; });

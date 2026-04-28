@@ -19,7 +19,7 @@ class _SetRowTileState extends State<SetRowTile> {
     'football'   => '🏈',
     'hockey'     => '🏒',
     'soccer'     => '⚽',
-    _            => '🃏',
+    _            => '🏀',
   };
 
   Color _progressColor(double pct) =>
