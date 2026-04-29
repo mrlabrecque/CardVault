@@ -1,0 +1,12 @@
+version = "1.0"
+
+[env.local]
+enabled = true
+
+# Market Movers — weekly refresh of top athletes and price snapshots
+[functions."market-movers-refresh"]
+verify_jwt = false
+
+[functions."market-movers-refresh".crons."weekly_snapshot"]
+handler = "main"
+schedule = "0 2 * * 1"  # Every Monday at 2 AM UTC
