@@ -187,7 +187,7 @@ class _CardSheetState extends State<CardSheet> {
                             const DropdownMenuItem(value: null, child: Text('Base')),
                             ...widget.parallels.map((p) => DropdownMenuItem(value: p, child: Text(p.name))),
                           ],
-                          onChanged: widget.onParallelChanged,
+                          onChanged: (v) => widget.onParallelChanged?.call(v),
                         )
                       else
                         Padding(
@@ -300,7 +300,7 @@ class _CardSheetState extends State<CardSheet> {
                                   isDense: true,
                                 ),
                                 items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                                onChanged: widget.onGraderChanged,
+                                onChanged: (v) => widget.onGraderChanged?.call(v),
                               ),
                             ),
                             const SizedBox(width: 12),
