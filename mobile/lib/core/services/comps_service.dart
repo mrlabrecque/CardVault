@@ -48,7 +48,7 @@ class CompsService {
 
   Future<void> refreshMasterCardComps(String masterCardId, String parallelName) async {
     final res = await _supabase.functions.invoke(
-      'get-card-comps',
+      'refresh-comps',
       body: {'masterCardId': masterCardId, 'parallelName': parallelName},
     );
     if (res.status != 200) {
@@ -58,14 +58,57 @@ class CompsService {
   }
 
   Future<void> refreshCardValue(String cardId) async {
+    // Fetch card details to get masterCardId, parallelName, and grade info
+    final cardData = await _supabase
+        .from('user_cards')
+        .select('master_card_id, parallel_name, is_graded, grade_value')
+        .eq('id', cardId)
+        .single();
+
+    final masterId = (cardData as Map)['master_card_id'] as String?;
+    final parallelName = ((cardData as Map)['parallel_name'] as String?) ?? 'Base';
+    final isGraded = (cardData as Map)['is_graded'] as bool? ?? false;
+    final gradeValue = (cardData as Map)['grade_value'] as String?;
+
+    if (masterId == null) {
+      throw Exception('Master card not found for card $cardId');
+    }
+
+    // Fetch comps
     final res = await _supabase.functions.invoke(
-      'refresh-card-value',
-      body: {'cardId': cardId},
+      'refresh-comps',
+      body: {'masterCardId': masterId, 'parallelName': parallelName},
     );
+
     if (res.status != 200) {
       final error = (res.data as Map<String, dynamic>?)?['error'] ?? 'Unknown error';
-      throw Exception('Refresh value failed: $error (${res.status})');
+      throw Exception('Refresh comps failed: $error (${res.status})');
     }
+
+    // Extract appropriate average based on card's grade
+    final data = res.data as Map<String, dynamic>;
+    final rawAvg = (data['rawAvg'] as num?)?.toDouble() ?? 0;
+    final psa10Avg = (data['psa10Avg'] as num?)?.toDouble() ?? 0;
+    final psa9Avg = (data['psa9Avg'] as num?)?.toDouble() ?? 0;
+
+    double currentValue = 0;
+    if (!isGraded) {
+      currentValue = rawAvg;
+    } else if (gradeValue == '10' || gradeValue == '10.0') {
+      currentValue = psa10Avg;
+    } else if (gradeValue == '9' || gradeValue == '9.0') {
+      currentValue = psa9Avg;
+    } else {
+      currentValue = rawAvg;
+    }
+
+    // Update card's current_value
+    await _supabase.from('user_cards').update({
+      'current_value': currentValue,
+      'value_refreshed_at': DateTime.now().toIso8601String(),
+    }).eq('id', cardId);
+
+    print('[refreshCardValue] Updated card $cardId with current_value=$currentValue');
   }
 
   Future<List<LookupHistory>> getHistory() async {

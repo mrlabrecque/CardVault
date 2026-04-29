@@ -11,10 +11,6 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
 ];
 
-// ── Filtering constants ─────────────────────────────────────────────────────
-
-const GRADER_KEYWORDS = ['psa', 'bgs', 'sgc', 'cgc', 'csg', 'beckett'];
-
 const LISTING_NOISE = new Set([
   'rookie', 'rated', 'serial', 'numbered', 'graded', 'limited', 'edition',
   'insert', 'parallel', 'short', 'print', 'chrome', 'refractor', 'invest',
@@ -26,8 +22,6 @@ const LISTING_NOISE = new Set([
   'national', 'upper', 'deck', 'prizm', 'trading', 'sports', 'card', 'cards',
   'single', 'color', 'colour',
 ]);
-
-// ── Query builder ──────────────────────────────────────────────────────────
 
 function buildCardEbayQuery(card: Record<string, unknown>): string {
   const {
@@ -59,14 +53,10 @@ function buildCardEbayQuery(card: Record<string, unknown>): string {
   return [...parts, ...attrs].filter(Boolean).join(' ');
 }
 
-// ── Parallel filtering with DB-driven list ─────────────────────────────────
-
 function buildParallelExclusionList(selectedParallelName: string, allParallelNames: string[]): Set<string> {
   if (selectedParallelName === 'Base') {
-    // Base: reject any card with ANY known parallel name
     return new Set(allParallelNames.filter(p => p !== 'Base'));
   }
-  // Named parallel: reject cards with OTHER parallel names
   return new Set(allParallelNames.filter(p => p !== 'Base' && p !== selectedParallelName));
 }
 
@@ -80,8 +70,6 @@ function titleHasExcludedParallel(title: string, exclusionList: Set<string>): bo
   return false;
 }
 
-// ── Filtering ──────────────────────────────────────────────────────────────
-
 function noUnexpectedWords(title: string, query: string): boolean {
   const t = title.toLowerCase();
   const q = query.toLowerCase();
@@ -94,12 +82,11 @@ function parseAndFilter(
   query: string,
   selectedParallelName: string,
   allParallelNames: string[],
+  cardNumber?: string | null,
   setName?: string,
 ): any[] {
-  const yearMatch    = query.match(/\b(19|20)\d{2}\b/);
-  const cardNumMatch = query.match(/(?:^|\s)#?(\d{1,4})(?:\s|$)/);
-  const serialMatch  = query.match(/\/(\d{1,4})\b/);
-
+  const yearMatch = query.match(/\b(19|20)\d{2}\b/);
+  const serialMatch = query.match(/\/(\d{1,4})\b/);
   const noisePattern = new RegExp(`\\b(${[...LISTING_NOISE].join('|')})\\b`, 'gi');
   const playerGuess = query
     .replace(/\b(19|20)\d{2}\b/, '')
@@ -108,36 +95,46 @@ function parseAndFilter(
     .replace(setName ? new RegExp(setName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi') : /(?:)/, '')
     .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
     .replace(noisePattern, '')
-    .replace(/\s{2,}/g, ' ').trim();
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 
-  const year       = yearMatch ? parseInt(yearMatch[0]) : null;
+  const year = yearMatch ? parseInt(yearMatch[0]) : null;
   const serial_max = serialMatch ? parseInt(serialMatch[1]) : null;
   const playerWords = playerGuess.toLowerCase().split(/\s+/).filter(Boolean);
-  const is_auto    = /\bauto(graph)?\b/i.test(query);
-  const is_patch   = /\b(patch|relic|jersey)\b/i.test(query);
-
+  const is_auto = /\bauto(graph)?\b/i.test(query);
+  const is_patch = /\b(patch|relic|jersey)\b/i.test(query);
   const parallelExclusionList = buildParallelExclusionList(selectedParallelName, allParallelNames);
 
-  return raw.filter(item => {
+  return raw.filter((item, idx) => {
     const title = (item.title ?? '').toLowerCase();
-    if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) return false;
-    if (year && !title.includes(String(year))) return false;
-    if (cardNumMatch && !new RegExp(`\\b${cardNumMatch[1]}\\b`).test(title)) return false;
+    if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) { if (idx < 3) console.log(`[filter] Rejected (player word): "${title.slice(0, 60)}"`); return false; }
+    if (year && !title.includes(String(year))) { if (idx < 3) console.log(`[filter] Rejected (year): "${title.slice(0, 60)}"`); return false; }
     if (/\blot\b/i.test(title)) return false;
+    // Card number: if we're looking for a specific number, require exact match
+    // Handles formats like "438", "HH12-AR", etc.
+    if (cardNumber) {
+      const ourNum = String(cardNumber).toLowerCase();
+      // Must contain our card number anywhere in the title
+      if (!title.includes(ourNum)) { if (idx < 3) console.log(`[filter] Rejected (cardNum "${ourNum}" not in): "${title.slice(0, 60)}"`); return false; }
+      // Reject if title has OTHER numbered cards (e.g., #317 when we want #438)
+      // Use strict #XXXX format to avoid false positives with random numbers
+      const otherCardNums = title.match(/#(\d{1,4})\b/g) ?? [];
+      if (otherCardNums.some((m: string) => !m.includes(ourNum))) { if (idx < 3) console.log(`[filter] Rejected (other card num): "${title.slice(0, 60)}"`); return false; }
+    }
     const hasSerial = /\/\d{1,4}\b/.test(title);
     if (!serial_max && hasSerial) return false;
     if (serial_max && !new RegExp(`\\/${serial_max}\\b`).test(title)) return false;
-    const hasAuto  = /\bauto(graph)?\b/.test(title);
+    const hasAuto = /\bauto(graph)?\b/.test(title);
     const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
-    if (is_auto  && !hasAuto)  return false;
-    if (!is_auto  && hasAuto)  return false;
+    if (is_auto && !hasAuto) return false;
+    if (!is_auto && hasAuto) return false;
     if (is_patch && !hasPatch) return false;
     if (!is_patch && hasPatch) return false;
     if (/\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) return false;
     if (/\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) return false;
-    // DB-driven parallel check: reject if title has an excluded parallel
     if (titleHasExcludedParallel(item.title, parallelExclusionList)) return false;
     if (!noUnexpectedWords(item.title, query)) return false;
+    console.log(`[filter] PASSED: "${item.title.slice(0, 80)}"`);
     return true;
   });
 }
@@ -161,8 +158,6 @@ function parseGrade(title: string): string {
   return 'Raw';
 }
 
-// ── Scrapechain fetch ──────────────────────────────────────────────────────
-
 async function fetchSoldListings(query: string): Promise<any[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
@@ -180,12 +175,12 @@ async function fetchSoldListings(query: string): Promise<any[]> {
 
       return (data.products ?? [])
         .map((p: any) => ({
-          itemId:        p.item_id ?? null,
-          title:         p.title ?? '',
-          price:         { value: String(p.sale_price ?? 0), currency: p.currency ?? 'USD' },
+          itemId: p.item_id ?? null,
+          title: p.title ?? '',
+          price: { value: String(p.sale_price ?? 0), currency: p.currency ?? 'USD' },
           buyingOptions: resolveSaleType(p.buying_format),
-          itemEndDate:   p.date_sold ?? null,
-          itemWebUrl:    p.link ?? null,
+          itemEndDate: p.date_sold ?? null,
+          itemWebUrl: p.link ?? null,
         }))
         .filter((item: any) => !item.itemEndDate || new Date(item.itemEndDate) >= cutoff);
     } catch (e: any) {
@@ -195,8 +190,6 @@ async function fetchSoldListings(query: string): Promise<any[]> {
   }
   return [];
 }
-
-// ── Handler ────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -211,10 +204,9 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
-  const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-  // Verify caller is authenticated
   function b64urlToBytes(b64url: string): Uint8Array {
     const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
     return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
@@ -237,10 +229,10 @@ Deno.serve(async (req) => {
     try {
       const parts = token.split('.');
       if (parts.length !== 3) return null;
-      const header  = b64urlToJson(parts[0]);
+      const header = b64urlToJson(parts[0]);
       const payload = b64urlToJson(parts[1]);
       const jwks = await getJwks(supabaseUrl);
-      const jwk  = jwks.find((k: any) => k.kid === header.kid) ?? jwks[0];
+      const jwk = jwks.find((k: any) => k.kid === header.kid) ?? jwks[0];
       if (!jwk) return null;
       const key = await crypto.subtle.importKey(
         'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
@@ -266,7 +258,6 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  // Fetch the master card row with all joined data
   const { data: masterCard, error: mcError } = await admin
     .from('master_card_definitions')
     .select(`
@@ -280,7 +271,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Master card not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
-  // Fetch all parallel names in this set for exclusion filtering
   const { data: allParallels } = await admin
     .from('set_parallels')
     .select('name')
@@ -288,28 +278,28 @@ Deno.serve(async (req) => {
 
   const allParallelNames = (allParallels as any[])?.map((p: any) => p.name) ?? [];
 
-  const mcd     = masterCard as any;
+  const mcd = masterCard as any;
   const setData = mcd.sets ?? {};
   const release = setData.releases ?? {};
 
   const cardRow = {
-    year:          release.year,
-    release_name:  release.name,
-    set_name:      setData.name,
-    player:        mcd.player,
-    card_number:   mcd.card_number,
+    year: release.year,
+    release_name: release.name,
+    set_name: setData.name,
+    player: mcd.player,
+    card_number: mcd.card_number,
     parallel_type: parallelName,
-    is_auto:       mcd.is_auto,
-    is_patch:      mcd.is_patch,
-    is_rookie:     mcd.is_rookie,
-    serial_max:    mcd.serial_max,
-    is_graded:     false, // catalog doesn't grade; we get all comps
-    grader:        null,
-    grade_value:   null,
+    is_auto: mcd.is_auto,
+    is_patch: mcd.is_patch,
+    is_rookie: mcd.is_rookie,
+    serial_max: mcd.serial_max,
+    is_graded: false,
+    grader: null,
+    grade_value: null,
   };
 
   const query = buildCardEbayQuery(cardRow);
-  console.log(`[get-card-comps] query: "${query}", parallel: "${parallelName}"`);
+  console.log(`[refresh-comps] query: "${query}", parallel: "${parallelName}"`);
 
   let raw: any[];
   try {
@@ -318,24 +308,25 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: `Scrapechain error: ${e.message}` }), { status: 502, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
-  const items = parseAndFilter(raw, query, parallelName, allParallelNames, setData.name ?? undefined);
-  console.log(`[get-card-comps] ${raw.length} raw → ${items.length} filtered`);
+  console.log(`[refresh-comps] cardNumber from DB: "${mcd.card_number}"`);
+  const items = parseAndFilter(raw, query, parallelName, allParallelNames, mcd.card_number ?? undefined, setData.name ?? undefined);
+  console.log(`[refresh-comps] ${raw.length} raw → ${items.length} filtered`);
+  if (items.length > 0) {
+    console.log(`[refresh-comps] Sample result: "${items[0].title}"`);
+  }
 
-  // Delete old comps for this master_card + parallel
   await admin.from('card_sold_comps')
     .delete()
     .eq('master_card_id', masterCardId)
     .eq('parallel_name', parallelName);
 
-  // Insert new comps with grade tags
   if (items.length > 0) {
     const rows = items.map((item: any) => {
       const grade = parseGrade(item.title);
-      console.log(`[insert] title="${item.title}" → grade="${grade}"`);
       return {
         master_card_id: masterCardId,
         parallel_name: parallelName,
-        grade: grade,
+        grade,
         ebay_item_id: item.itemId ?? null,
         title: item.title ?? '',
         price: parseFloat(item.price?.value ?? '0'),
@@ -345,11 +336,9 @@ Deno.serve(async (req) => {
         url: item.itemWebUrl ?? null,
       };
     });
-    console.log(`[insert] Inserting ${rows.length} rows with grades: ${rows.map((r: any) => r.grade).join(', ')}`);
     await admin.from('card_sold_comps').insert(rows);
   }
 
-  // Compute grade averages
   const { data: allCompsData } = await admin
     .from('card_sold_comps')
     .select('price, grade')
@@ -361,46 +350,19 @@ Deno.serve(async (req) => {
   const psa10Comps = allComps.filter((c: any) => c.grade === 'PSA 10');
   const psa9Comps = allComps.filter((c: any) => c.grade === 'PSA 9');
 
-  const rawAvg = rawComps.length > 0
-    ? rawComps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / rawComps.length
-    : 0;
-  const psa10Avg = psa10Comps.length > 0
-    ? psa10Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa10Comps.length
-    : 0;
-  const psa9Avg = psa9Comps.length > 0
-    ? psa9Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa9Comps.length
-    : 0;
-
-  // Update user_cards with matching master_card_id + parallel_name
-  const { data: userCards } = await admin
-    .from('user_cards')
-    .select('id, is_graded, grade_value')
-    .eq('master_card_id', masterCardId)
-    .eq('parallel_name', parallelName);
-
-  for (const card of (userCards as any[]) ?? []) {
-    let currentValue = 0;
-    if (!card.is_graded) {
-      currentValue = rawAvg;
-    } else if (card.grade_value === '10' || card.grade_value === '10.0') {
-      currentValue = psa10Avg;
-    } else if (card.grade_value === '9' || card.grade_value === '9.0') {
-      currentValue = psa9Avg;
-    } else {
-      // Other grades default to raw
-      currentValue = rawAvg;
-    }
-
-    await admin.from('user_cards')
-      .update({
-        current_value: currentValue,
-        value_refreshed_at: new Date().toISOString(),
-      })
-      .eq('id', card.id);
-  }
+  const rawAvg = rawComps.length > 0 ? rawComps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / rawComps.length : 0;
+  const psa10Avg = psa10Comps.length > 0 ? psa10Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa10Comps.length : 0;
+  const psa9Avg = psa9Comps.length > 0 ? psa9Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa9Comps.length : 0;
 
   return new Response(
-    JSON.stringify({ rawAvg, psa10Avg, psa9Avg, totalCount: items.length, query }),
+    JSON.stringify({
+      comps: items,
+      rawAvg,
+      psa10Avg,
+      psa9Avg,
+      totalCount: items.length,
+      query,
+    }),
     { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
   );
 });

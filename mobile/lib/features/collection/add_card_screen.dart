@@ -295,10 +295,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
       );
       final newCardId = await ref.read(cardsServiceProvider).addCard(form);
-      unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
-        ref.invalidate(userCardsProvider);
-      }).catchError((_) {}));
       ref.invalidate(userCardsProvider);
+      unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).catchError((e) {
+        print('[refreshCardValue error] $e');
+      }));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
@@ -391,10 +391,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
             );
             final newCardId = await ref.read(cardsServiceProvider).addCard(form);
-            unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).then((_) {
-              ref.invalidate(userCardsProvider);
-            }).catchError((_) {}));
             ref.invalidate(userCardsProvider);
+            unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).catchError((e) {
+              print('[refreshCardValue error] $e');
+            }));
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
@@ -421,9 +421,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                 _newIsAuto = false;
                 _newIsPatch = false;
                 _newIsSSP = false;
-              });
-              SchedulerBinding.instance.addPostFrameCallback((_) {
-                if (mounted) context.pop();
               });
             }
             return null;

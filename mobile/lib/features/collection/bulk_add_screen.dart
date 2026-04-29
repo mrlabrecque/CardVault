@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -343,11 +344,9 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
         ));
 
         // Fetch pricing from scrapechain (fire-and-forget)
-        try {
-          await supabase.functions.invoke('refresh-card-value', body: {'cardId': cardId});
-        } catch (_) {
+        unawaited(ref.read(compsServiceProvider).refreshCardValue(cardId).catchError((_) {
           // Pricing fetch failed, but card was added — user can refresh later
-        }
+        }));
       }
 
       // Invalidate the cards provider to refresh the list
