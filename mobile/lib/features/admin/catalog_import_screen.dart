@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 
 int? _tryParseInt(dynamic value) {
   if (value == null) return null;
@@ -73,8 +74,8 @@ class _CatalogImportScreenState extends ConsumerState<CatalogImportScreen> {
                 // Filters
                 Row(children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _year,
+                    child: AdaptiveDropdown<String>(
+                      value: _year,
                       decoration: _inputDec('Year'),
                       items: _years.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
                       onChanged: (v) => setState(() { _year = v!; _skip = 0; _lastResult = null; }),
@@ -82,8 +83,8 @@ class _CatalogImportScreenState extends ConsumerState<CatalogImportScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _segment,
+                    child: AdaptiveDropdown<String>(
+                      value: _segment,
                       decoration: _inputDec('Sport'),
                       items: _sports.map((s) => DropdownMenuItem(value: s.$2, child: Text(s.$1))).toList(),
                       onChanged: (v) => setState(() { _segment = v!; _skip = 0; _lastResult = null; }),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/card_detail_view.dart';
@@ -116,9 +117,9 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
   Widget _parallelDropdown(List<SetParallel> parallels) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      DropdownButtonFormField<String?>(
+      AdaptiveDropdown<String?>(
         key: ValueKey(_selectedParallelId),
-        initialValue: _selectedParallelId,
+        value: _selectedParallelId,
         decoration: const InputDecoration(labelText: 'Parallel', border: OutlineInputBorder()),
         items: [
           const DropdownMenuItem(value: null, child: Text('Base')),
@@ -350,9 +351,9 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: AdaptiveDropdown<String>(
                       key: ValueKey(_graderCtrl.text),
-                      initialValue: _graderCtrl.text.isEmpty ? 'PSA' : _graderCtrl.text,
+                      value: _graderCtrl.text.isEmpty ? 'PSA' : _graderCtrl.text,
                       decoration: const InputDecoration(
                         labelText: 'Grader',
                         border: OutlineInputBorder(),

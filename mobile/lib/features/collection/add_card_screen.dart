@@ -12,6 +12,7 @@ import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import 'widgets/card_detail_view.dart';
@@ -733,8 +734,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
           child: Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _catalogFilterYear,
+                child: AdaptiveDropdown<String>(
+                  value: _catalogFilterYear,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     isDense: true,
@@ -755,8 +756,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _catalogFilterSport,
+                child: AdaptiveDropdown<String>(
+                  value: _catalogFilterSport,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     isDense: true,
@@ -1059,8 +1060,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
               const SizedBox(height: 16),
               // Parallel selector
               if (_parallels.isNotEmpty)
-                DropdownButtonFormField<SetParallel?>(
-                  initialValue: _selectedParallel,
+                AdaptiveDropdown<SetParallel?>(
+                  value: _selectedParallel,
                   decoration: InputDecoration(
                     labelText: 'Parallel',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1526,8 +1527,8 @@ class _YourCopyFields extends StatelessWidget {
             child: Center(child: CircularProgressIndicator()),
           )
         else if (parallels.isNotEmpty)
-          DropdownButtonFormField<SetParallel?>(
-            initialValue: selectedParallel,
+          AdaptiveDropdown<SetParallel?>(
+            value: selectedParallel,
             decoration: InputDecoration(
               labelText: 'Parallel',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1587,8 +1588,8 @@ class _YourCopyFields extends StatelessWidget {
           const SizedBox(height: 8),
           Row(children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: grader,
+              child: AdaptiveDropdown<String>(
+                value: grader,
                 decoration: InputDecoration(
                   labelText: 'Grader',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

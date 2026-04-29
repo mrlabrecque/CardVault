@@ -1,14 +1,26 @@
+import '../../core/widgets/adaptive_dropdown.dart';
 import 'dart:async';
+import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:flutter/material.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/comps_service.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/app_breadcrumb.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/info_box.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/card_fan_loader.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
@@ -389,8 +401,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _catalogFilterYear,
+                  child: AdaptiveDropdown<String>(
+                    value: _catalogFilterYear,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       isDense: true,
@@ -410,8 +422,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _catalogFilterSport,
+                  child: AdaptiveDropdown<String>(
+                    value: _catalogFilterSport,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       isDense: true,
@@ -672,8 +684,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                   const SizedBox(height: 16),
                   const Text('Your Copy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _parallelName,
+                  AdaptiveDropdown<String>(
+                    value: _parallelName,
                     decoration: const InputDecoration(
                       labelText: 'Parallel',
                       border: OutlineInputBorder(),
@@ -754,8 +766,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _grader,
+                          child: AdaptiveDropdown<String>(
+                            value: _grader,
                             decoration: const InputDecoration(
                               labelText: 'Grader',
                               border: OutlineInputBorder(),

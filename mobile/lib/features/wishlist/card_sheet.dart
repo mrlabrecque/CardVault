@@ -1,4 +1,6 @@
+import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:flutter/material.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/cards_service.dart';
 import 'wishlist_card_preview.dart';
 
@@ -174,8 +176,8 @@ class _CardSheetState extends State<CardSheet> {
                     const SizedBox(height: 16),
                     if (widget.showParallel) ...[
                       if (widget.parallels.isNotEmpty)
-                        DropdownButtonFormField<SetParallel?>(
-                          initialValue: widget.selectedParallel,
+                        AdaptiveDropdown<SetParallel?>(
+                          value: widget.selectedParallel,
                           decoration: InputDecoration(
                             labelText: 'Parallel',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -290,8 +292,8 @@ class _CardSheetState extends State<CardSheet> {
                         Row(
                           children: [
                             Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: widget.grader,
+                              child: AdaptiveDropdown<String>(
+                                value: widget.grader,
                                 decoration: InputDecoration(
                                   labelText: 'Grader',
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
