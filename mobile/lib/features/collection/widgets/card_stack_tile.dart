@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/utils/adaptive_ui.dart';
+import '../../../core/utils/adaptive_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';

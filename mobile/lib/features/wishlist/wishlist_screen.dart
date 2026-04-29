@@ -302,8 +302,6 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
   void _showWishlistForm(BuildContext context, WidgetRef ref, {WishlistItem? editing, Map<String, dynamic>? prefill}) {
     showAdaptiveSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => WishlistFormSheet(
         editing: editing,
         prefill: prefill,

@@ -519,8 +519,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
   void _showAddCopySheet() {
     showAdaptiveSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => CardSheet(
         title: 'Add to Your Collection',
         card: _selectedCard,
@@ -628,8 +626,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
 
     showAdaptiveSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setState) => CardSheet(
           title: 'Add to Wishlist',

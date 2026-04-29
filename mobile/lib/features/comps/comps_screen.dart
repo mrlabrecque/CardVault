@@ -25,8 +25,6 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
   void _showValueDisclaimer(BuildContext context) {
     showAdaptiveSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => Padding(

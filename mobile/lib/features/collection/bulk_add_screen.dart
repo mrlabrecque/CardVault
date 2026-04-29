@@ -1,27 +1,17 @@
-import '../../core/widgets/adaptive_dropdown.dart';
 import 'dart:async';
-import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:flutter/material.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/comps_service.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/auth/auth_service.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/attr_tag.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/app_breadcrumb.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/info_box.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/utils/adaptive_ui.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 

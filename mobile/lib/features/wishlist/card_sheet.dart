@@ -1,7 +1,7 @@
-import '../../core/widgets/adaptive_dropdown.dart';
 import 'package:flutter/material.dart';
-import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'wishlist_card_preview.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
