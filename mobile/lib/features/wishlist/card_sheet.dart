@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
-import '../../core/utils/adaptive_ui.dart';
 import 'wishlist_card_preview.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
@@ -114,13 +113,18 @@ class _CardSheetState extends State<CardSheet> {
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       duration: const Duration(milliseconds: 150),
       curve: Curves.easeOut,
-      child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
+      child: Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: DefaultTextStyle(
+            style: const TextStyle(color: Colors.black87),
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(
@@ -342,6 +346,8 @@ class _CardSheetState extends State<CardSheet> {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }

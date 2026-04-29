@@ -29,7 +29,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
   late String _selectedParallelName = widget.card.parallel;
   bool get _isOtherParallel => _selectedParallelId == '__other__';
 
-
   void _startEdit() => setState(() {
     _editing = true;
     _selectedParallelId = widget.card.parallelId;
@@ -61,15 +60,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
       }
     });
   }
-
-  String get _sportEmoji => switch (widget.card.sport.toLowerCase()) {
-    'basketball' => '🏀',
-    'baseball'   => '⚾',
-    'football'   => '🏈',
-    'hockey'     => '🏒',
-    'soccer'     => '⚽',
-    _            => '🏀',
-  };
 
   String _resolveDefaultGrade() {
     if (!widget.card.isGraded) return 'Raw';
@@ -165,10 +155,16 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     final pl = (card.currentValue ?? 0) - (card.pricePaid ?? 0);
     final plPct = card.pricePaid != null && card.pricePaid! > 0 ? (pl / card.pricePaid!) * 100 : 0.0;
 
-    return Column(
-      children: [
-        // Drag handle
-        Padding(
+    return Material(
+      color: Colors.white,
+      child: Padding(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.black87),
+          child: Column(
+            children: [
+            // Drag handle
+          Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Center(
             child: Container(
@@ -443,21 +439,24 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               ),
             ),
 
-          const SizedBox(height: 100),
+          const SizedBox(height: 20),
               ],
             ),
           ),
+          // Bottom padding to account for tab bar
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 72),
         ],
-      );
+      ),
+      ),
+      ),
+    );
   }
 }
 
 class _InfoBox extends StatelessWidget {
-  const _InfoBox({required this.label, required this.value, this.subtitle, this.valueColor, this.trend = 0});
+  const _InfoBox({required this.label, required this.value, this.trend = 0});
   final String label;
   final String value;
-  final String? subtitle;
-  final Color? valueColor;
   final int trend;
 
   @override
@@ -484,13 +483,9 @@ class _InfoBox extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
               ],
-              Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: valueColor ?? const Color(0xFF111827))),
+              Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: Color(0xFF111827))),
             ],
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(subtitle!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: valueColor?.withValues(alpha: 0.75) ?? const Color(0xFF6B7280))),
-          ],
         ],
       ),
     );

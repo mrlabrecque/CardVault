@@ -22,7 +22,6 @@ class _ScanScreenState extends State<ScanScreen> {
     setState(() => _scanned = true);
     _controller.stop();
     final value = barcode!.rawValue!;
-    // TODO: pass barcode value to comps search
     showAdaptiveSheet(
       context: context,
       builder: (_) => Padding(

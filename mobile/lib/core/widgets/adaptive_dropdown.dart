@@ -51,7 +51,9 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
           color: Colors.white,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.black87),
+          child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
@@ -83,6 +85,7 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
             ),
             const Icon(CupertinoIcons.chevron_down, size: 18, color: Color(0xFF9CA3AF)),
           ],
+          ),
         ),
       ),
     );
@@ -90,7 +93,7 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
 
   Widget _buildAndroidDropdown() {
     return DropdownButtonFormField<T>(
-      value: widget.value,
+      initialValue: widget.value,
       items: widget.items,
       onChanged: widget.onChanged,
       decoration: widget.decoration ??
@@ -114,8 +117,10 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
         return Container(
           height: 250,
           color: CupertinoColors.systemBackground.resolveFrom(context),
-          child: Column(
-            children: [
+          child: DefaultTextStyle(
+            style: const TextStyle(color: Colors.black87),
+            child: Column(
+              children: [
               // Header with Done button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -158,6 +163,7 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
                 ),
               ),
             ],
+            ),
           ),
         );
       },

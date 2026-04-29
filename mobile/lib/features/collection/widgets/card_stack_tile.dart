@@ -64,13 +64,6 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
   void _openDetail(BuildContext context, UserCard card) {
     showAdaptiveSheet(
       context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => SizedBox(
         height: MediaQuery.of(context).size.height,
         child: ItemDetailScreen(card: card),
@@ -149,9 +142,11 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
       );
 
   Widget _buildInfo(ColorScheme colors, CardStack stack) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return DefaultTextStyle(
+      style: const TextStyle(color: Colors.black87),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         Text.rich(
           TextSpan(children: [
             TextSpan(text: stack.player, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
@@ -185,13 +180,16 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
           ],
         ),
       ],
+      ),
     );
   }
 
   Widget _buildValue(ColorScheme colors, CardStack stack) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
+    return DefaultTextStyle(
+      style: const TextStyle(color: Colors.black87),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -229,6 +227,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
         if (stack.qty > 1)
           Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
       ],
+      ),
     );
   }
 }
@@ -244,12 +243,6 @@ class _IndividualCardRow extends StatelessWidget {
     return InkWell(
       onTap: () => showAdaptiveSheet(
         context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
         builder: (_) => SizedBox(
           height: MediaQuery.of(context).size.height,
           child: ItemDetailScreen(card: card),
@@ -257,8 +250,10 @@ class _IndividualCardRow extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.black87),
+          child: Row(
+            children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,6 +274,7 @@ class _IndividualCardRow extends StatelessWidget {
               constraints: const BoxConstraints(),
             ),
           ],
+          ),
         ),
       ),
     );

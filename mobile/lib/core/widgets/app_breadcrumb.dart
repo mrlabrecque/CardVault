@@ -61,16 +61,18 @@ class AppBreadcrumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.of(context).padding.top;
     final breadcrumbItems = _buildItems(context);
+    final fontFamily = Theme.of(context).textTheme.bodyMedium?.fontFamily;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6))),
       ),
-      child: Row(
+      child: DefaultTextStyle(
+        style: TextStyle(color: Colors.black87, fontFamily: fontFamily),
+        child: Row(
         children: [
           Flexible(
             child: Row(
@@ -106,6 +108,7 @@ class AppBreadcrumb extends StatelessWidget {
           ),
           if (trailing case final t?) t,
         ],
+        ),
       ),
     );
   }

@@ -108,7 +108,6 @@ class CompsService {
       'value_refreshed_at': DateTime.now().toIso8601String(),
     }).eq('id', cardId);
 
-    print('[refreshCardValue] Updated card $cardId with current_value=$currentValue');
   }
 
   Future<List<LookupHistory>> getHistory() async {

@@ -129,9 +129,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
   final _loadingCards = false;
   MasterCard? _selectedCard;
   bool _isNewCard = false;
-  int _cardPage = 0;
-  static const int _cardPageSize = 50;
-  bool _cardHasMore = false;
 
   // ── New card fields ──────────────────────────────────────────
   final _newPlayerCtrl = TextEditingController();
@@ -167,9 +164,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    print('[AddCard] App lifecycle: $state');
     if (state == AppLifecycleState.paused) {
-      print('[AddCard] Saving state on app pause...');
       unawaited(_saveNavigationState());
     }
   }
@@ -236,10 +231,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
           return;
         }
       }
-    } catch (e) {
-      print('[AddCard] Error restoring state: $e');
+    } catch (_) {
+      // Ignore restore errors
     }
-    print('[AddCard] Loading default state');
     if (mounted) {
       await _loadBrowseReleases(reset: true);
     }
@@ -405,7 +399,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
 
   void _searchCards(String query) {
     if (_selectedSet == null) {
-      setState(() { _cardResults = []; _cardHasMore = false; });
+      setState(() { _cardResults = []; });
       return;
     }
     final q = query.toLowerCase();
@@ -415,7 +409,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
     }).toList();
     setState(() {
       _cardResults = filtered;
-      _cardHasMore = false;
     });
   }
 
@@ -424,14 +417,11 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
       _selectedCard = card;
       _cardCtrl.text = card.displayName;
       _cardResults = [];
-      _cardHasMore = false;
-      _cardPage = 0;
       _isNewCard = false;
       _catalogStep = _CatalogStep.detail;
     });
     unawaited(_saveNavigationState());
-    // Lazily fetch card image from CardSight
-    ref.read(compsServiceProvider).fetchCardImage(card.id);
+    unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
   }
 
   void _selectParallel(SetParallel? p) {
@@ -474,10 +464,14 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
       ref.invalidate(userCardsProvider);
       unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
-        );
-        unawaited(_clearNavigationState()); // Clear saved state after successful add
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
+          );
+        } catch (_) {
+          // Silently fail if snackbar can't be shown
+        }
+        unawaited(_clearNavigationState());
         setState(() {
           _catalogStep = _CatalogStep.sets;
           _selectedCard = null;
@@ -507,9 +501,13 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        } catch (_) {
+          // Silently fail if snackbar can't be shown
+        }
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -567,10 +565,14 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
             ref.invalidate(userCardsProvider);
             unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
-              );
-              unawaited(_clearNavigationState()); // Clear saved state after successful add
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
+                );
+              } catch (_) {
+                // Silently fail if snackbar can't be shown
+              }
+              unawaited(_clearNavigationState());
               setState(() {
                 _catalogStep = _CatalogStep.sets;
                 _selectedCard = null;
@@ -598,9 +600,13 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
             return null;
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-              );
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                );
+              } catch (_) {
+                // Silently fail if snackbar can't be shown
+              }
             }
             return e.toString();
           } finally {
@@ -621,7 +627,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
 
     // Fetch card image if not already cached
     if (_selectedCard?.id != null) {
-      ref.read(compsServiceProvider).fetchCardImage(_selectedCard!.id);
+      unawaited(ref.read(compsServiceProvider).fetchCardImage(_selectedCard!.id));
     }
 
     showAdaptiveSheet(
@@ -675,9 +681,13 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
               });
               ref.invalidate(wishlistProvider);
               if (sheetContext.mounted) {
-                ScaffoldMessenger.of(sheetContext).showSnackBar(
-                  const SnackBar(content: Text('Added to Wishlist!'), duration: Duration(seconds: 2)),
-                );
+                try {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    const SnackBar(content: Text('Added to Wishlist!'), duration: Duration(seconds: 2)),
+                  );
+                } catch (_) {
+                  // Silently fail if snackbar can't be shown
+                }
               }
               return null;
             } catch (e) {
@@ -1092,9 +1102,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                           if (_selectedCard == null) return 0;
                           final selectedParallelName = _selectedParallel?.name ?? 'Base';
                           return allCards.where((card) {
-                            final cardMatch = card.masterCardId == _selectedCard?.id;
+                            final cardMatch = card.masterCardId == _selectedCard!.id;
                             final cardNumberMatch = (card.cardNumber?.trim() ?? '') ==
-                                (_selectedCard?.cardNumber?.trim() ?? '');
+                                (_selectedCard!.cardNumber?.trim() ?? '');
                             final parallelMatch = card.parallel.trim() == selectedParallelName.trim();
                             return cardMatch && cardNumberMatch && parallelMatch;
                           }).length;
@@ -1134,9 +1144,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                           final selectedParallelName = _selectedParallel?.name ?? 'Base';
                           return wishlist.any((item) {
                             final playerMatch = (item.player?.trim().toLowerCase() ?? '') ==
-                                (_selectedCard?.player.trim().toLowerCase() ?? '');
+                                (_selectedCard!.player.trim().toLowerCase());
                             final cardNumberMatch = (item.cardNumber?.trim() ?? '') ==
-                                (_selectedCard?.cardNumber?.trim() ?? '');
+                                (_selectedCard!.cardNumber?.trim() ?? '');
                             final parallelMatch = (item.parallel?.trim() ?? 'Base') ==
                                 selectedParallelName.trim();
                             return playerMatch && cardNumberMatch && parallelMatch;
@@ -1173,7 +1183,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
               // Comps section
               if (_selectedCard != null)
                 CardCompsSection(

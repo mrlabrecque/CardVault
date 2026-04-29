@@ -58,19 +58,19 @@ Future<T?> showAdaptiveDialog<T>({
 Future<T?> showAdaptiveSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
+  bool isDismissible = true,
+  bool enableDrag = true,
 }) async {
-  if (isIOS) {
-    return showCupertinoModalPopup<T>(
-      context: context,
-      builder: builder,
-    );
-  } else {
-    return showModalBottomSheet<T>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: builder,
-    );
-  }
+  return showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: Colors.white,
+    useSafeArea: false,
+    isScrollControlled: true,
+    isDismissible: isDismissible,
+    enableDrag: enableDrag,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: builder,
+  );
 }

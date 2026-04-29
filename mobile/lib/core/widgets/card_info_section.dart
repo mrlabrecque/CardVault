@@ -75,9 +75,11 @@ class CardInfoSection extends StatelessWidget {
       );
 
   Widget _buildInfo(ColorScheme colors) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return DefaultTextStyle(
+      style: const TextStyle(color: Colors.black87),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         Text.rich(
           TextSpan(children: [
             TextSpan(text: player, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
@@ -90,7 +92,7 @@ class CardInfoSection extends StatelessWidget {
         const SizedBox(height: 2),
         if (year != null || set != null)
           Text(
-            [if (year != null) '$year', if (set != null) set!].join(' · '),
+            [if (year != null) '$year', if (set != null) set].join(' · '),
             style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -108,6 +110,7 @@ class CardInfoSection extends StatelessWidget {
           ],
         ),
       ],
+      ),
     );
   }
 

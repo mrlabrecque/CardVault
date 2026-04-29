@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+    return Column(
       children: [
+        const AppBreadcrumb(current: 'Tools'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            children: [
         _ToolCard(
           icon: Icons.add_a_photo_outlined,
           title: 'Scan a Card',
@@ -65,6 +70,9 @@ class ToolsScreen extends StatelessWidget {
           subtitle: 'Import cards from a CSV or spreadsheet',
           comingSoon: true,
         ),
+      ],
+            ),
+          ),
       ],
     );
   }

@@ -65,7 +65,7 @@ class _CardFanLoaderState extends State<CardFanLoader> with SingleTickerProvider
                     transform: Matrix4.identity()
                       ..setEntry(3, 2, 0.001)
                       ..rotateZ(-0.436 * progress) // ~-25 degrees
-                      ..translate(-18.0 * progress, 0.0, 0.0),
+                      ..translate(-18.0 * progress, 0.0),
                     child: Container(
                       width: cardWidth,
                       height: cardHeight,
@@ -111,7 +111,7 @@ class _CardFanLoaderState extends State<CardFanLoader> with SingleTickerProvider
                     transform: Matrix4.identity()
                       ..setEntry(3, 2, 0.001)
                       ..rotateZ(0.436 * progress) // ~+25 degrees
-                      ..translate(18 * progress, 0),
+                      ..translate(18.0 * progress, 0.0),
                     child: Container(
                       width: cardWidth,
                       height: cardHeight,

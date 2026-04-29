@@ -49,9 +49,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             widget.masterCardId,
             widget.parallelName,
           );
-      print('[CardCompsSection] Initial fetch: ${comps.length} comps for ${widget.masterCardId} / ${widget.parallelName}');
       if (comps.isEmpty) {
-        print('[CardCompsSection] No comps found, refreshing...');
         await ref.read(compsServiceProvider).refreshMasterCardComps(
               widget.masterCardId,
               widget.parallelName,
@@ -60,16 +58,10 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               widget.masterCardId,
               widget.parallelName,
             );
-        print('[CardCompsSection] After refresh: ${comps.length} comps');
       }
-      print('[CardCompsSection] About to setState with ${comps.length} comps, mounted=$mounted');
       if (mounted) {
         setState(() {
           _allComps = comps;
-          final grades = _allComps.map((c) => c.grade).toSet();
-          print('[CardCompsSection] setState complete, _allComps.length=${_allComps.length}, grades=$grades, selectedGrade=$_selectedGrade');
-          final filtered = _allComps.where((c) => c.grade == _selectedGrade).length;
-          print('[CardCompsSection] Filtered by $_selectedGrade: $filtered comps');
         });
       }
     } catch (e) {
@@ -145,14 +137,16 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFDBB726)),
         ),
-        child: Row(
-          children: [
-            const Icon(Icons.search_off, size: 16, color: Color(0xFFF59E0B)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.black87),
+          child: Row(
+            children: [
+              const Icon(Icons.search_off, size: 16, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   const Text(
                     'No comps found',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
@@ -163,18 +157,21 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                     style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
                   ),
                 ],
+                ),
               ),
+            ],
             ),
-          ],
         ),
       );
     }
 
-    return Column(
+    return DefaultTextStyle(
+      style: const TextStyle(color: Colors.black87),
+      child: Column(
       children: [
         // Date range filter
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -221,7 +218,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         // Grade pills
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
               _GradePill(
@@ -251,14 +248,14 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         // Chart (if enough data)
         if (_getChartData().length >= 2) ...[
           Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFF3F4F6)),
               ),
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(12, 16, 20, 0),
               child: SizedBox(
                 height: 120,
                 child: _PriceChart(data: _getChartData()),
@@ -269,7 +266,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         // Filtered comps list
         Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 8),
+          padding: const EdgeInsets.only(top: 6, bottom: 6),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -286,14 +283,16 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFC7D2E8)),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline, size: 16, color: Color(0xFF6366F1)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+            child: DefaultTextStyle(
+              style: const TextStyle(color: Colors.black87),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       Text(
                         'No recent sales',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.onSurface),
@@ -304,17 +303,19 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                         style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
                       ),
                     ],
+                    ),
                   ),
+                ],
                 ),
-              ],
             ),
           )
         else
           ListView.separated(
             shrinkWrap: true,
+            padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _filteredComps.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (_, i) => Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -325,6 +326,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           ),
       ],
+      ),
     );
   }
 }
@@ -361,25 +363,28 @@ class _GradePill extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Column(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : colors.onSurface,
+          child: DefaultTextStyle(
+            style: const TextStyle(color: Colors.black87),
+            child: Column(
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : colors.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isSelected ? Colors.white70 : colors.onSurface.withValues(alpha: 0.6),
+                const SizedBox(height: 2),
+                Text(
+                  price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSelected ? Colors.white70 : colors.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -580,15 +585,16 @@ class _CompRow extends StatelessWidget {
 
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left: title + date
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.black87),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left: title + date
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Text(
                     comp.title,
                     maxLines: 2,
@@ -651,6 +657,7 @@ class _CompRow extends StatelessWidget {
               ],
             ),
           ],
+          ),
         ),
       );
   }

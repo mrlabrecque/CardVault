@@ -75,8 +75,6 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
   void _showMarketMoversInfo(BuildContext context) {
     showAdaptiveSheet(
       context: context,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
         child: Column(

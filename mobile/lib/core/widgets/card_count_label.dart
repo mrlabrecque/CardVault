@@ -16,7 +16,7 @@ class CardCountLabel extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Text(
-        '${total} ${total == 1 ? 'card' : 'cards'}'
+        '$total ${total == 1 ? 'card' : 'cards'}'
         '${shown != null && shown != total ? ' · $shown shown' : ''}',
         style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
       ),

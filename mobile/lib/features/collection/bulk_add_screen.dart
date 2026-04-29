@@ -5,13 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
-import '../../core/auth/auth_service.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
-import '../../core/utils/adaptive_ui.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -325,7 +323,6 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
 
     try {
       final svc = ref.read(cardsServiceProvider);
-      final supabase = ref.read(supabaseProvider);
 
       for (final staged in _staged) {
         final cardId = await svc.addCard(AddCardFormData(
