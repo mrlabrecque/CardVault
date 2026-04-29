@@ -1355,22 +1355,20 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                     child: Row(
                       children: [
                         Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
                                   c.displayName,
                                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                if (attrs != null) ...[
-                                  const SizedBox(height: 4),
-                                  attrs,
-                                ],
+                              ),
+                              if (attrs != null) ...[
+                                const SizedBox(width: 6),
+                                attrs,
                               ],
-                            ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1390,7 +1388,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
   Widget? _cardAttributePills(MasterCard c) {
     final hasAttrs = c.isRookie || c.isAuto || c.isPatch || c.isSSP || c.serialMax != null;
     if (!hasAttrs) return null;
-    return Wrap(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       spacing: 4,
       children: [
         if (c.isRookie) AttrTag('RC', color: const Color(0xFF16A34A)),
