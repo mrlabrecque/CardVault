@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';
@@ -61,7 +62,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
   Color get _plColor => widget.stack.pl >= 0 ? Colors.green : Colors.red;
 
   void _openDetail(BuildContext context, UserCard card) {
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,
@@ -241,7 +242,7 @@ class _IndividualCardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return InkWell(
-      onTap: () => showModalBottomSheet(
+      onTap: () => showAdaptiveSheet(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,

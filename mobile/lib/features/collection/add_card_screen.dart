@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
+import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
@@ -515,7 +516,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
   }
 
   void _showAddCopySheet() {
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -624,7 +625,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
       ref.read(compsServiceProvider).fetchCardImage(_selectedCard!.id);
     }
 
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/market_movers_service.dart';
@@ -72,7 +73,7 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
   }
 
   void _showMarketMoversInfo(BuildContext context) {
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(

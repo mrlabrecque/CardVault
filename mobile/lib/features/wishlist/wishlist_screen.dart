@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_service.dart';
@@ -299,7 +300,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
   }
 
   void _showWishlistForm(BuildContext context, WidgetRef ref, {WishlistItem? editing, Map<String, dynamic>? prefill}) {
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

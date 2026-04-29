@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/comps_service.dart';
@@ -22,7 +23,7 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
   static const _pageSize = 10;
 
   void _showValueDisclaimer(BuildContext context) {
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(

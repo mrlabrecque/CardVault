@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -22,7 +23,7 @@ class _ScanScreenState extends State<ScanScreen> {
     _controller.stop();
     final value = barcode!.rawValue!;
     // TODO: pass barcode value to comps search
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
