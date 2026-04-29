@@ -12,7 +12,6 @@ import '../features/scan/scan_screen.dart';
 import '../features/tools/tools_screen.dart';
 import '../features/collection/add_card_screen.dart';
 import '../features/collection/bulk_add_screen.dart';
-import '../features/collection/item_detail_screen.dart';
 import '../features/lot_builder/lot_builder_screen.dart';
 import '../features/grading/grading_screen.dart';
 import '../features/market_movers/market_movers_screen.dart';
@@ -21,7 +20,6 @@ import '../features/admin/admin_releases_screen.dart';
 import '../features/admin/admin_sets_screen.dart';
 import '../features/admin/admin_parallels_screen.dart';
 import '../features/admin/pending_parallels_screen.dart';
-import 'models/user_card.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
 
@@ -45,10 +43,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/dashboard', builder: (context, state) => const DashboardScreen()),
           GoRoute(path: '/collection', builder: (context, state) => const CollectionScreen()),
-          GoRoute(
-            path: '/collection/:id',
-            builder: (context, state) => ItemDetailScreen(card: state.extra as UserCard),
-          ),
           GoRoute(path: '/catalog', builder: (context, state) => const AddCardScreen()),
           GoRoute(path: '/bulk-add', builder: (context, state) => const BulkAddScreen()),
           GoRoute(path: '/tools', builder: (context, state) => const ToolsScreen()),

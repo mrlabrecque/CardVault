@@ -155,7 +155,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     if (confirm == true) {
       await ref.read(cardsServiceProvider).deleteCard(widget.card.id);
       ref.invalidate(userCardsProvider);
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.of(context).pop();
     }
   }
 
@@ -166,18 +166,43 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     final pl = (card.currentValue ?? 0) - (card.pricePaid ?? 0);
     final plPct = card.pricePaid != null && card.pricePaid! > 0 ? (pl / card.pricePaid!) * 100 : 0.0;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(card.player),
-        actions: [
-          IconButton(icon: Icon(Icons.delete_outline, color: colors.error), onPressed: _delete),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+    return Column(
+      children: [
+        // Drag handle
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+        // Title row
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 8, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  card.player,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black87),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_outline, color: colors.error),
+                onPressed: _delete,
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
               children: [
           CardDetailView(
             userCard: card,
@@ -424,8 +449,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 }
 

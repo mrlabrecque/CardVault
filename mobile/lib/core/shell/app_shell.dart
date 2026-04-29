@@ -58,9 +58,10 @@ class AppShell extends ConsumerWidget {
     return idx < 0 ? 0 : idx;
   }
 
-  bool _isTabRoute(String location) =>
-      _tabTitles.keys.any((p) => location == p) ||
-      location.startsWith('/admin');
+  bool _isTabRoute(String location) {
+    // Only show header for main tab routes
+    return _tabTitles.keys.any((p) => location == p);
+  }
 
   String _pageTitle(String location) {
     for (final entry in _tabTitles.entries) {

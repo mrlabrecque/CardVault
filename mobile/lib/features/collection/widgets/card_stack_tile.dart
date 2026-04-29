@@ -60,6 +60,23 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
 
   Color get _plColor => widget.stack.pl >= 0 ? Colors.green : Colors.red;
 
+  void _openDetail(BuildContext context, UserCard card) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SizedBox(
+        height: MediaQuery.of(context).size.height,
+        child: ItemDetailScreen(card: card),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -80,7 +97,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
           InkWell(
             onTap: stack.qty > 1
                 ? () => setState(() => _expanded = !_expanded)
-                : () => Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(card: stack.cards.first))),
+                : () => _openDetail(context, stack.cards.first),
             borderRadius: BorderRadius.circular(14),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -224,7 +241,19 @@ class _IndividualCardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return InkWell(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(card: card))),
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => SizedBox(
+          height: MediaQuery.of(context).size.height,
+          child: ItemDetailScreen(card: card),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
