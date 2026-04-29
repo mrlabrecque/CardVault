@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/app_breadcrumb.dart';
@@ -13,6 +15,61 @@ import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
+
+// Persisted navigation state
+class _AddCardNavState {
+  final _CatalogStep step;
+  final String browseSearchQuery;
+  final String browseFilterYear;
+  final String browseFilterSport;
+  final String setSearchQuery;
+  final String? selectedReleaseId;
+  final String? selectedSetId;
+  final String? selectedCardId;
+
+  _AddCardNavState({
+    required this.step,
+    this.browseSearchQuery = '',
+    this.browseFilterYear = '',
+    this.browseFilterSport = '',
+    this.setSearchQuery = '',
+    this.selectedReleaseId,
+    this.selectedSetId,
+    this.selectedCardId,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'step': step.index,
+      'browseSearchQuery': browseSearchQuery,
+      'browseFilterYear': browseFilterYear,
+      'browseFilterSport': browseFilterSport,
+      'setSearchQuery': setSearchQuery,
+      'selectedReleaseId': selectedReleaseId,
+      'selectedSetId': selectedSetId,
+      'selectedCardId': selectedCardId,
+    };
+  }
+
+  static _AddCardNavState? fromJson(Map<String, dynamic> json) {
+    try {
+      return _AddCardNavState(
+        step: _CatalogStep.values[json['step'] as int? ?? 0],
+        browseSearchQuery: json['browseSearchQuery'] as String? ?? '',
+        browseFilterYear: json['browseFilterYear'] as String? ?? '',
+        browseFilterSport: json['browseFilterSport'] as String? ?? '',
+        setSearchQuery: json['setSearchQuery'] as String? ?? '',
+        selectedReleaseId: json['selectedReleaseId'] as String?,
+        selectedSetId: json['selectedSetId'] as String?,
+        selectedCardId: json['selectedCardId'] as String?,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+const _addCardNavStateKey = 'add_card_nav_state';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
@@ -38,7 +95,7 @@ class AddCardScreen extends ConsumerStatefulWidget {
   ConsumerState<AddCardScreen> createState() => _AddCardScreenState();
 }
 
-class _AddCardScreenState extends ConsumerState<AddCardScreen> {
+class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindingObserver {
   // ── Catalog step ─────────────────────────────────────────────
   _CatalogStep _catalogStep = _CatalogStep.browsing;
   String _catalogFilterYear = '';
@@ -100,11 +157,88 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBrowseReleases(reset: true);
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreNavigationState();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print('[AddCard] App lifecycle: $state');
+    if (state == AppLifecycleState.paused) {
+      print('[AddCard] Saving state on app pause...');
+      unawaited(_saveNavigationState());
+    }
+  }
+
+  Future<void> _restoreNavigationState() async {
+    if (!mounted) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stateJson = prefs.getString(_addCardNavStateKey);
+      print('[AddCard] Restore: checking for saved state... found=$stateJson');
+      if (stateJson != null) {
+        final saved = _AddCardNavState.fromJson(jsonDecode(stateJson) as Map<String, dynamic>);
+        if (saved != null && mounted) {
+          print('[AddCard] Restoring state: step=${saved.step}, releaseId=${saved.selectedReleaseId}');
+          setState(() {
+            _catalogStep = saved.step;
+            _browseSearchCtrl.text = saved.browseSearchQuery;
+            _catalogFilterYear = saved.browseFilterYear;
+            _catalogFilterSport = saved.browseFilterSport;
+            _setSearchCtrl.text = saved.setSearchQuery;
+          });
+
+          // Load data based on which step we're restoring to
+          if (saved.step == _CatalogStep.browsing) {
+            await _loadBrowseReleases(reset: true);
+          } else if ((saved.step == _CatalogStep.sets || saved.step == _CatalogStep.card || saved.step == _CatalogStep.detail) &&
+                     saved.selectedReleaseId != null) {
+            // Reload the selected release and its sets
+            try {
+              final releases = await ref.read(cardsServiceProvider).browseReleases(offset: 0, limit: 1000);
+              final release = releases.firstWhere((r) => r.id == saved.selectedReleaseId!);
+
+              if (mounted) {
+                setState(() {
+                  _browseSelectedRelease = release;
+                  _selectedRelease = release;
+                });
+
+                // Load sets for this release
+                await _selectBrowseRelease(release);
+
+                // If restoring to card or detail, load the set and cards
+                if ((saved.step == _CatalogStep.card || saved.step == _CatalogStep.detail) &&
+                    saved.selectedSetId != null && _browseSets.isNotEmpty) {
+                  final set = _browseSets.firstWhere((s) => s.id == saved.selectedSetId!);
+                  await _selectBrowseSet(set);
+                }
+              }
+            } catch (e) {
+              print('[AddCard] Error loading release data: $e');
+              if (mounted) await _loadBrowseReleases(reset: true);
+            }
+          } else {
+            await _loadBrowseReleases(reset: true);
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      print('[AddCard] Error restoring state: $e');
+    }
+    print('[AddCard] Loading default state');
+    if (mounted) {
+      await _loadBrowseReleases(reset: true);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_saveNavigationState());
     _browseSearchCtrl.dispose();
     _setSearchCtrl.dispose();
     _cardCtrl.dispose();
@@ -115,6 +249,36 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     _serialNumberCtrl.dispose();
     _gradeValueCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveNavigationState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final state = _AddCardNavState(
+        step: _catalogStep,
+        browseSearchQuery: _browseSearchCtrl.text,
+        browseFilterYear: _catalogFilterYear,
+        browseFilterSport: _catalogFilterSport,
+        setSearchQuery: _setSearchCtrl.text,
+        selectedReleaseId: _browseSelectedRelease?.id ?? _selectedRelease?.id,
+        selectedSetId: _selectedSet?.id,
+        selectedCardId: _selectedCard?.id,
+      );
+      final json = jsonEncode(state.toJson());
+      await prefs.setString(_addCardNavStateKey, json);
+      print('[AddCard] Saved state: step=${state.step}, cardId=${state.selectedCardId}');
+    } catch (e) {
+      print('[AddCard] Error saving state: $e');
+    }
+  }
+
+  Future<void> _clearNavigationState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_addCardNavStateKey);
+    } catch (e) {
+      // Silently fail
+    }
   }
 
   // ── Browse step methods ───────────────────────────────────────
@@ -148,6 +312,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _browseSets = [];
       _browseSetsLoading = true;
     });
+    unawaited(_saveNavigationState());
     try {
       final existing = await ref.read(cardsServiceProvider).getSetsForRelease(release.id);
       if (existing.isNotEmpty) {
@@ -254,6 +419,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       _isNewCard = false;
       _catalogStep = _CatalogStep.detail;
     });
+    unawaited(_saveNavigationState());
     // Lazily fetch card image from CardSight
     ref.read(compsServiceProvider).fetchCardImage(card.id);
   }
@@ -296,13 +462,12 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       );
       final newCardId = await ref.read(cardsServiceProvider).addCard(form);
       ref.invalidate(userCardsProvider);
-      unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).catchError((e) {
-        print('[refreshCardValue error] $e');
-      }));
+      unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
         );
+        unawaited(_clearNavigationState()); // Clear saved state after successful add
         setState(() {
           _catalogStep = _CatalogStep.sets;
           _selectedCard = null;
@@ -392,13 +557,12 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             );
             final newCardId = await ref.read(cardsServiceProvider).addCard(form);
             ref.invalidate(userCardsProvider);
-            unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId).catchError((e) {
-              print('[refreshCardValue error] $e');
-            }));
+            unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
               );
+              unawaited(_clearNavigationState()); // Clear saved state after successful add
               setState(() {
                 _catalogStep = _CatalogStep.sets;
                 _selectedCard = null;
@@ -644,6 +808,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                       ),
                     )
                   : ListView.separated(
+                      padding: EdgeInsets.zero,
                       itemCount: filtered.length + (_browseHasMore && filtered.length == _browseResults.length ? 1 : 0),
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
@@ -690,12 +855,18 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
         AppBreadcrumb(
           parent: 'Catalog',
           current: _browseSelectedRelease?.displayName ?? '',
-          onBack: () => setState(() {
-            _catalogStep = _CatalogStep.browsing;
-            _browseSelectedRelease = null;
-            _browseSets = [];
-            _setSearchCtrl.clear();
-          }),
+          onBack: () async {
+            setState(() {
+              _catalogStep = _CatalogStep.browsing;
+              _browseSelectedRelease = null;
+              _browseSets = [];
+              _setSearchCtrl.clear();
+            });
+            // Reload browse results if empty to restore filtered state
+            if (_browseResults.isEmpty && (_catalogFilterYear.isNotEmpty || _catalogFilterSport.isNotEmpty || _browseSearchCtrl.text.isNotEmpty)) {
+              await _loadBrowseReleases(reset: true);
+            }
+          },
         ),
         // Search bar
         Container(
@@ -732,6 +903,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                       ),
                     )
                   : ListView.separated(
+                      padding: EdgeInsets.zero,
                       itemCount: filtered.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
@@ -771,14 +943,27 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
             _selectedSet = null;
           }),
           parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-          onBack: () => setState(() {
-            _catalogStep = _CatalogStep.sets;
-            _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = [];
-            _isNewCard = false;
-            _selectedSet = null;
-          }),
+          onBack: () async {
+            setState(() {
+              _catalogStep = _CatalogStep.sets;
+              _selectedCard = null;
+              _cardCtrl.clear();
+              _cardResults = [];
+              _isNewCard = false;
+              _selectedSet = null;
+            });
+            // Reload sets if they're empty (in case they were cleared)
+            if (_browseSets.isEmpty && _browseSelectedRelease != null) {
+              try {
+                final sets = await ref.read(cardsServiceProvider).getSetsForRelease(_browseSelectedRelease!.id);
+                if (mounted) {
+                  setState(() => _browseSets = sets);
+                }
+              } catch (e) {
+                // Silently fail - sets will remain empty and user will see empty state
+              }
+            }
+          },
           current: _selectedSet?.name ?? '',
         ),
         // Search field
@@ -1147,6 +1332,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
       children: [
         Expanded(
           child: ListView.separated(
+            padding: EdgeInsets.zero,
             itemCount: _cardResults.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (_, i) {

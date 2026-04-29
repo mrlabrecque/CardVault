@@ -65,7 +65,7 @@ class AppBreadcrumb extends StatelessWidget {
     final breadcrumbItems = _buildItems(context);
 
     return Container(
-      padding: EdgeInsets.fromLTRB(16, top + 12, 16, 12),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6))),

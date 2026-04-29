@@ -122,7 +122,7 @@ class _AdminParallelsScreenState extends ConsumerState<AdminParallelsScreen> {
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
                 // Existing parallels
                 if (_parallels.isNotEmpty) ...[

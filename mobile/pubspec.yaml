@@ -46,6 +46,7 @@ dependencies:
   fl_chart: ^0.70.2
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.0
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
