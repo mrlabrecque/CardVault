@@ -214,6 +214,14 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                     saved.selectedSetId != null && _browseSets.isNotEmpty) {
                   final set = _browseSets.firstWhere((s) => s.id == saved.selectedSetId!);
                   await _selectBrowseSet(set);
+
+                  // If restoring to detail, re-select the card
+                  if (saved.step == _CatalogStep.detail &&
+                      saved.selectedCardId != null &&
+                      _allCards.isNotEmpty) {
+                    final match = _allCards.where((c) => c.id == saved.selectedCardId!).firstOrNull;
+                    if (match != null) _selectCard(match);
+                  }
                 }
               }
             } catch (e) {
