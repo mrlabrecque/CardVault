@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_service.dart';
+import 'utils/platform_utils.dart';
 import 'services/cards_service.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
@@ -23,6 +25,9 @@ import '../features/admin/pending_parallels_screen.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
 
+Page<void> _page(Widget child) =>
+  isIOS ? CupertinoPage(child: child) : MaterialPage(child: child);
+
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = ref.watch(supabaseProvider);
 
@@ -37,33 +42,33 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     refreshListenable: GoRouterRefreshStream(supabase.auth.onAuthStateChange),
     routes: [
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/login', pageBuilder: (context, state) => _page(const LoginScreen())),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
-          GoRoute(path: '/dashboard', builder: (context, state) => const DashboardScreen()),
-          GoRoute(path: '/collection', builder: (context, state) => const CollectionScreen()),
-          GoRoute(path: '/catalog', builder: (context, state) => const AddCardScreen()),
-          GoRoute(path: '/bulk-add', builder: (context, state) => const BulkAddScreen()),
-          GoRoute(path: '/tools', builder: (context, state) => const ToolsScreen()),
-          GoRoute(path: '/comps', builder: (context, state) => const CompsScreen()),
-          GoRoute(path: '/lot-builder', builder: (context, state) => const LotBuilderScreen()),
-          GoRoute(path: '/grading', builder: (context, state) => const GradingScreen()),
-          GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
-          GoRoute(path: '/scan', builder: (context, state) => const ScanScreen()),
-          GoRoute(path: '/market-movers', builder: (context, state) => const MarketMoversScreen()),
-          GoRoute(path: '/admin/catalog-import', builder: (_, _) => const CatalogImportScreen()),
-          GoRoute(path: '/admin/pending-parallels', builder: (_, _) => const PendingParallelsScreen()),
-          GoRoute(path: '/admin/releases', builder: (_, _) => const AdminReleasesScreen()),
+          GoRoute(path: '/dashboard', pageBuilder: (context, state) => _page(const DashboardScreen())),
+          GoRoute(path: '/collection', pageBuilder: (context, state) => _page(const CollectionScreen())),
+          GoRoute(path: '/catalog', pageBuilder: (context, state) => _page(const AddCardScreen())),
+          GoRoute(path: '/bulk-add', pageBuilder: (context, state) => _page(const BulkAddScreen())),
+          GoRoute(path: '/tools', pageBuilder: (context, state) => _page(const ToolsScreen())),
+          GoRoute(path: '/comps', pageBuilder: (context, state) => _page(const CompsScreen())),
+          GoRoute(path: '/lot-builder', pageBuilder: (context, state) => _page(const LotBuilderScreen())),
+          GoRoute(path: '/grading', pageBuilder: (context, state) => _page(const GradingScreen())),
+          GoRoute(path: '/wishlist', pageBuilder: (context, state) => _page(const WishlistScreen())),
+          GoRoute(path: '/scan', pageBuilder: (context, state) => _page(const ScanScreen())),
+          GoRoute(path: '/market-movers', pageBuilder: (context, state) => _page(const MarketMoversScreen())),
+          GoRoute(path: '/admin/catalog-import', pageBuilder: (_, _) => _page(const CatalogImportScreen())),
+          GoRoute(path: '/admin/pending-parallels', pageBuilder: (_, _) => _page(const PendingParallelsScreen())),
+          GoRoute(path: '/admin/releases', pageBuilder: (_, _) => _page(const AdminReleasesScreen())),
           GoRoute(
             path: '/admin/releases/:id/sets',
-            builder: (_, state) => AdminSetsScreen(release: state.extra as ReleaseRecord),
+            pageBuilder: (_, state) => _page(AdminSetsScreen(release: state.extra as ReleaseRecord)),
           ),
           GoRoute(
             path: '/admin/releases/:id/sets/:setId/parallels',
-            builder: (_, state) {
+            pageBuilder: (_, state) {
               final extra = state.extra as (ReleaseRecord, SetRecord);
-              return AdminParallelsScreen(release: extra.$1, set: extra.$2);
+              return _page(AdminParallelsScreen(release: extra.$1, set: extra.$2));
             },
           ),
         ],

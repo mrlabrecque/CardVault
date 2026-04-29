@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'widgets/card_stack_tile.dart';
 import 'widgets/set_row_tile.dart';
 import 'widgets/filter_sort_action_bar.dart';
@@ -62,16 +63,13 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   });
 
   Future<void> _deleteCard(String cardId) async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showAdaptiveDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Card'),
-        content: const Text('Remove this card from your collection?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
-        ],
-      ),
+      title: 'Delete Card',
+      content: 'Remove this card from your collection?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
     if (confirm == true) {
       await ref.read(cardsServiceProvider).deleteCard(cardId);

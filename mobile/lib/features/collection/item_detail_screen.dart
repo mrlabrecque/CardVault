@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/utils/adaptive_ui.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 
@@ -141,16 +142,13 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
   );
 
   Future<void> _delete() async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showAdaptiveDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Card'),
-        content: const Text('Remove this card from your collection?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
-        ],
-      ),
+      title: 'Delete Card',
+      content: 'Remove this card from your collection?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
     if (confirm == true) {
       await ref.read(cardsServiceProvider).deleteCard(widget.card.id);

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,6 +46,13 @@ class CardVaultApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => CupertinoTheme(
+        data: const CupertinoThemeData(
+          primaryColor: AppTheme.primary,
+          brightness: Brightness.light,
+        ),
+        child: child!,
+      ),
     );
   }
 }

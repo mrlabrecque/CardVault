@@ -1,9 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_service.dart';
 import '../services/cards_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/platform_utils.dart';
+import '../utils/adaptive_ui.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
@@ -91,30 +94,40 @@ class AppShell extends ConsumerWidget {
           Expanded(child: child),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIdx,
-        onDestinationSelected: (i) => context.go(_tabs[i].path),
-        backgroundColor: AppTheme.primary,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        destinations: _tabs.map((t) {
-          return NavigationDestination(
-            icon: Icon(t.icon),
-            selectedIcon: Icon(t.activeIcon),
-            label: t.label,
-          );
-        }).toList(),
-      ),
+      bottomNavigationBar: isIOS
+        ? CupertinoTabBar(
+            currentIndex: selectedIdx,
+            onTap: (i) => context.go(_tabs[i].path),
+            activeColor: Colors.white,
+            inactiveColor: Colors.white54,
+            backgroundColor: AppTheme.primary,
+            items: _tabs.map((t) => BottomNavigationBarItem(
+              icon: Icon(t.icon),
+              activeIcon: Icon(t.activeIcon),
+              label: t.label,
+            )).toList(),
+          )
+        : NavigationBar(
+            selectedIndex: selectedIdx,
+            onDestinationSelected: (i) => context.go(_tabs[i].path),
+            backgroundColor: AppTheme.primary,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            destinations: _tabs.map((t) {
+              return NavigationDestination(
+                icon: Icon(t.icon),
+                selectedIcon: Icon(t.activeIcon),
+                label: t.label,
+              );
+            }).toList(),
+          ),
     );
   }
 
   void _showAvatarSheet(BuildContext context, WidgetRef ref, String? email) {
     final router = GoRouter.of(context);
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (sheetCtx) => _AvatarSheet(
         email: email,
         onNavigate: (path) {
