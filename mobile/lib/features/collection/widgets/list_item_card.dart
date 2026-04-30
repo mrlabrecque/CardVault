@@ -1,3 +1,4 @@
+import 'package:card_vault/core/theme/fonts.dart';
 import 'package:flutter/material.dart';
 import '../../../core/utils/adaptive_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -97,23 +98,30 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildImage(),
-                  const SizedBox(width: 12),
-                  CardInfoSection(
-                    player: stack.player,
-                    cardNumber: stack.cardNumber,
-                    year: stack.year,
-                    set: stack.set,
-                    parallel: stack.parallel,
-                    serialMax: stack.serialMax,
-                    sport: stack.sport,
-                    rookie: stack.rookie,
-                    autograph: stack.autograph,
-                    memorabilia: stack.memorabilia,
-                    ssp: stack.ssp,
-                    isGraded: stack.isGraded,
-                    gradeLabel: stack.gradeLabel,
-                  ),
-                  _buildValue(colors, stack),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+                      child: CardInfoSection(
+                            player: stack.player,
+                            cardNumber: stack.cardNumber,
+                            year: stack.year,
+                            set: stack.set,
+                            parallel: stack.parallel,
+                            serialMax: stack.serialMax,
+                            sport: stack.sport,
+                            rookie: stack.rookie,
+                            autograph: stack.autograph,
+                            memorabilia: stack.memorabilia,
+                            ssp: stack.ssp,
+                            isGraded: stack.isGraded,
+                            gradeLabel: stack.gradeLabel,
+                          ),
+                    ),
+                  ),  
+                   Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 8, 12, 12),
+                    child: _buildValue(colors, stack),
+                   ),
                 ],
               ),
             ),
@@ -157,7 +165,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
 
   Widget _buildValue(ColorScheme colors, CardStack stack) {
     return DefaultTextStyle(
-      style: const TextStyle(color: Colors.black87),
+      style: TextStyle(color: Colors.black87, fontFamily: AppFonts.fontFamily),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
