@@ -1,23 +1,14 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/lot_service.dart';
 import '../../core/widgets/card_info_section.dart';
+import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/app_theme.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
-
-String _sportEmoji(String sport) => switch (sport.toLowerCase()) {
-  'basketball' => '🏀',
-  'baseball'   => '⚾',
-  'football'   => '🏈',
-  'hockey'     => '🏒',
-  'soccer'     => '⚽',
-  _            => '🏀',
-};
 
 enum _SortOption { dateDesc, playerAz, valueDesc }
 
@@ -322,62 +313,67 @@ class _BrowseCardRow extends StatelessWidget {
       onTap: onToggle,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: inLot ? const Color(0xFFF0FDF4) : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: inLot ? const Color(0xFF86EFAC) : const Color(0xFFF3F4F6)),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Thumbnail
-            _CardThumb(imageUrl: card.imageUrl, sport: card.sport, size: 44),
-            const SizedBox(width: 12),
-            // Info
-            CardInfoSection(
-              player: card.player,
-              cardNumber: card.cardNumber,
-              year: card.year,
-              set: card.set,
-              parallel: card.parallel,
-              serialMax: card.serialMax,
-              sport: card.sport,
-              rookie: card.rookie,
-              autograph: card.autograph,
-              memorabilia: card.memorabilia,
-              ssp: card.ssp,
-              isGraded: card.isGraded && card.grade != null,
-              gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
-            ),
-            const SizedBox(width: 10),
-            // Value + toggle button
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 60),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                child: CardInfoSection(
+                  player: card.player,
+                  cardNumber: card.cardNumber,
+                  year: card.year,
+                  set: card.set,
+                  parallel: card.parallel,
+                  serialMax: card.serialMax,
+                  sport: card.sport,
+                  rookie: card.rookie,
+                  autograph: card.autograph,
+                  memorabilia: card.memorabilia,
+                  ssp: card.ssp,
+                  isGraded: card.isGraded && card.grade != null,
+                  gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
                 ),
-                const SizedBox(height: 6),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: inLot ? const Color(0xFF22C55E) : AppTheme.primary,
-                    shape: BoxShape.circle,
+              ),
+              ),
+                  Padding(padding: EdgeInsets.all(12),
+                    child:
+                    Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
                   ),
-                  child: Icon(
-                    inLot ? Icons.check : Icons.add,
-                    size: 16,
-                    color: Colors.white,
+                  const SizedBox(height: 6),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: inLot ? const Color(0xFF22C55E) : AppTheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      inLot ? Icons.check : Icons.add,
+                      size: 16,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -548,102 +544,64 @@ class _BasketCardRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFF3F4F6)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CardThumb(imageUrl: card.imageUrl, sport: card.sport, size: 44),
-          const SizedBox(width: 12),
-          CardInfoSection(
-            player: card.player,
-            cardNumber: card.cardNumber,
-            year: card.year,
-            set: card.set,
-            parallel: card.parallel,
-            serialMax: card.serialMax,
-            sport: card.sport,
-            rookie: card.rookie,
-            autograph: card.autograph,
-            memorabilia: card.memorabilia,
-            ssp: card.ssp,
-            isGraded: card.isGraded && card.grade != null,
-            gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 44, height: 62),
+            const SizedBox(width: 12),
+            Expanded(
+              child: CardInfoSection(
+                player: card.player,
+                cardNumber: card.cardNumber,
+                year: card.year,
+                set: card.set,
+                parallel: card.parallel,
+                serialMax: card.serialMax,
+                sport: card.sport,
+                rookie: card.rookie,
+                autograph: card.autograph,
+                memorabilia: card.memorabilia,
+                ssp: card.ssp,
+                isGraded: card.isGraded && card.grade != null,
+                gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
               ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: onRemove,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFFECACA)),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFFECACA)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Shared widgets ────────────────────────────────────────────────────────────
-
-class _CardThumb extends StatelessWidget {
-  const _CardThumb({required this.imageUrl, required this.sport, required this.size});
-  final String? imageUrl;
-  final String sport;
-  final double size;
-
-  // Standard trading card ratio: 2.5" × 3.5" → height = width × (7/5)
-  double get _height => size * 1.4;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: SizedBox(
-        width: size,
-        height: _height,
-        child: imageUrl != null
-            ? CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover,
-                errorWidget: (_, _, _) => _Emoji(sport: sport, width: size, height: _height))
-            : _Emoji(sport: sport, width: size, height: _height),
-      ),
-    );
-  }
-}
-
-class _Emoji extends StatelessWidget {
-  const _Emoji({required this.sport, required this.width, required this.height});
-  final String sport;
-  final double width;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF9FAFB),
-      alignment: Alignment.center,
-      child: Text(_sportEmoji(sport), style: TextStyle(fontSize: width * 0.45)),
-    );
-  }
-}

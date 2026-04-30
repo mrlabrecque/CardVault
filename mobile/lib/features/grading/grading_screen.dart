@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
@@ -6,6 +5,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/grading_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/card_info_section.dart';
+import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
@@ -336,15 +336,6 @@ class _CardRow extends StatelessWidget {
   final double gradingFee;
   final VoidCallback onAnalyze;
 
-  String get _sportEmoji => switch (card.sport.toLowerCase()) {
-    'basketball' => '🏀',
-    'baseball'   => '⚾',
-    'football'   => '🏈',
-    'hockey'     => '🏒',
-    'soccer'     => '⚽',
-    _            => '🏀',
-  };
-
   @override
   Widget build(BuildContext context) {
     final tier = _tier(card, state, gradingFee);
@@ -358,47 +349,18 @@ class _CardRow extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildImage(),
-            const SizedBox(width: 12),
-            Expanded(child: _buildInfo(tier)),
-            const SizedBox(width: 8),
-            _buildRightSide(tier),
+            CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 60),
+            Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(12, 8, 6, 12), child: _buildInfo(tier))),
+            Padding(padding: const EdgeInsets.all(12), child: _buildRightSide(tier)),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildImage() {
-    if (card.imageUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: CachedNetworkImage(
-          imageUrl: card.imageUrl!,
-          width: 44,
-          height: 60,
-          fit: BoxFit.cover,
-          placeholder: (_, _) => _imagePlaceholder(),
-          errorWidget: (_, _, _) => _imagePlaceholder(),
-        ),
-      );
-    }
-    return _imagePlaceholder();
-  }
-
-  Widget _imagePlaceholder() => Container(
-    width: 44,
-    height: 60,
-    decoration: BoxDecoration(
-      color: Colors.grey.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 20))),
-  );
 
   Widget _buildInfo(_Tier tier) {
     return Column(
@@ -424,7 +386,11 @@ class _CardRow extends StatelessWidget {
             ),
             if (tier != _Tier.pending) ...[
               const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child:
               _TierBadge(tier: tier),
+              )
             ],
           ],
         ),
@@ -518,7 +484,7 @@ class _ShimmerBoxState extends State<_ShimmerBox> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_opacity),
+      opacity: Tween<double>(begin: 0.2, end: 1.0).animate(_opacity),
       child: Container(
         width: widget.width,
         height: widget.height,

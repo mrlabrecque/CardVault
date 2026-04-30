@@ -6,6 +6,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/models/wishlist_item.dart';
 import '../../core/widgets/card_count_label.dart';
 import '../../core/widgets/card_info_section.dart';
+import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/fonts.dart';
@@ -349,6 +350,21 @@ class _WishlistCard extends StatelessWidget {
   final VoidCallback onDelete;
   final void Function(String matchId) onDismissMatch;
 
+  String get _sportEmoji => switch ((item.sport ?? '').toLowerCase()) {
+    'basketball' => '🏀',
+    'baseball'   => '⚾',
+    'football'   => '🏈',
+    'hockey'     => '🏒',
+    'soccer'     => '⚽',
+    _            => '🏀',
+  };
+
+  Widget _imagePlaceholder(String sport) => Container(
+    color: const Color(0xFFF9FAFB),
+    alignment: Alignment.center,
+    child: Text(_sportEmoji, style: const TextStyle(fontSize: 18)),
+  );
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -392,36 +408,43 @@ class _WishlistCard extends StatelessWidget {
             const Divider(height: 1),
           ],
           Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Main content row: left (info) + right (badge + prices)
+                // Main content row: image + info (expanded) + right (badge + prices)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    CardThumbnail(
+                      imageUrl: item.imageUrl,
+                      sport: item.sport ?? 'Unknown',
+                      width: 60,
+                    ),
                     Expanded(
-                      child: CardInfoSection(
-                        player: item.player ?? 'Unknown',
-                        cardNumber: item.cardNumber,
-                        year: item.year,
-                        set: item.setName,
-                        parallel: item.parallel,
-                        serialMax: item.serialMax,
-                        sport: item.sport ?? 'Unknown',
-                        rookie: item.attrs.contains('RC'),
-                        autograph: item.attrs.contains('AUTO'),
-                        memorabilia: item.attrs.contains('PATCH'),
-                        ssp: item.attrs.contains('SSP'),
-                        isGraded: item.grade != null && item.grade!.isNotEmpty,
-                        gradeLabel: item.grade,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+                          child: CardInfoSection(
+                            player: item.player ?? 'Unknown',
+                            cardNumber: item.cardNumber,
+                            year: item.year,
+                            set: item.setName,
+                            parallel: item.parallel,
+                            serialMax: item.serialMax,
+                            sport: item.sport ?? 'Unknown',
+                            rookie: item.attrs.contains('RC'),
+                            autograph: item.attrs.contains('AUTO'),
+                            memorabilia: item.attrs.contains('PATCH'),
+                            ssp: item.attrs.contains('SSP'),
+                            isGraded: item.grade != null && item.grade!.isNotEmpty,
+                            gradeLabel: item.grade,
+                          ),
                       ),
                     ),
-                    const SizedBox(width: 10),
                     // Right side: badge + prices
-                    SizedBox(
-                      width: 105,
-                      child: Column(
+                    Padding(padding: EdgeInsets.all(12),
+                    child:
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         // Top: badge only
