@@ -415,8 +415,6 @@ class _WishlistCard extends StatelessWidget {
                         ssp: item.attrs.contains('SSP'),
                         isGraded: item.grade != null && item.grade!.isNotEmpty,
                         gradeLabel: item.grade,
-                        imageUrl: item.imageUrl,
-                        showImage: true,
                       ),
                     ),
                     const SizedBox(width: 10),

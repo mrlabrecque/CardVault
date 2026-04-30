@@ -6,7 +6,7 @@ import '../../core/models/user_card.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/utils/adaptive_ui.dart';
-import 'widgets/card_stack_tile.dart';
+import 'widgets/list_item_card.dart';
 import 'widgets/set_row_tile.dart';
 import 'widgets/filter_sort_action_bar.dart';
 
@@ -187,7 +187,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         : ListView.builder(
                             padding: const EdgeInsets.only(bottom: 100),
                             itemCount: filtered.length,
-                            itemBuilder: (_, i) => CardStackTile(
+                            itemBuilder: (_, i) => ListItemCard(
                               index: i,
                               stack: filtered[i],
                               onDelete: _deleteCard,

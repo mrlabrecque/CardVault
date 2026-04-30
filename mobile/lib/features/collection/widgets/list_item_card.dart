@@ -5,8 +5,8 @@ import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';
 import '../../../core/widgets/card_info_section.dart';
 import '../item_detail_screen.dart';
-class CardStackTile extends StatefulWidget {
-  const CardStackTile({
+class ListItemCard extends StatefulWidget {
+  const ListItemCard({
     super.key,
     required this.stack,
     this.onDelete,
@@ -21,10 +21,10 @@ class CardStackTile extends StatefulWidget {
   final int index;
 
   @override
-  State<CardStackTile> createState() => _CardStackTileState();
+  State<ListItemCard> createState() => _ListItemCardState();
 }
 
-class _CardStackTileState extends State<CardStackTile> with SingleTickerProviderStateMixin {
+class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderStateMixin {
   bool _expanded = false;
   late final AnimationController _spinCtrl = AnimationController(
     vsync: this,
@@ -32,7 +32,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
   );
 
   @override
-  void didUpdateWidget(CardStackTile old) {
+  void didUpdateWidget(ListItemCard old) {
     super.didUpdateWidget(old);
     if (widget.isRefreshing && !_spinCtrl.isAnimating) {
       _spinCtrl.repeat();
@@ -134,7 +134,7 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
     if (widget.stack.imageUrl != null) {
       return ClipRRect(
         borderRadius: BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(_expanded ? 0 : 6)),
-        child: 
+        child:
           CachedNetworkImage(
           imageUrl: widget.stack.imageUrl!,
           width: 60,
