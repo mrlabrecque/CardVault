@@ -108,8 +108,16 @@ class FilterSortActionBar<T> extends StatelessWidget {
                         for (final f in filters)
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
+                            
                             child: FilterChip(
-                              label: Text(f),
+                              label: DefaultTextStyle(
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontFamily: Theme.of(context).textTheme.labelSmall?.fontFamily,
+                                fontSize: 11,
+                              ),
+                                child: Text(f),
+                              ),
                               selected: activeFilters.contains(f),
                               onSelected: (_) => onFilterToggle?.call(f),
                             ),

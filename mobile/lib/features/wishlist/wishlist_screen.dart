@@ -8,6 +8,7 @@ import '../../core/widgets/card_count_label.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/theme/fonts.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
@@ -220,10 +221,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             ),
             const SizedBox(height: 16),
             Text('No cards on your wishlist',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.onSurface)),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.onSurface, fontFamily: AppFonts.fontFamily)),
             const SizedBox(height: 4),
             Text('Add cards to watch for deals on eBay.',
-                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5))),
+                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5), fontFamily: AppFonts.fontFamily)),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () => _showWishlistForm(context, ref),
@@ -233,7 +234,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              child: Text('Add a Card', style: TextStyle(fontWeight: FontWeight.w600, color: colors.onPrimary)),
+              child: Text('Add a Card', style: TextStyle(fontWeight: FontWeight.w600, color: colors.onPrimary, fontFamily: AppFonts.fontFamily)),
             ),
           ],
         ),
@@ -266,7 +267,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
               child: Text(
                 _searchQuery.isNotEmpty ? 'No cards match your search.' : 'No wishlist items yet.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5), fontFamily: AppFonts.fontFamily),
               ),
             )
           : ListView.builder(
@@ -380,11 +381,11 @@ class _WishlistCard extends StatelessWidget {
                 children: [
                   Icon(Icons.local_offer, color: colors.onPrimary, size: 14),
                   const SizedBox(width: 8),
-                  Text('Deal Found!', style: TextStyle(color: colors.onPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
+                  Text('Deal Found!', style: TextStyle(color: colors.onPrimary, fontSize: 12, fontWeight: FontWeight.w700, fontFamily: AppFonts.fontFamily)),
                   const Spacer(),
                   if (item.savings > 0)
                     Text('\$${item.savings.toStringAsFixed(0)} under target',
-                        style: TextStyle(color: colors.onPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: colors.onPrimary, fontSize: 11, fontWeight: FontWeight.w600, fontFamily: AppFonts.fontFamily)),
                 ],
               ),
             ),
@@ -406,11 +407,16 @@ class _WishlistCard extends StatelessWidget {
                         year: item.year,
                         set: item.setName,
                         parallel: item.parallel,
-                        attrs: item.attrs.where((a) => !a.startsWith('/')).toList(),
                         serialMax: item.serialMax,
-                        imageUrl: item.imageUrl,
                         sport: item.sport ?? 'Unknown',
-                        grade: item.grade,
+                        rookie: item.attrs.contains('RC'),
+                        autograph: item.attrs.contains('AUTO'),
+                        memorabilia: item.attrs.contains('PATCH'),
+                        ssp: item.attrs.contains('SSP'),
+                        isGraded: item.grade != null && item.grade!.isNotEmpty,
+                        gradeLabel: item.grade,
+                        imageUrl: item.imageUrl,
+                        showImage: true,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -460,7 +466,7 @@ class _WishlistCard extends StatelessWidget {
                       children: [
                         Text(
                           '${item.matches.length} active listing${item.matches.length == 1 ? '' : 's'}',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.7)),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.7), fontFamily: AppFonts.fontFamily),
                         ),
                         Icon(isMatchesExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
                       ],
@@ -543,7 +549,7 @@ class _MatchRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(match.title,
-                    style: const TextStyle(fontSize: 11, color: Colors.black87),
+                    style: TextStyle(fontSize: 11, color: Colors.black87, fontFamily: AppFonts.fontFamily),
                     maxLines: 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
                 Row(
@@ -551,7 +557,8 @@ class _MatchRow extends StatelessWidget {
                     Text(isAuction ? 'Auction' : 'Buy Now',
                         style: TextStyle(
                             fontSize: 10, fontWeight: FontWeight.w600,
-                            color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB))),
+                            color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB),
+                            fontFamily: AppFonts.fontFamily)),
                     if (match.url != null) ...[
                       const SizedBox(width: 6),
                       GestureDetector(
@@ -569,7 +576,7 @@ class _MatchRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text('\$${match.price.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.primary)),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.primary, fontFamily: AppFonts.fontFamily)),
               const SizedBox(height: 6),
               GestureDetector(
                 onTap: onDismiss,
@@ -608,7 +615,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
+      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg, fontFamily: AppFonts.fontFamily)),
     );
   }
 }
@@ -638,9 +645,9 @@ class _PriceBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.2)),
+          Text(label, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.2, fontFamily: AppFonts.fontFamily)),
           const SizedBox(height: 1),
-          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: highlight ? colors.primary : colors.onSurface)),
+          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: highlight ? colors.primary : colors.onSurface, fontFamily: AppFonts.fontFamily)),
         ],
       ),
     );

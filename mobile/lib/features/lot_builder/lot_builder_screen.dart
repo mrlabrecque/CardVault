@@ -4,8 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/lot_service.dart';
-import '../../core/widgets/attr_tag.dart';
-import '../../core/widgets/serial_tag.dart';
+import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/app_theme.dart';
@@ -331,56 +330,26 @@ class _BrowseCardRow extends StatelessWidget {
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Thumbnail
             _CardThumb(imageUrl: card.imageUrl, sport: card.sport, size: 44),
             const SizedBox(width: 12),
             // Info
-            Expanded(
-              child: Builder(builder: (context) {
-                final colors = Theme.of(context).colorScheme;
-                return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text.rich(
-                    TextSpan(children: [
-                      TextSpan(text: card.player, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                      if (card.cardNumber != null)
-                        TextSpan(text: '  #${card.cardNumber}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5))),
-                    ]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  if (card.set != null || card.checklist != null)
-                    Text(
-                      [
-                        if (card.year != null) '${card.year}',
-                        if (card.set != null) card.set!,
-                        if (card.checklist != null) card.checklist!,
-                      ].join(' · '),
-                      style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  if (card.parallel != 'Base')
-                    Text(card.parallel, style: TextStyle(fontSize: 12, color: colors.primary)),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [
-                      if (card.isGraded && card.grade != null)
-                        AttrTag('${card.grader ?? ''} ${card.grade!}'.trim(), color: const Color(0xFF374151)),
-                      if (card.rookie)     AttrTag('RC',    color: const Color(0xFF2563EB)),
-                      if (card.autograph)  AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
-                      if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF059669)),
-                      SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
-                    ],
-                  ),
-                ],
-                );
-              }),
+            CardInfoSection(
+              player: card.player,
+              cardNumber: card.cardNumber,
+              year: card.year,
+              set: card.set,
+              parallel: card.parallel,
+              serialMax: card.serialMax,
+              sport: card.sport,
+              rookie: card.rookie,
+              autograph: card.autograph,
+              memorabilia: card.memorabilia,
+              ssp: card.ssp,
+              isGraded: card.isGraded && card.grade != null,
+              gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
             ),
             const SizedBox(width: 10),
             // Value + toggle button
@@ -578,7 +547,6 @@ class _BasketCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -592,54 +560,20 @@ class _BasketCardRow extends StatelessWidget {
         children: [
           _CardThumb(imageUrl: card.imageUrl, sport: card.sport, size: 44),
           const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text.rich(
-                  TextSpan(children: [
-                    TextSpan(
-                      text: card.player,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                    ),
-                    if (card.cardNumber != null)
-                      TextSpan(
-                        text: '  #${card.cardNumber}',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5)),
-                      ),
-                  ]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                if (card.set != null || card.checklist != null)
-                  Text(
-                    [
-                      if (card.year != null) '${card.year}',
-                      if (card.set != null) card.set!,
-                      if (card.checklist != null) card.checklist!,
-                    ].join(' · '),
-                    style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                if (card.parallel != 'Base')
-                  Text(card.parallel, style: TextStyle(fontSize: 12, color: colors.primary)),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    if (card.isGraded && card.grade != null)
-                      AttrTag('${card.grader ?? ''} ${card.grade!}'.trim(), color: const Color(0xFF374151)),
-                    if (card.rookie)      AttrTag('RC',    color: const Color(0xFF2563EB)),
-                    if (card.autograph)   AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
-                    if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF059669)),
-                    SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
-                  ],
-                ),
-              ],
-            ),
+          CardInfoSection(
+            player: card.player,
+            cardNumber: card.cardNumber,
+            year: card.year,
+            set: card.set,
+            parallel: card.parallel,
+            serialMax: card.serialMax,
+            sport: card.sport,
+            rookie: card.rookie,
+            autograph: card.autograph,
+            memorabilia: card.memorabilia,
+            ssp: card.ssp,
+            isGraded: card.isGraded && card.grade != null,
+            gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
           ),
           const SizedBox(width: 10),
           Column(

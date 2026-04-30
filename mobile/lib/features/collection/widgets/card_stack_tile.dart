@@ -3,10 +3,8 @@ import '../../../core/utils/adaptive_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';
-import '../../../core/widgets/serial_tag.dart';
-import '../../../core/widgets/attr_tag.dart';
+import '../../../core/widgets/card_info_section.dart';
 import '../item_detail_screen.dart';
-
 class CardStackTile extends StatefulWidget {
   const CardStackTile({
     super.key,
@@ -94,12 +92,27 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
                 : () => _openDetail(context, stack.cards.first),
             borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildImage(),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildInfo(colors, stack)),
+                  CardInfoSection(
+                    player: stack.player,
+                    cardNumber: stack.cardNumber,
+                    year: stack.year,
+                    set: stack.set,
+                    parallel: stack.parallel,
+                    serialMax: stack.serialMax,
+                    sport: stack.sport,
+                    rookie: stack.rookie,
+                    autograph: stack.autograph,
+                    memorabilia: stack.memorabilia,
+                    ssp: stack.ssp,
+                    isGraded: stack.isGraded,
+                    gradeLabel: stack.gradeLabel,
+                  ),
                   _buildValue(colors, stack),
                 ],
               ),
@@ -120,12 +133,12 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
   Widget _buildImage() {
     if (widget.stack.imageUrl != null) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: CachedNetworkImage(
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(_expanded ? 0 : 6)),
+        child: 
+          CachedNetworkImage(
           imageUrl: widget.stack.imageUrl!,
-          width: 44,
-          height: 60,
-          fit: BoxFit.cover,
+          width: 60,
+          fit: BoxFit.fill,
           placeholder: (ctx, url) => _imagePlaceholder(),
           errorWidget: (ctx, url, err) => _imagePlaceholder(),
         ),
@@ -135,60 +148,19 @@ class _CardStackTileState extends State<CardStackTile> with SingleTickerProvider
   }
 
   Widget _imagePlaceholder() => Container(
-        width: 44,
-        height: 60,
-        decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-        child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 20))),
+        width: 60,
+        height: 85,
+        decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.15), borderRadius: BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6))),
+        child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 40))),
       );
 
-  Widget _buildInfo(ColorScheme colors, CardStack stack) {
-    return DefaultTextStyle(
-      style: const TextStyle(color: Colors.black87),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-        Text.rich(
-          TextSpan(children: [
-            TextSpan(text: stack.player, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-            if (stack.cardNumber != null)
-              TextSpan(text: '  #${stack.cardNumber}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: colors.onSurface.withValues(alpha: 0.5))),
-          ]),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 2),
-        if (stack.set != null || stack.checklist != null)
-          Text(
-            [if (stack.year != null) '${stack.year}', if (stack.set != null) stack.set!, if (stack.checklist != null) stack.checklist!].join(' · '),
-            style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        if (stack.parallel != 'Base')
-          Text(stack.parallel, style: TextStyle(fontSize: 12, color: colors.primary)),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            if (stack.rookie)      AttrTag('RC', color: const Color(0xFF16A34A)),
-            if (stack.autograph)   AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-            if (stack.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-            if (stack.ssp)         AttrTag('SSP', color: const Color(0xFFB45309)),
-            if (stack.isGraded)    AttrTag(stack.gradeLabel, color: const Color(0xFF9CA3AF)),
-            SerialTag(serialMax: stack.serialMax),
-          ],
-        ),
-      ],
-      ),
-    );
-  }
 
   Widget _buildValue(ColorScheme colors, CardStack stack) {
     return DefaultTextStyle(
       style: const TextStyle(color: Colors.black87),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
         children: [
         Row(
           mainAxisSize: MainAxisSize.min,

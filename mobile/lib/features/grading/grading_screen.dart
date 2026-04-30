@@ -5,8 +5,7 @@ import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/grading_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/attr_tag.dart';
-import '../../core/widgets/serial_tag.dart';
+import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
@@ -402,59 +401,31 @@ class _CardRow extends StatelessWidget {
   );
 
   Widget _buildInfo(_Tier tier) {
-    final setLine = [
-      if (card.year != null) '${card.year}',
-      if (card.set != null) card.set!,
-      if (card.checklist != null) card.checklist!,
-    ].join(' · ');
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Player + card number + tier badge
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: card.player,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  ),
-                  if (card.cardNumber != null)
-                    TextSpan(
-                      text: '  #${card.cardNumber}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Color(0xFF9CA3AF)),
-                    ),
-                ]),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            CardInfoSection(
+              player: card.player,
+              cardNumber: card.cardNumber,
+              year: card.year,
+              set: card.set,
+              parallel: card.parallel,
+              serialMax: card.serialMax,
+              sport: card.sport,
+              rookie: card.rookie,
+              autograph: card.autograph,
+              memorabilia: card.memorabilia,
+              ssp: card.ssp,
+              isGraded: false,
             ),
             if (tier != _Tier.pending) ...[
               const SizedBox(width: 6),
               _TierBadge(tier: tier),
             ],
-          ],
-        ),
-        if (setLine.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Text(setLine, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)), maxLines: 1, overflow: TextOverflow.ellipsis),
-        ],
-        if (card.parallel != 'Base') ...[
-          const SizedBox(height: 1),
-          Text(card.parallel, style: TextStyle(fontSize: 12, color: AppTheme.primary)),
-        ],
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            if (card.rookie)      AttrTag('RC',    color: const Color(0xFF16A34A)),
-            if (card.autograph)   AttrTag('AUTO',  color: const Color(0xFF7C3AED)),
-            if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-            if (card.serialMax != null) SerialTag(serialMax: card.serialMax),
           ],
         ),
         const SizedBox(height: 4),
