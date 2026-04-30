@@ -9,6 +9,7 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
 
@@ -153,7 +154,16 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(userCardsProvider);
 
-    return cardsAsync.when(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9FAFB),
+      body: Column(
+        children: [
+          AppBreadcrumb(
+            parent: 'Tools',
+            current: 'Grading',
+            onBack: () => Navigator.of(context).pop(),
+          ),
+          Expanded(child: cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
       error: (e, _) => Center(child: Text('Error: $e')),
       data: (allCards) {
@@ -164,20 +174,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
         return StickySubHeaderLayout(
           header: Column(
             children: [
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
-                  ),
-                  const Text('Grading', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-                ],
-              ),
-              const SizedBox(height: 12),
               _buildFeeCard(),
               const SizedBox(height: 12),
             ],
@@ -234,6 +230,9 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
                     ),
         );
       },
+    )),
+        ],
+      ),
     );
   }
 

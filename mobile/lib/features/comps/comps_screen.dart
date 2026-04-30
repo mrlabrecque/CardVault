@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/comps_service.dart';
@@ -111,32 +112,20 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      body: Column(
         children: [
-          // ── Breadcrumb ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
-                ),
-                const Text('Comp Search', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => _showValueDisclaimer(context),
-                  child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF9CA3AF)),
-                ),
-              ],
+          AppBreadcrumb(
+            parent: 'Tools',
+            current: 'Comp Search',
+            onBack: () => Navigator.of(context).pop(),
+            trailing: GestureDetector(
+              onTap: () => _showValueDisclaimer(context),
+              child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF9CA3AF)),
             ),
           ),
-
+          Expanded(child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        children: [
           // ── Search bar ──────────────────────────────────────────────────────
           Row(
             children: [
@@ -303,6 +292,8 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
               );
             },
           ),
+        ],
+      )),
         ],
       ),
     );

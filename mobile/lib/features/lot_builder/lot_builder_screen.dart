@@ -7,6 +7,7 @@ import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/theme/app_theme.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
@@ -69,6 +70,11 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
       backgroundColor: const Color(0xFFF9FAFB),
       body: Column(
         children: [
+          AppBreadcrumb(
+            parent: 'Tools',
+            current: 'Lot Builder',
+            onBack: () => Navigator.of(context).pop(),
+          ),
           _Header(
             showBasket: _showBasket,
             basketCount: lot.items.length,
@@ -107,25 +113,8 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
-              ),
-              const Text('Lot Builder', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Builder(builder: (context) {
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Builder(builder: (context) {
             return Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
@@ -145,8 +134,6 @@ class _Header extends StatelessWidget {
               ),
             );
           }),
-        ],
-      ),
     );
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/services/market_movers_service.dart';
 import '../../core/models/market_mover.dart';
 
@@ -24,10 +24,25 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      body: moversAsync.when(
-        loading: () => _buildSkeleton(),
-        error: (e, _) => _buildError(e.toString()),
-        data: (data) => _buildContent(data),
+      body: Column(
+        children: [
+          AppBreadcrumb(
+            parent: 'Tools',
+            current: 'Market Movers',
+            onBack: () => Navigator.of(context).pop(),
+            trailing: GestureDetector(
+              onTap: () => _showMarketMoversInfo(context),
+              child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF9CA3AF)),
+            ),
+          ),
+          Expanded(
+            child: moversAsync.when(
+              loading: () => _buildSkeleton(),
+              error: (e, _) => _buildError(e.toString()),
+              data: (data) => _buildContent(data),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -125,29 +140,6 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
-          // ── Breadcrumb ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () => context.go('/tools'),
-                  child: const Text('Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF9CA3AF))),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.chevron_right, size: 14, color: Color(0xFFD1D5DB)),
-                ),
-                const Text('Market Movers', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => _showMarketMoversInfo(context),
-                  child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF9CA3AF)),
-                ),
-              ],
-            ),
-          ),
-
           // ── Sport filters (scrollable) ──
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
