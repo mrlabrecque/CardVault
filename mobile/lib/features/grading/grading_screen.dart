@@ -175,7 +175,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
           header: Column(
             children: [
               _buildFeeCard(),
-              const SizedBox(height: 12),
             ],
           ),
           subHeader: FilterSortActionBar<String>(

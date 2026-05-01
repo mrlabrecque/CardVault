@@ -97,7 +97,7 @@ class FilterSortActionBar<T> extends StatelessWidget {
         // Row 2: Filters + Action
         if (filters.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: searchText != null ? 6 : 0),
+            padding: EdgeInsets.only(top: 0),
             child: Row(
               children: [
                 Expanded(
