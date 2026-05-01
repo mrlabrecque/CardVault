@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 
+// Remove before public launch — shows per-release import status after each import run.
+const _kShowImportStatus = true;
+
 int? _tryParseInt(dynamic value) {
   if (value == null) return null;
   if (value is int) return value;
@@ -63,6 +66,9 @@ class _CatalogImportScreenState extends ConsumerState<CatalogImportScreen> {
     final colors = Theme.of(context).colorScheme;
     final imported = _tryParseInt(_lastResult?['imported']);
     final total    = _tryParseInt(_lastResult?['total']);
+    final releases = _kShowImportStatus
+        ? (_lastResult?['releases'] as List?)?.cast<Map<String, dynamic>>()
+        : null;
 
     return Scaffold(
       body: Column(
@@ -111,12 +117,45 @@ class _CatalogImportScreenState extends ConsumerState<CatalogImportScreen> {
                       children: [
                         Text('Result', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.5))),
                         const SizedBox(height: 8),
-                        Text('$imported imported  ·  $total from CardSight',
+                        Text('$imported new  ·  $total from CardSight',
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                         if ((total ?? 0) == 100) ...[
                           const SizedBox(height: 4),
                           Text('Full page returned — use "Load Next 100" for more.',
                               style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5))),
+                        ],
+                        if (releases != null && releases.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          ...releases.map((r) {
+                            final isNew = r['is_new'] as bool? ?? false;
+                            final name  = r['name'] as String? ?? '';
+                            final year  = _tryParseInt(r['year']);
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isNew ? Icons.add_circle_outline : Icons.check_circle_outline,
+                                    size: 16,
+                                    color: isNew ? colors.primary : colors.onSurface.withValues(alpha: 0.3),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      year != null ? '$year $name' : name,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isNew
+                                            ? colors.onSurface
+                                            : colors.onSurface.withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                       ],
                     ),

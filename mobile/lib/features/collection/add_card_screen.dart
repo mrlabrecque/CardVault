@@ -18,6 +18,9 @@ import '../wishlist/card_sheet.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 
+// Remove before public launch — shows set/card import status in the catalog browse lists.
+const _kShowImportStatus = true;
+
 // Persisted navigation state
 class _AddCardNavState {
   final _CatalogStep step;
@@ -843,6 +846,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                         }
                         final r = filtered[i];
                         return ListTile(
+                          leading: _kShowImportStatus ? _ImportDot(imported: r.importedSetCount, total: r.setCount) : null,
                           title: Text(r.displayName,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                           subtitle: r.sport != null
@@ -925,6 +929,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                       itemBuilder: (_, i) {
                         final s = filtered[i];
                         return ListTile(
+                          leading: _kShowImportStatus ? _ImportDot(imported: s.importedCount, total: s.cardCount ?? 0) : null,
                           title: Text(s.name,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                           subtitle: s.cardCount != null
@@ -1621,6 +1626,25 @@ class _YourCopyFields extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+// ── Import status dot (remove with _kShowImportStatus before public launch) ───
+
+class _ImportDot extends StatelessWidget {
+  const _ImportDot({required this.imported, required this.total});
+  final int imported;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    if (total > 0 && imported >= total) {
+      return const Icon(Icons.check_circle_outline, size: 16, color: Colors.green);
+    }
+    if (imported > 0) {
+      return const Icon(Icons.adjust, size: 16, color: Colors.amber);
+    }
+    return const Icon(Icons.radio_button_unchecked, size: 16, color: Colors.amber);
   }
 }
 

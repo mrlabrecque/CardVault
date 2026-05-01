@@ -105,14 +105,22 @@ Deno.serve(async (req) => {
 
     const { data: upserted, error: upsertError } = await supabase
       .from('releases')
-      .upsert(rows, { onConflict: 'cardsight_id' })
-      .select('id, name, year');
+      .upsert(rows, { onConflict: 'cardsight_id', ignoreDuplicates: true })
+      .select('cardsight_id');
 
     if (upsertError) throw new Error(upsertError.message);
 
+    const newIds = new Set(upserted?.map((r: { cardsight_id: string }) => r.cardsight_id) ?? []);
+    const releaseList = rows.map(r => ({
+      name:   r.name,
+      year:   r.year,
+      is_new: newIds.has(r.cardsight_id),
+    }));
+
     return json({
       imported: upserted?.length ?? 0,
-      total:    releases.length,
+      total:    rows.length,
+      releases: releaseList,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

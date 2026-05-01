@@ -27,37 +27,54 @@ class SetParallel {
 }
 
 class ReleaseRecord {
-  const ReleaseRecord({required this.id, required this.name, this.year, this.sport, this.cardsightId});
+  const ReleaseRecord({required this.id, required this.name, this.year, this.sport, this.cardsightId, this.setCount = 0, this.importedSetCount = 0});
   final String id;
   final String name;
   final int? year;
   final String? sport;
   final String? cardsightId;
+  final int setCount;
+  final int importedSetCount;
 
-  factory ReleaseRecord.fromJson(Map<String, dynamic> j) => ReleaseRecord(
-    id:          j['id'] as String,
-    name:        j['name'] as String,
-    year:        _tryParseInt(j['year']),
-    sport:       j['sport'] as String?,
-    cardsightId: j['cardsight_id'] as String?,
-  );
+  factory ReleaseRecord.fromJson(Map<String, dynamic> j) {
+    final setsRaw = (j['sets'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    int imported = 0;
+    for (final s in setsRaw) {
+      final defs = s['master_card_definitions'] as List?;
+      if (defs != null && defs.isNotEmpty && (_tryParseInt(defs[0]['count']) ?? 0) > 0) imported++;
+    }
+    return ReleaseRecord(
+      id:               j['id'] as String,
+      name:             j['name'] as String,
+      year:             _tryParseInt(j['year']),
+      sport:            j['sport'] as String?,
+      cardsightId:      j['cardsight_id'] as String?,
+      setCount:         setsRaw.length,
+      importedSetCount: imported,
+    );
+  }
 
   String get displayName => year != null ? '$year $name' : name;
 }
 
 class SetRecord {
-  const SetRecord({required this.id, required this.name, this.cardCount, this.cardsightId});
+  const SetRecord({required this.id, required this.name, this.cardCount, this.cardsightId, this.importedCount = 0});
   final String id;
   final String name;
   final int? cardCount;
   final String? cardsightId;
+  final int importedCount;
 
-  factory SetRecord.fromJson(Map<String, dynamic> j) => SetRecord(
-    id:          j['id'] as String,
-    name:        j['name'] as String,
-    cardCount:   _tryParseInt(j['card_count']),
-    cardsightId: j['cardsight_id'] as String?,
-  );
+  factory SetRecord.fromJson(Map<String, dynamic> j) {
+    final defsRaw = j['master_card_definitions'] as List?;
+    return SetRecord(
+      id:            j['id'] as String,
+      name:          j['name'] as String,
+      cardCount:     _tryParseInt(j['card_count']),
+      cardsightId:   j['cardsight_id'] as String?,
+      importedCount: defsRaw != null && defsRaw.isNotEmpty ? (_tryParseInt(defsRaw[0]['count']) ?? 0) : 0,
+    );
+  }
 }
 
 class MasterCard {
@@ -262,7 +279,7 @@ class CardsService {
   }
 
   Future<List<ReleaseRecord>> searchReleases(String query) async {
-    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id');
+    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))');
     if (query.trim().isNotEmpty) {
       q = q.ilike('name', '%${query.trim()}%');
     }
@@ -272,7 +289,7 @@ class CardsService {
 
   /// Browses releases from our DB — no API call. Paginated.
   Future<List<ReleaseRecord>> browseReleases({int? year, String? sport, int offset = 0, int limit = 30}) async {
-    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id');
+    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))');
     if (year != null) q = q.eq('year', year);
     if (sport != null && sport.isNotEmpty) q = q.eq('sport', sport);
     final data = await q
@@ -311,7 +328,7 @@ class CardsService {
   Future<List<SetRecord>> getSetsForRelease(String releaseId) async {
     final data = await _supabase
         .from('sets')
-        .select('id, name, card_count, cardsight_id')
+        .select('id, name, card_count, cardsight_id, master_card_definitions(count)')
         .eq('release_id', releaseId)
         .order('name', ascending: true);
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
