@@ -244,21 +244,8 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: (_importingReleases || _year.isEmpty || _segment.isEmpty) ? null : _importReleases,
-                  icon: _importingReleases
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.download_outlined, size: 16),
-                  label: Text(_year.isEmpty || _segment.isEmpty
-                      ? 'Select a year and sport to import'
-                      : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
+              const SizedBox(height: 12),
+                            TextField(
                 controller: _searchCtrl,
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
@@ -275,6 +262,20 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                   isDense: true,
                 ),
               ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: (_importingReleases || _year.isEmpty || _segment.isEmpty) ? null : _importReleases,
+                  icon: _importingReleases
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.download_outlined, size: 16),
+                  label: Text(_year.isEmpty || _segment.isEmpty
+                      ? 'Select a year and sport to import'
+                      : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
+                ),
+              ),
+
             ],
           ),
         ),

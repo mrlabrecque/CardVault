@@ -782,7 +782,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
         ),
         // Search bar
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
@@ -881,7 +881,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
         ),
         // Search bar
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
@@ -979,7 +979,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
         ),
         // Search field
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: TextField(
             controller: _cardCtrl,
             onChanged: _searchCards,
