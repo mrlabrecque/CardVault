@@ -1,4 +1,5 @@
 import 'package:card_vault/core/theme/fonts.dart';
+import 'package:card_vault/core/widgets/card_thumbnail.dart';
 import 'package:flutter/material.dart';
 import '../../../core/utils/adaptive_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -94,10 +95,11 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             borderRadius: BorderRadius.circular(14),
             child: Padding(
               padding: const EdgeInsets.all(0),
+              child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildImage(),
+                  CardThumbnail(imageUrl: stack.imageUrl, sport: stack.sport, width: 70),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
@@ -125,6 +127,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                 ],
               ),
             ),
+            ),
           )
               .animate(delay: staggerDelay)
               .fadeIn(duration: const Duration(milliseconds: 200))
@@ -138,29 +141,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildImage() {
-    if (widget.stack.imageUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(_expanded ? 0 : 6)),
-        child:
-          CachedNetworkImage(
-          imageUrl: widget.stack.imageUrl!,
-          width: 60,
-          fit: BoxFit.fill,
-          placeholder: (ctx, url) => _imagePlaceholder(),
-          errorWidget: (ctx, url, err) => _imagePlaceholder(),
-        ),
-      );
-    }
-    return _imagePlaceholder();
-  }
-
-  Widget _imagePlaceholder() => Container(
-        width: 60,
-        height: 85,
-        decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.15), borderRadius: BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6))),
-        child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 40))),
-      );
 
 
   Widget _buildValue(ColorScheme colors, CardStack stack) {

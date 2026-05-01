@@ -6,8 +6,8 @@ class CardThumbnail extends StatelessWidget {
     super.key,
     required this.imageUrl,
     required this.sport,
-    this.width = 60,
-    this.height = 85,
+    this.width = 70,
+    this.height = double.infinity,
     this.borderRadius = 6,
   });
 
@@ -37,7 +37,6 @@ class CardThumbnail extends StatelessWidget {
         child: CachedNetworkImage(
           imageUrl: imageUrl!,
           width: width,
-          height: height,
           fit: BoxFit.cover,
           placeholder: (_, _) => _placeholder(),
           errorWidget: (_, _, _) => _placeholder(),
@@ -49,7 +48,7 @@ class CardThumbnail extends StatelessWidget {
 
   Widget _placeholder() => Container(
     width: width,
-    height: height,
+    height: height == double.infinity ? null : height,
     decoration: BoxDecoration(
       color: Colors.grey.withValues(alpha: 0.15),
       borderRadius: BorderRadius.only(

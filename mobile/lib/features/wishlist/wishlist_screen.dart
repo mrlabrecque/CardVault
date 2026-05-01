@@ -350,20 +350,6 @@ class _WishlistCard extends StatelessWidget {
   final VoidCallback onDelete;
   final void Function(String matchId) onDismissMatch;
 
-  String get _sportEmoji => switch ((item.sport ?? '').toLowerCase()) {
-    'basketball' => '🏀',
-    'baseball'   => '⚾',
-    'football'   => '🏈',
-    'hockey'     => '🏒',
-    'soccer'     => '⚽',
-    _            => '🏀',
-  };
-
-  Widget _imagePlaceholder(String sport) => Container(
-    color: const Color(0xFFF9FAFB),
-    alignment: Alignment.center,
-    child: Text(_sportEmoji, style: const TextStyle(fontSize: 18)),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -413,13 +399,15 @@ class _WishlistCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Main content row: image + info (expanded) + right (badge + prices)
+                IntrinsicHeight(child: 
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+
                     CardThumbnail(
                       imageUrl: item.imageUrl,
                       sport: item.sport ?? 'Unknown',
-                      width: 60,
+                      width: 70,
                     ),
                     Expanded(
                       child: Padding(
@@ -473,6 +461,7 @@ class _WishlistCard extends StatelessWidget {
                     ),
                     ),
                   ],
+                ),
                 ),
 
                 // Active listings section

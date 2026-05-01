@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/card_detail_view.dart';
@@ -144,7 +146,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     if (confirm == true) {
       await ref.read(cardsServiceProvider).deleteCard(widget.card.id);
       ref.invalidate(userCardsProvider);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) context.pop();
     }
   }
 
@@ -155,49 +157,24 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     final pl = (card.currentValue ?? 0) - (card.pricePaid ?? 0);
     final plPct = card.pricePaid != null && card.pricePaid! > 0 ? (pl / card.pricePaid!) * 100 : 0.0;
 
-    return Material(
-      color: Colors.white,
-      child: Padding(
-        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-        child: DefaultTextStyle(
-          style: const TextStyle(color: Colors.black87),
-          child: Column(
-            children: [
-            // Drag handle
-          Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        ),
-        // Title row
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 8, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  card.player,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black87),
-                ),
-              ),
-              IconButton(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9FAFB),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            AppBreadcrumb(
+              parent: 'Collection',
+              current: card.player,
+              onBack: () => context.pop(),
+              trailing: IconButton(
                 icon: Icon(Icons.delete_outline, color: colors.error),
                 onPressed: _delete,
               ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
               children: [
           CardDetailView(
             userCard: card,
@@ -443,13 +420,11 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               ],
             ),
           ),
-          // Bottom padding to account for tab bar
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 72),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),
-      ),
-      ),
-    );
+    ),
+  );
   }
 }
 

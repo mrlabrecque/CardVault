@@ -349,15 +349,17 @@ class _CardRow extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(0),
+        child: IntrinsicHeight( 
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 60),
+            CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
             Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(12, 8, 6, 12), child: _buildInfo(tier))),
             Padding(padding: const EdgeInsets.all(12), child: _buildRightSide(tier)),
           ],
         ),
       ),
+    )
     );
   }
 

@@ -309,13 +309,15 @@ class _BrowseCardRow extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsets.all(0),
+          child:IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 60),
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                child: CardInfoSection(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                
+                        child: CardInfoSection(
                   player: card.player,
                   cardNumber: card.cardNumber,
                   year: card.year,
@@ -360,6 +362,7 @@ class _BrowseCardRow extends StatelessWidget {
               ),
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -539,14 +542,16 @@ class _BasketCardRow extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 44, height: 62),
-            const SizedBox(width: 12),
-            Expanded(
-              child: CardInfoSection(
+        padding: const EdgeInsets.all(0),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
+             Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                
+                        child: CardInfoSection(
                 player: card.player,
                 cardNumber: card.cardNumber,
                 year: card.year,
@@ -561,9 +566,12 @@ class _BasketCardRow extends StatelessWidget {
                 isGraded: card.isGraded && card.grade != null,
                 gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
               ),
+                      ),
+
             ),
-            const SizedBox(width: 8),
-            Column(
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
@@ -585,8 +593,10 @@ class _BasketCardRow extends StatelessWidget {
                 ),
               ],
             ),
+            ),
           ],
         ),
+      ),
       ),
     );
   }
