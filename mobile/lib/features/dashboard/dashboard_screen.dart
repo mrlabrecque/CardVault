@@ -243,7 +243,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               title: topCards[i].player,
                               subtitle: '${topCards[i].year ?? ''} ${topCards[i].set ?? ''}'.trim(),
                               trailing: '\$${(topCards[i].currentValue ?? 0).toStringAsFixed(0)}',
-                              onTap: () => context.go('/collection/${topCards[i].id}', extra: topCards[i]),
+                              onTap: () => context.go('/collection/card', extra: topCards[i]),
                             ),
                         ])
                 else

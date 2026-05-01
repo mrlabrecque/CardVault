@@ -158,20 +158,33 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        title: Text(card.player, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.delete_outline, color: colors.error),
-            onPressed: _delete,
-          ),
-        ],
-      ),
       body: Column(
         children: [
+          Container(
+            color: Colors.white,
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                  onPressed: () => context.go('/collection'),
+                  color: Colors.black87,
+                ),
+                Expanded(
+                  child: Text(
+                    card.player,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.black87),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.delete_outline, color: colors.error),
+                  onPressed: _delete,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16),

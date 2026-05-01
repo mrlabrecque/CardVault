@@ -61,7 +61,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   Color get _plColor => widget.stack.pl >= 0 ? Colors.green : Colors.red;
 
   void _openDetail(BuildContext context, UserCard card) {
-    context.push('/collection/card', extra: card);
+    context.go('/collection/card', extra: card);
   }
 
   @override
@@ -194,7 +194,7 @@ class _IndividualCardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return InkWell(
-      onTap: () => context.push('/collection/card', extra: card),
+      onTap: () => context.go('/collection/card', extra: card),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: DefaultTextStyle(

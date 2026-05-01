@@ -61,7 +61,6 @@ class AppShell extends ConsumerWidget {
   }
 
   bool _isTabRoute(String location) {
-    // Only show header for main tab routes
     return _tabTitles.keys.any((p) => location == p);
   }
 
@@ -91,11 +90,9 @@ class AppShell extends ConsumerWidget {
               onAvatarTap: () => _showAvatarSheet(context, ref, user?.email),
             ),
           Expanded(
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: true,
-              child: child,
-            ),
+            child: showShellHeader
+                ? MediaQuery.removePadding(context: context, removeTop: true, child: child)
+                : child,
           ),
         ],
       ),
