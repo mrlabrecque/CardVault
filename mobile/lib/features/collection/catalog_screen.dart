@@ -19,7 +19,7 @@ import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 
 // Persisted navigation state
-class _AddCardNavState {
+class _CatalogNavState {
   final _CatalogStep step;
   final String browseSearchQuery;
   final String browseFilterYear;
@@ -29,7 +29,7 @@ class _AddCardNavState {
   final String? selectedSetId;
   final String? selectedCardId;
 
-  _AddCardNavState({
+  _CatalogNavState({
     required this.step,
     this.browseSearchQuery = '',
     this.browseFilterYear = '',
@@ -53,9 +53,9 @@ class _AddCardNavState {
     };
   }
 
-  static _AddCardNavState? fromJson(Map<String, dynamic> json) {
+  static _CatalogNavState? fromJson(Map<String, dynamic> json) {
     try {
-      return _AddCardNavState(
+      return _CatalogNavState(
         step: _CatalogStep.values[json['step'] as int? ?? 0],
         browseSearchQuery: json['browseSearchQuery'] as String? ?? '',
         browseFilterYear: json['browseFilterYear'] as String? ?? '',
@@ -88,16 +88,16 @@ const _catalogSports = [
   ('Hockey', 'Hockey'),
 ];
 
-enum _CatalogStep { browsing, sets, card, detail, addCopy }
+enum _CatalogStep { browsing, sets, card, parallel, detail, addCopy }
 
-class AddCardScreen extends ConsumerStatefulWidget {
-  const AddCardScreen({super.key});
+class CatalogScreen extends ConsumerStatefulWidget {
+  const CatalogScreen({super.key});
 
   @override
-  ConsumerState<AddCardScreen> createState() => _AddCardScreenState();
+  ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
 }
 
-class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindingObserver {
+class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindingObserver {
   // ── Catalog step ─────────────────────────────────────────────
   _CatalogStep _catalogStep = _CatalogStep.browsing;
   String _catalogFilterYear = '';
@@ -175,7 +175,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
       final prefs = await SharedPreferences.getInstance();
       final stateJson = prefs.getString(_addCardNavStateKey);
       if (stateJson != null) {
-        final saved = _AddCardNavState.fromJson(jsonDecode(stateJson) as Map<String, dynamic>);
+        final saved = _CatalogNavState.fromJson(jsonDecode(stateJson) as Map<String, dynamic>);
         if (saved != null && mounted) {
           setState(() {
             _catalogStep = saved.step;
@@ -188,7 +188,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
           // Load data based on which step we're restoring to
           if (saved.step == _CatalogStep.browsing) {
             await _loadBrowseReleases(reset: true);
-          } else if ((saved.step == _CatalogStep.sets || saved.step == _CatalogStep.card || saved.step == _CatalogStep.detail) &&
+          } else if ((saved.step == _CatalogStep.sets || saved.step == _CatalogStep.card || saved.step == _CatalogStep.parallel || saved.step == _CatalogStep.detail) &&
                      saved.selectedReleaseId != null) {
             // Reload the selected release and its sets
             try {
@@ -204,14 +204,14 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                 // Load sets for this release
                 await _selectBrowseRelease(release);
 
-                // If restoring to card or detail, load the set and cards
-                if ((saved.step == _CatalogStep.card || saved.step == _CatalogStep.detail) &&
+                // If restoring to card, parallel, or detail, load the set and cards
+                if ((saved.step == _CatalogStep.card || saved.step == _CatalogStep.parallel || saved.step == _CatalogStep.detail) &&
                     saved.selectedSetId != null && _browseSets.isNotEmpty) {
                   final set = _browseSets.firstWhere((s) => s.id == saved.selectedSetId!);
                   await _selectBrowseSet(set);
 
-                  // If restoring to detail, re-select the card
-                  if (saved.step == _CatalogStep.detail &&
+                  // If restoring to parallel or detail, re-select the card
+                  if ((saved.step == _CatalogStep.parallel || saved.step == _CatalogStep.detail) &&
                       saved.selectedCardId != null &&
                       _allCards.isNotEmpty) {
                     final match = _allCards.where((c) => c.id == saved.selectedCardId!).firstOrNull;
@@ -255,7 +255,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
   Future<void> _saveNavigationState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final state = _AddCardNavState(
+      final state = _CatalogNavState(
         step: _catalogStep,
         browseSearchQuery: _browseSearchCtrl.text,
         browseFilterYear: _catalogFilterYear,
@@ -413,7 +413,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
       _cardCtrl.text = card.displayName;
       _cardResults = [];
       _isNewCard = false;
-      _catalogStep = _CatalogStep.detail;
+      _selectedParallel = null;
+      _parallelName = 'Base';
+      _catalogStep = _parallels.isEmpty ? _CatalogStep.detail : _CatalogStep.parallel;
     });
     unawaited(_saveNavigationState());
     unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
@@ -517,16 +519,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
         card: _selectedCard,
         setName: _selectedSet?.name,
         releaseName: _selectedRelease?.displayName,
-        showParallel: true,
-        parallels: _parallels,
-        selectedParallel: _selectedParallel,
-        onParallelChanged: (p) => setState(() {
-          _selectedParallel = p;
-          _parallelName = p?.name ?? 'Base';
-        }),
         showPricePaid: true,
         pricePaidCtrl: _pricePaidCtrl,
-        showSerialNumber: (_selectedParallel?.name ?? _parallelName).contains('/'),
+        showSerialNumber: _selectedParallel?.serialMax != null,
         serialNumberCtrl: _serialNumberCtrl,
         showGraded: true,
         isGraded: _isGraded,
@@ -560,49 +555,21 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
             ref.invalidate(userCardsProvider);
             unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
             if (mounted) {
+              _pricePaidCtrl.clear();
+              _serialNumberCtrl.clear();
+              setState(() {
+                _isGraded = false;
+                _grader = 'PSA';
+              });
+              _gradeValueCtrl.clear();
               try {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
                 );
-              } catch (_) {
-                // Silently fail if snackbar can't be shown
-              }
-              unawaited(_clearNavigationState());
-              setState(() {
-                _catalogStep = _CatalogStep.sets;
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _cardResults = [];
-                _isNewCard = false;
-                _selectedRelease = null;
-                _selectedSet = null;
-                _pricePaidCtrl.clear();
-                _serialNumberCtrl.clear();
-                _isGraded = false;
-                _grader = 'PSA';
-                _gradeValueCtrl.clear();
-                _parallelName = 'Base';
-                _selectedParallel = null;
-                _newPlayerCtrl.clear();
-                _newCardNumberCtrl.clear();
-                _newSerialMaxCtrl.clear();
-                _newIsRookie = false;
-                _newIsAuto = false;
-                _newIsPatch = false;
-                _newIsSSP = false;
-              });
+              } catch (_) {}
             }
             return null;
           } catch (e) {
-            if (mounted) {
-              try {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                );
-              } catch (_) {
-                // Silently fail if snackbar can't be shown
-              }
-            }
             return e.toString();
           } finally {
             if (mounted) setState(() => _saving = false);
@@ -612,86 +579,40 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
     );
   }
 
-  void _showAddToWishlist() {
-    final watchWordsCtrl = TextEditingController();
-    final targetPriceCtrl = TextEditingController();
-    final gradeValueCtrl = TextEditingController();
-    var selectedParallel = _selectedParallel;
-    var isGraded = false;
-    var grader = 'PSA';
-
-    // Fetch card image if not already cached
-    if (_selectedCard?.id != null) {
-      unawaited(ref.read(compsServiceProvider).fetchCardImage(_selectedCard!.id));
+  Future<void> _addToWishlist() async {
+    try {
+      await ref.read(wishlistProvider.notifier).add({
+        'player': (_selectedCard?.player ?? '').trim(),
+        'year': _selectedRelease?.year,
+        'set_name': _selectedRelease?.name,
+        'card_number': (_selectedCard?.cardNumber ?? '').trim(),
+        'parallel': (_selectedParallel?.name ?? 'Base').trim(),
+        'is_rookie': _selectedCard?.isRookie ?? false,
+        'is_auto': _selectedCard?.isAuto ?? false,
+        'is_patch': _selectedCard?.isPatch ?? false,
+        'serial_max': _selectedCard?.serialMax,
+        'grade': null,
+        'ebay_query': null,
+        'exclude_terms': [],
+        'target_price': null,
+        'master_card_id': _selectedCard?.id,
+        'release_id': _selectedRelease?.id,
+        'set_id': _selectedSet?.id,
+        'sport': _selectedRelease?.sport,
+      });
+      ref.invalidate(wishlistProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Added to Wishlist!'), duration: Duration(seconds: 2)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
-
-    showAdaptiveSheet(
-      context: context,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setState) => CardSheet(
-          title: 'Add to Wishlist',
-          card: _selectedCard,
-          year: _selectedRelease?.year,
-          setName: _selectedRelease?.name,
-          releaseName: _selectedRelease?.displayName,
-          showParallel: true,
-          parallels: _parallels,
-          selectedParallel: selectedParallel,
-          onParallelChanged: (p) => setState(() {
-            selectedParallel = p;
-          }),
-          showWatchWords: true,
-          watchWordsCtrl: watchWordsCtrl,
-          showTargetPrice: true,
-          targetPriceCtrl: targetPriceCtrl,
-          showGraded: true,
-          isGraded: isGraded,
-          grader: grader,
-          gradeValueCtrl: gradeValueCtrl,
-          onGradedChanged: (v) => setState(() => isGraded = v),
-          onGraderChanged: (g) => setState(() => grader = g ?? 'PSA'),
-          onSave: (data) async {
-            try {
-              final grade = isGraded && gradeValueCtrl.text.trim().isNotEmpty
-                  ? '$grader ${gradeValueCtrl.text.trim()}'
-                  : null;
-              await ref.read(wishlistProvider.notifier).add({
-                'player': (_selectedCard?.player ?? '').trim(),
-                'year': _selectedRelease?.year,
-                'set_name': _selectedRelease?.name,
-                'card_number': (_selectedCard?.cardNumber ?? '').trim(),
-                'parallel': (selectedParallel?.name ?? 'Base').trim(),
-                'is_rookie': _selectedCard?.isRookie ?? false,
-                'is_auto': _selectedCard?.isAuto ?? false,
-                'is_patch': _selectedCard?.isPatch ?? false,
-                'serial_max': _selectedCard?.serialMax,
-                'grade': grade,
-                'ebay_query': null,
-                'exclude_terms': [],
-                'target_price': double.tryParse(targetPriceCtrl.text),
-                'master_card_id': _selectedCard?.id,
-                'release_id': _selectedRelease?.id,
-                'set_id': _selectedSet?.id,
-                'sport': _selectedRelease?.sport,
-              });
-              ref.invalidate(wishlistProvider);
-              if (sheetContext.mounted) {
-                try {
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    const SnackBar(content: Text('Added to Wishlist!'), duration: Duration(seconds: 2)),
-                  );
-                } catch (_) {
-                  // Silently fail if snackbar can't be shown
-                }
-              }
-              return null;
-            } catch (e) {
-              return e.toString();
-            }
-          },
-        ),
-      ),
-    );
   }
 
   // ── Build ─────────────────────────────────────────────────────
@@ -701,11 +622,12 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       body: switch (_catalogStep) {
-        _CatalogStep.browsing => _buildBrowseView(colors),
-        _CatalogStep.sets     => _buildSetsView(colors),
-        _CatalogStep.card     => _buildCardSearchView(colors),
-        _CatalogStep.detail   => _buildCardDetailView(colors),
-        _CatalogStep.addCopy  => _buildYourCopyFormView(colors),
+        _CatalogStep.browsing  => _buildBrowseView(colors),
+        _CatalogStep.sets      => _buildSetsView(colors),
+        _CatalogStep.card      => _buildCardSearchView(colors),
+        _CatalogStep.parallel  => _buildParallelView(colors),
+        _CatalogStep.detail    => _buildCardDetailView(colors),
+        _CatalogStep.addCopy   => _buildYourCopyFormView(colors),
       },
     );
   }
@@ -782,7 +704,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
         ),
         // Search bar
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
@@ -1004,9 +926,9 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
     );
   }
 
-  // ── Card detail view (read-only, showing Add to Collection/Wishlist buttons) ──
+  // ── Parallel step ─────────────────────────────────────────────
 
-  Widget _buildCardDetailView(ColorScheme colors) {
+  Widget _buildParallelView(ColorScheme colors) {
     return Column(
       children: [
         AppBreadcrumb(
@@ -1046,6 +968,110 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
           ],
         ),
         Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            itemCount: _parallels.length + 1,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final isBase = i == 0;
+              final p = isBase ? null : _parallels[i - 1];
+              final label = isBase ? 'Base' : p!.name;
+              final attrs = isBase ? null : _parallelAttrPills(p!);
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedParallel = p;
+                      _parallelName = p?.name ?? 'Base';
+                      _catalogStep = _CatalogStep.detail;
+                    });
+                    unawaited(_saveNavigationState());
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (attrs != null) ...[
+                                const SizedBox(width: 6),
+                                attrs,
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Card detail view (read-only, showing Add to Collection/Wishlist buttons) ──
+
+  Widget _buildCardDetailView(ColorScheme colors) {
+    return Column(
+      children: [
+        AppBreadcrumb(
+          items: [
+            BreadcrumbItem(label: 'Catalog', onTap: () => setState(() {
+              _catalogStep = _CatalogStep.browsing;
+              _browseSelectedRelease = null;
+              _browseSets = [];
+              _selectedCard = null;
+              _cardCtrl.clear();
+              _cardResults = [];
+              _isNewCard = false;
+              _selectedRelease = null;
+              _selectedSet = null;
+            })),
+            BreadcrumbItem(
+              label: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
+              onTap: () => setState(() {
+                _catalogStep = _CatalogStep.sets;
+                _selectedCard = null;
+                _cardCtrl.clear();
+                _cardResults = [];
+                _isNewCard = false;
+              }),
+            ),
+            BreadcrumbItem(
+              label: _selectedSet?.name ?? '',
+              onTap: () => setState(() {
+                _catalogStep = _CatalogStep.card;
+                _selectedCard = null;
+                _cardCtrl.clear();
+                _cardResults = _allCards;
+                _isNewCard = false;
+              }),
+            ),
+            BreadcrumbItem(
+              label: _selectedCard?.player ?? '',
+              onTap: _parallels.isNotEmpty
+                  ? () => setState(() => _catalogStep = _CatalogStep.parallel)
+                  : null,
+            ),
+            if (_parallels.isNotEmpty)
+              BreadcrumbItem(label: _parallelName),
+          ],
+        ),
+        Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
@@ -1058,33 +1084,6 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                 sport: _selectedRelease?.sport,
                 sections: const [CardDetailSection.hero],
               ),
-              const SizedBox(height: 16),
-              // Parallel selector
-              if (_parallels.isNotEmpty)
-                AdaptiveDropdown<SetParallel?>(
-                  value: _selectedParallel,
-                  decoration: InputDecoration(
-                    labelText: 'Parallel',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Base')),
-                    ..._parallels.map((p) => DropdownMenuItem(value: p, child: Text(p.name))),
-                  ],
-                  onChanged: (p) => setState(() {
-                    _selectedParallel = p;
-                    _parallelName = p?.name ?? 'Base';
-                  }),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'No parallels for this set',
-                    style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.6)),
-                  ),
-                ),
               const SizedBox(height: 16),
               // Action buttons
               Row(
@@ -1166,7 +1165,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
                                 label: const Text('In Wishlist'),
                               )
                             : OutlinedButton.icon(
-                                onPressed: () => _showAddToWishlist(),
+                                onPressed: _addToWishlist,
                                 style: OutlinedButton.styleFrom(
                                   backgroundColor: Colors.white,
                                 ),
@@ -1384,6 +1383,19 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> with WidgetsBindi
             },
           ),
         ),
+      ],
+    );
+  }
+
+  Widget? _parallelAttrPills(SetParallel p) {
+    final hasAttrs = p.serialMax != null || p.isAuto;
+    if (!hasAttrs) return null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: [
+        if (p.isAuto) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
+        if (p.serialMax != null) AttrTag('/${p.serialMax}', color: const Color(0xFF6366F1)),
       ],
     );
   }
