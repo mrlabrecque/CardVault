@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_service.dart';
 import 'utils/platform_utils.dart';
-import 'services/cards_service.dart';
 import 'models/user_card.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/collection/item_detail_screen.dart';
@@ -19,10 +18,7 @@ import '../features/collection/bulk_add_screen.dart';
 import '../features/lot_builder/lot_builder_screen.dart';
 import '../features/grading/grading_screen.dart';
 import '../features/market_movers/market_movers_screen.dart';
-import '../features/admin/catalog_import_screen.dart';
-import '../features/admin/admin_releases_screen.dart';
-import '../features/admin/admin_sets_screen.dart';
-import '../features/admin/admin_parallels_screen.dart';
+import '../features/admin/admin_catalog_screen.dart';
 import '../features/admin/pending_parallels_screen.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
@@ -63,20 +59,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/wishlist', pageBuilder: (context, state) => _page(const WishlistScreen())),
           GoRoute(path: '/scan', pageBuilder: (context, state) => _page(const ScanScreen())),
           GoRoute(path: '/market-movers', pageBuilder: (context, state) => _page(const MarketMoversScreen())),
-          GoRoute(path: '/admin/catalog-import', pageBuilder: (_, _) => _page(const CatalogImportScreen())),
+          GoRoute(path: '/admin/catalog', pageBuilder: (_, _) => _page(const AdminCatalogScreen())),
           GoRoute(path: '/admin/pending-parallels', pageBuilder: (_, _) => _page(const PendingParallelsScreen())),
-          GoRoute(path: '/admin/releases', pageBuilder: (_, _) => _page(const AdminReleasesScreen())),
-          GoRoute(
-            path: '/admin/releases/:id/sets',
-            pageBuilder: (_, state) => _page(AdminSetsScreen(release: state.extra as ReleaseRecord)),
-          ),
-          GoRoute(
-            path: '/admin/releases/:id/sets/:setId/parallels',
-            pageBuilder: (_, state) {
-              final extra = state.extra as (ReleaseRecord, SetRecord);
-              return _page(AdminParallelsScreen(release: extra.$1, set: extra.$2));
-            },
-          ),
         ],
       ),
     ],

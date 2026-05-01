@@ -51,8 +51,7 @@ class AppShell extends ConsumerWidget {
     '/collection': 'Collection',
     '/tools': 'Tools',
     '/wishlist': 'Wishlist',
-    '/admin/catalog-import': 'Catalog Import',
-    '/admin/releases': 'Manage Releases',
+    '/admin/catalog': 'Catalog',
     '/admin/pending-parallels': 'Pending Parallels',
   };
 
@@ -288,14 +287,9 @@ class _AvatarSheet extends ConsumerWidget {
             ],
             if (isAdmin) ...[
               _AdminLink(
-                label: 'Catalog Import',
-                icon: Icons.download_outlined,
-                onTap: () => onNavigate('/admin/catalog-import'),
-              ),
-              _AdminLink(
-                label: 'Manage Releases',
+                label: 'Catalog',
                 icon: Icons.library_books_outlined,
-                onTap: () => onNavigate('/admin/releases'),
+                onTap: () => onNavigate('/admin/catalog'),
               ),
               _AdminLink(
                 label: 'Pending Parallels',
