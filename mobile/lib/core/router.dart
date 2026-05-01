@@ -6,7 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_service.dart';
 import 'utils/platform_utils.dart';
 import 'services/cards_service.dart';
+import 'models/user_card.dart';
 import '../features/collection/collection_screen.dart';
+import '../features/collection/item_detail_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
@@ -48,6 +50,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/dashboard', pageBuilder: (context, state) => _page(const DashboardScreen())),
           GoRoute(path: '/collection', pageBuilder: (context, state) => _page(const CollectionScreen())),
+          GoRoute(
+            path: '/collection/card',
+            pageBuilder: (_, state) => _page(ItemDetailScreen(card: state.extra as UserCard)),
+          ),
           GoRoute(path: '/catalog', pageBuilder: (context, state) => _page(const AddCardScreen())),
           GoRoute(path: '/bulk-add', pageBuilder: (context, state) => _page(const BulkAddScreen())),
           GoRoute(path: '/tools', pageBuilder: (context, state) => _page(const ToolsScreen())),

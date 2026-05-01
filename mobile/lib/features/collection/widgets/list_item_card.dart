@@ -1,12 +1,11 @@
 import 'package:card_vault/core/theme/fonts.dart';
 import 'package:card_vault/core/widgets/card_thumbnail.dart';
 import 'package:flutter/material.dart';
-import '../../../core/utils/adaptive_ui.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';
 import '../../../core/widgets/card_info_section.dart';
-import '../item_detail_screen.dart';
 class ListItemCard extends StatefulWidget {
   const ListItemCard({
     super.key,
@@ -62,13 +61,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   Color get _plColor => widget.stack.pl >= 0 ? Colors.green : Colors.red;
 
   void _openDetail(BuildContext context, UserCard card) {
-    showAdaptiveSheet(
-      context: context,
-      builder: (_) => SizedBox(
-        height: MediaQuery.of(context).size.height,
-        child: ItemDetailScreen(card: card),
-      ),
-    );
+    context.push('/collection/card', extra: card);
   }
 
   @override
@@ -201,13 +194,7 @@ class _IndividualCardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return InkWell(
-      onTap: () => showAdaptiveSheet(
-        context: context,
-        builder: (_) => SizedBox(
-          height: MediaQuery.of(context).size.height,
-          child: ItemDetailScreen(card: card),
-        ),
-      ),
+      onTap: () => context.push('/collection/card', extra: card),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: DefaultTextStyle(

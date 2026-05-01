@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
-import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/card_detail_view.dart';
@@ -159,22 +158,23 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            AppBreadcrumb(
-              parent: 'Collection',
-              current: card.player,
-              onBack: () => context.pop(),
-              trailing: IconButton(
-                icon: Icon(Icons.delete_outline, color: colors.error),
-                onPressed: _delete,
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Text(card.player, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.delete_outline, color: colors.error),
+            onPressed: _delete,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
               children: [
           CardDetailView(
             userCard: card,
@@ -423,7 +423,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
           SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),
-    ),
   );
   }
 }

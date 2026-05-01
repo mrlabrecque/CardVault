@@ -91,7 +91,13 @@ class AppShell extends ConsumerWidget {
               initial: initial,
               onAvatarTap: () => _showAvatarSheet(context, ref, user?.email),
             ),
-          Expanded(child: child),
+          Expanded(
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              child: child,
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: isIOS
