@@ -1,6 +1,6 @@
 {
-    "name": "card_vault",
-    "short_name": "card_vault",
+    "name": "Card Locker",
+    "short_name": "Card Locker",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

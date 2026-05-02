@@ -68,7 +68,7 @@ class AppShell extends ConsumerWidget {
     for (final entry in _tabTitles.entries) {
       if (location.startsWith(entry.key)) return entry.value;
     }
-    return 'Card Vault';
+    return 'Card Locker';
   }
 
   @override
@@ -176,7 +176,7 @@ class _ShellHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'CARD VAULT',
+                  'CARD LOCKER',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,

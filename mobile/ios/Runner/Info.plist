@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Card Vault</string>
+	<string>Card Locker</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -48,11 +48,11 @@
 		</dict>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Card Vault uses the camera to scan barcodes and capture card images for valuation.</string>
+	<string>Card Locker uses the camera to scan barcodes and capture card images for valuation.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Card Vault accesses your photo library so you can upload card images for valuation.</string>
+	<string>Card Locker accesses your photo library so you can upload card images for valuation.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Card Vault saves card images to your photo library.</string>
+	<string>Card Locker saves card images to your photo library.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>CFBundleURLTypes</key>

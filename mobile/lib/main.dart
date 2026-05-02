@@ -41,7 +41,7 @@ class CardVaultApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'Card Vault',
+      title: 'Card Locker',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       routerConfig: router,
