@@ -6,6 +6,12 @@ DART_DEFINES=--dart-define=SUPABASE_URL=$(SUPABASE_URL) --dart-define=SUPABASE_A
 .PHONY: ipa run
 
 ipa:
+	@VERSION=$$(grep '^version:' pubspec.yaml | sed 's/version: //'); \
+	NAME=$$(echo $$VERSION | cut -d'+' -f1); \
+	BUILD=$$(echo $$VERSION | cut -d'+' -f2); \
+	NEW_BUILD=$$((BUILD + 1)); \
+	sed -i '' "s/^version: .*/version: $$NAME+$$NEW_BUILD/" pubspec.yaml; \
+	echo "Building $$NAME+$$NEW_BUILD..."; \
 	flutter build ipa --release $(DART_DEFINES)
 
 run:
