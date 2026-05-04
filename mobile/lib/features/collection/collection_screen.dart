@@ -115,12 +115,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     return Scaffold(
       backgroundColor: colors.surface,
       appBar: AppBar(
-        title: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Collection',
-            style: AppFonts.appBarTitle,
-          ),
+        centerTitle: false,
+        title: Text(
+          'Collection',
+          style: AppFonts.appBarTitle,
         ),
         actions: const [AppBarAvatar()],
       ),

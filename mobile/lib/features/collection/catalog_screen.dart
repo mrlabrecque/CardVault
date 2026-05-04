@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
-import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
@@ -631,6 +630,74 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
+  // ── AppBar helpers ─────────────────────────────────────────────
+
+  String _appBarTitle() {
+    if (_mode == _CatalogMode.search) return 'Catalog';
+    return switch (_catalogStep) {
+      _CatalogStep.browsing  => 'Catalog',
+      _CatalogStep.sets      => _browseSelectedRelease?.displayName ?? 'Sets',
+      _CatalogStep.card      => _selectedSet?.name ?? 'Find a Card',
+      _CatalogStep.parallel  => _selectedCard?.player ?? 'Select Parallel',
+      _CatalogStep.detail    => _selectedCard?.player ?? 'Card',
+      _CatalogStep.addCopy   => 'Add to Collection',
+    };
+  }
+
+  void _handleStepBack() {
+    switch (_catalogStep) {
+      case _CatalogStep.browsing:
+        context.pop();
+      case _CatalogStep.sets:
+        setState(() {
+          _catalogStep = _CatalogStep.browsing;
+          _browseSelectedRelease = null;
+          _browseSets = [];
+          _setSearchCtrl.clear();
+        });
+      case _CatalogStep.card:
+        setState(() {
+          _catalogStep = _CatalogStep.sets;
+          _selectedCard = null;
+          _cardCtrl.clear();
+          _cardResults = [];
+          _isNewCard = false;
+          _selectedSet = null;
+        });
+      case _CatalogStep.parallel:
+        setState(() {
+          _catalogStep = _CatalogStep.card;
+          _selectedCard = null;
+          _cardCtrl.clear();
+          _cardResults = _allCards;
+          _isNewCard = false;
+        });
+      case _CatalogStep.detail:
+        setState(() {
+          if (_parallels.isNotEmpty) {
+            _catalogStep = _CatalogStep.parallel;
+          } else {
+            _catalogStep = _CatalogStep.card;
+            _selectedCard = null;
+            _cardCtrl.clear();
+            _cardResults = _allCards;
+            _isNewCard = false;
+          }
+        });
+      case _CatalogStep.addCopy:
+        setState(() {
+          _catalogStep = _CatalogStep.detail;
+          _pricePaidCtrl.clear();
+          _serialNumberCtrl.clear();
+          _isGraded = false;
+          _grader = 'PSA';
+          _gradeValueCtrl.clear();
+          _parallelName = 'Base';
+          _selectedParallel = null;
+        });
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────
 
   @override
@@ -638,13 +705,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Catalog',
-            style: AppFonts.appBarTitle,
-          ),
+        leading: _catalogStep == _CatalogStep.browsing && _mode == _CatalogMode.browse
+            ? null
+            : BackButton(onPressed: _handleStepBack),
+        centerTitle: false,
+        title: Text(
+          _appBarTitle(),
+          style: AppFonts.appBarTitle,
         ),
         actions: const [AppBarAvatar()],
       ),
@@ -705,10 +772,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
     return Column(
       children: [
-        AppBreadcrumb(
-          current: 'Catalog',
-          onBack: () => context.pop(),
-        ),
         // Filter row
         Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -846,22 +909,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
     return Column(
       children: [
-        AppBreadcrumb(
-          parent: 'Catalog',
-          current: _browseSelectedRelease?.displayName ?? '',
-          onBack: () async {
-            setState(() {
-              _catalogStep = _CatalogStep.browsing;
-              _browseSelectedRelease = null;
-              _browseSets = [];
-              _setSearchCtrl.clear();
-            });
-            // Reload browse results if empty to restore filtered state
-            if (_browseResults.isEmpty && (_catalogFilterYear.isNotEmpty || _catalogFilterSport.isNotEmpty || _browseSearchCtrl.text.isNotEmpty)) {
-              await _loadBrowseReleases(reset: true);
-            }
-          },
-        ),
         // Search bar
         Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -923,43 +970,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Widget _buildCardSearchView(ColorScheme colors) {
     return Column(
       children: [
-        AppBreadcrumb(
-          grandparent: 'Catalog',
-          onGrandparentBack: () => setState(() {
-            _catalogStep = _CatalogStep.browsing;
-            _browseSelectedRelease = null;
-            _browseSets = [];
-            _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = [];
-            _isNewCard = false;
-            _selectedRelease = null;
-            _selectedSet = null;
-          }),
-          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-          onBack: () async {
-            setState(() {
-              _catalogStep = _CatalogStep.sets;
-              _selectedCard = null;
-              _cardCtrl.clear();
-              _cardResults = [];
-              _isNewCard = false;
-              _selectedSet = null;
-            });
-            // Reload sets if they're empty (in case they were cleared)
-            if (_browseSets.isEmpty && _browseSelectedRelease != null) {
-              try {
-                final sets = await ref.read(cardsServiceProvider).getSetsForRelease(_browseSelectedRelease!.id);
-                if (mounted) {
-                  setState(() => _browseSets = sets);
-                }
-              } catch (e) {
-                // Silently fail - sets will remain empty and user will see empty state
-              }
-            }
-          },
-          current: _selectedSet?.name ?? '',
-        ),
         // Search field
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -992,42 +1002,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Widget _buildParallelView(ColorScheme colors) {
     return Column(
       children: [
-        AppBreadcrumb(
-          items: [
-            BreadcrumbItem(label: 'Catalog', onTap: () => setState(() {
-              _catalogStep = _CatalogStep.browsing;
-              _browseSelectedRelease = null;
-              _browseSets = [];
-              _selectedCard = null;
-              _cardCtrl.clear();
-              _cardResults = [];
-              _isNewCard = false;
-              _selectedRelease = null;
-              _selectedSet = null;
-            })),
-            BreadcrumbItem(
-              label: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-              onTap: () => setState(() {
-                _catalogStep = _CatalogStep.sets;
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _cardResults = [];
-                _isNewCard = false;
-              }),
-            ),
-            BreadcrumbItem(
-              label: _selectedSet?.name ?? '',
-              onTap: () => setState(() {
-                _catalogStep = _CatalogStep.card;
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _cardResults = _allCards;
-                _isNewCard = false;
-              }),
-            ),
-            BreadcrumbItem(label: _selectedCard?.player ?? ''),
-          ],
-        ),
         Expanded(
           child: ListView.separated(
             padding: EdgeInsets.zero,
@@ -1089,49 +1063,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Widget _buildCardDetailView(ColorScheme colors) {
     return Column(
       children: [
-        AppBreadcrumb(
-          items: [
-            BreadcrumbItem(label: 'Catalog', onTap: () => setState(() {
-              _catalogStep = _CatalogStep.browsing;
-              _browseSelectedRelease = null;
-              _browseSets = [];
-              _selectedCard = null;
-              _cardCtrl.clear();
-              _cardResults = [];
-              _isNewCard = false;
-              _selectedRelease = null;
-              _selectedSet = null;
-            })),
-            BreadcrumbItem(
-              label: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-              onTap: () => setState(() {
-                _catalogStep = _CatalogStep.sets;
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _cardResults = [];
-                _isNewCard = false;
-              }),
-            ),
-            BreadcrumbItem(
-              label: _selectedSet?.name ?? '',
-              onTap: () => setState(() {
-                _catalogStep = _CatalogStep.card;
-                _selectedCard = null;
-                _cardCtrl.clear();
-                _cardResults = _allCards;
-                _isNewCard = false;
-              }),
-            ),
-            BreadcrumbItem(
-              label: _selectedCard?.player ?? '',
-              onTap: _parallels.isNotEmpty
-                  ? () => setState(() => _catalogStep = _CatalogStep.parallel)
-                  : null,
-            ),
-            if (_parallels.isNotEmpty)
-              BreadcrumbItem(label: _parallelName),
-          ],
-        ),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -1258,32 +1189,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Widget _buildYourCopyFormView(ColorScheme colors) {
     return Column(
       children: [
-        AppBreadcrumb(
-          grandparent: 'Catalog',
-          onGrandparentBack: () => setState(() {
-            _catalogStep = _CatalogStep.browsing;
-            _browseSelectedRelease = null;
-            _browseSets = [];
-            _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = [];
-            _isNewCard = false;
-            _selectedRelease = null;
-            _selectedSet = null;
-          }),
-          parent: _browseSelectedRelease?.displayName ?? _selectedRelease?.displayName ?? '',
-          onBack: () => setState(() {
-            _catalogStep = _CatalogStep.detail;
-            _pricePaidCtrl.clear();
-            _serialNumberCtrl.clear();
-            _isGraded = false;
-            _grader = 'PSA';
-            _gradeValueCtrl.clear();
-            _parallelName = 'Base';
-            _selectedParallel = null;
-          }),
-          current: _selectedSet?.name ?? '',
-        ),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),

@@ -70,13 +70,11 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Lot Builder',
-            style: AppFonts.appBarTitle,
-          ),
+        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
+        centerTitle: false,
+        title: Text(
+          'Lot Builder',
+          style: AppFonts.appBarTitle,
         ),
         actions: const [AppBarAvatar()],
       ),

@@ -158,13 +158,11 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Grading',
-            style: AppFonts.appBarTitle,
-          ),
+        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
+        centerTitle: false,
+        title: Text(
+          'Grading',
+          style: AppFonts.appBarTitle,
         ),
         actions: const [AppBarAvatar()],
       ),
