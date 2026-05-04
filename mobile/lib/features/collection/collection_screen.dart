@@ -113,7 +113,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     final cardsAsync = ref.watch(userCardsProvider);
 
     return Scaffold(
-      backgroundColor: colors.surface,
       appBar: AppBar(
         centerTitle: false,
         title: Text(
@@ -236,7 +235,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
 
     if (allRows.isEmpty) {
       return Scaffold(
-        backgroundColor: colors.surface,
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Text('📦', style: TextStyle(fontSize: 40)),

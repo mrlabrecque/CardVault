@@ -29,15 +29,15 @@ class AppTheme {
       surface: surface,
       onSurface: textMain,
       surfaceContainerHighest: surfaceElev,
-      outline: border,
-    );
+      outline: border    
+      );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: base,
       fontFamily: GoogleFonts.oswald().fontFamily,
       textTheme: GoogleFonts.oswaldTextTheme(),
-      scaffoldBackgroundColor: const Color(0xFFF9FAFB),
+      scaffoldBackgroundColor: Color(0xFFFDFDFD),
 
       appBarTheme: const AppBarTheme(
         backgroundColor: surface,

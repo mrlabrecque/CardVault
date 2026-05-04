@@ -68,7 +68,6 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
     final notifier  = ref.read(lotProvider.notifier);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         centerTitle: false,

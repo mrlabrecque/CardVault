@@ -154,9 +154,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   @override
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(userCardsProvider);
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         centerTitle: false,

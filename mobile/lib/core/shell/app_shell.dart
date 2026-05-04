@@ -56,7 +56,6 @@ class AppShell extends ConsumerWidget {
     final selectedIdx = _selectedIndex(location);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIdx,

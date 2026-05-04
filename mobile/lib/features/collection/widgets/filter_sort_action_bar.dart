@@ -47,8 +47,8 @@ class FilterSortActionBar<T> extends StatelessWidget {
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     hintText: searchHint,
-                    hintStyle: TextStyle(color: colors.outline, fontSize: 14),
-                    prefixIcon: Icon(Icons.search, size: 18, color: colors.outline),
+                    hintStyle: TextStyle(color: colors.onSurface.withValues(alpha: 0.4), fontSize: 14),
+                    prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
                     suffixIcon: searchText!.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),

@@ -157,7 +157,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
     final plPct = card.pricePaid != null && card.pricePaid! > 0 ? (pl / card.pricePaid!) * 100 : 0.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       body: Column(
         children: [
           Container(

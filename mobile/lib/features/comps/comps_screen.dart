@@ -111,7 +111,6 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
     final historyAsync = ref.watch(lookupHistoryProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       body: Column(
         children: [
           AppBreadcrumb(

@@ -24,7 +24,6 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
     final moversAsync = ref.watch(marketMoversProvider(_selectedSport));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       body: Column(
         children: [
           AppBreadcrumb(
