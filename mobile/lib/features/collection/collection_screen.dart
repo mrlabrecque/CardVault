@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
+import '../../core/theme/fonts.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
@@ -111,7 +113,17 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     final cardsAsync = ref.watch(userCardsProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: colors.surface,
+      appBar: AppBar(
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Collection',
+            style: AppFonts.appBarTitle,
+          ),
+        ),
+        actions: const [AppBarAvatar()],
+      ),
       body: Column(
         children: [
           // ── Tab toggle ───────────────────────────────────
@@ -120,7 +132,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
+                color: colors.onSurface.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(children: [
@@ -226,7 +238,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
 
     if (allRows.isEmpty) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF9FAFB),
+        backgroundColor: colors.surface,
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Text('📦', style: TextStyle(fontSize: 40)),

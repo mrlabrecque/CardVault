@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/app_breadcrumb.dart';
+import '../../core/widgets/filter_pill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/market_movers_service.dart';
 import '../../core/models/market_mover.dart';
@@ -141,28 +142,25 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
           // ── Sport filters (scrollable) ──
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: FilterChip(
-                    label: const Text('All'),
-                    selected: _selectedSport == null,
-                    onSelected: (_) => setState(() => _selectedSport = null),
-                  ),
+          Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterPill(
+                  label: 'All',
+                  isActive: _selectedSport == null,
+                  onTap: () => setState(() => _selectedSport = null),
                 ),
-                ...['NBA', 'NFL', 'MLB', 'NHL'].map((sport) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: FilterChip(
-                    label: Text(sport),
-                    selected: _selectedSport == sport,
-                    onSelected: (_) => setState(() => _selectedSport = sport),
-                  ),
-                )),
-              ],
-            ),
+              ),
+              ...['NBA', 'NFL', 'MLB', 'NHL'].map((sport) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterPill(
+                  label: sport,
+                  isActive: _selectedSport == sport,
+                  onTap: () => setState(() => _selectedSport = sport),
+                ),
+              )),
+            ],
           ),
 
           const SizedBox(height: 20),

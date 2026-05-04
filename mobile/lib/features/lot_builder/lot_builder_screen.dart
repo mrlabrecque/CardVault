@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/lot_service.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
-import '../../core/widgets/app_breadcrumb.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 enum _SortOption { dateDesc, playerAz, valueDesc }
@@ -68,13 +69,19 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Lot Builder',
+            style: AppFonts.appBarTitle,
+          ),
+        ),
+        actions: const [AppBarAvatar()],
+      ),
       body: Column(
         children: [
-          AppBreadcrumb(
-            parent: 'Tools',
-            current: 'Lot Builder',
-            onBack: () => Navigator.of(context).pop(),
-          ),
           _Header(
             showBasket: _showBasket,
             basketCount: lot.items.length,

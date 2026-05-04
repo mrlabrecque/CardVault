@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/fonts.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_service.dart';
@@ -9,7 +11,6 @@ import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
-import '../../core/theme/fonts.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
@@ -197,6 +198,16 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     final async = ref.watch(wishlistProvider);
 
     return Scaffold(
+      appBar: AppBar(
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Wishlist',
+            style: AppFonts.appBarTitle,
+          ),
+        ),
+        actions: const [AppBarAvatar()],
+      ),
       body: async.when(
         loading: () => const Center(child: CardFanLoader()),
         error: (e, _) => Center(child: Text('Error: $e')),

@@ -4,12 +4,13 @@ import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/grading_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
-import '../../core/widgets/app_breadcrumb.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
 
@@ -156,14 +157,18 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      body: Column(
-        children: [
-          AppBreadcrumb(
-            parent: 'Tools',
-            current: 'Grading',
-            onBack: () => Navigator.of(context).pop(),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Grading',
+            style: AppFonts.appBarTitle,
           ),
-          Expanded(child: cardsAsync.when(
+        ),
+        actions: const [AppBarAvatar()],
+      ),
+      body: cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
       error: (e, _) => Center(child: Text('Error: $e')),
       data: (allCards) {
@@ -229,9 +234,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
                     ),
         );
       },
-    )),
-        ],
-      ),
+    ),
     );
   }
 

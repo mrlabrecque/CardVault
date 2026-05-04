@@ -583,6 +583,131 @@ class CardsService {
 
     return result['id'] as String;
   }
+
+  /// Fuzzy search across releases, sets, and cards in the catalog
+  Future<({
+    List<ReleaseRecord> releases,
+    List<(SetRecord, ReleaseRecord)> sets,
+    List<(MasterCard, SetRecord, ReleaseRecord)> cards,
+  })> searchCatalog(String query) async {
+    final queryTrim = query.trim();
+    final releases = <ReleaseRecord>[];
+    final sets = <(SetRecord, ReleaseRecord)>[];
+    final cards = <(MasterCard, SetRecord, ReleaseRecord)>[];
+
+    if (queryTrim.isEmpty) return (releases: releases, sets: sets, cards: cards);
+
+    // Cache for release lookups to avoid fetching the same release multiple times
+    final releaseCache = <String, ReleaseRecord>{};
+
+    try {
+      // Search releases by name or sport
+      final releaseData = await _supabase
+          .from('releases')
+          .select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))')
+          .ilike('name', '%$queryTrim%')
+          .order('year', ascending: false)
+          .limit(20);
+      releases.addAll((releaseData as List).map((r) => ReleaseRecord.fromJson(r as Map<String, dynamic>)));
+    } catch (_) {}
+
+    try {
+      // Search sets by name (without nested joins)
+      final setData = await _supabase
+          .from('sets')
+          .select('id, name, card_count, cardsight_id, release_id')
+          .ilike('name', '%$queryTrim%')
+          .limit(30);
+
+      for (final s in setData as List) {
+        final setMap = s as Map<String, dynamic>;
+        final releaseId = setMap['release_id'] as String?;
+
+        if (releaseId != null) {
+          // Get release info (use cache if already fetched)
+          ReleaseRecord? release = releaseCache[releaseId];
+          if (release == null) {
+            try {
+              final releaseData = await _supabase
+                  .from('releases')
+                  .select('id, name, year, sport, cardsight_id')
+                  .eq('id', releaseId)
+                  .single();
+              release = ReleaseRecord.fromJson(releaseData as Map<String, dynamic>);
+              releaseCache[releaseId] = release;
+            } catch (_) {}
+          }
+
+          if (release != null) {
+            final set = SetRecord(
+              id: setMap['id'] as String,
+              name: setMap['name'] as String,
+              cardCount: _tryParseInt(setMap['card_count']),
+              cardsightId: setMap['cardsight_id'] as String?,
+            );
+            sets.add((set, release));
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      // Search cards by player name (without nested joins)
+      final cardData = await _supabase
+          .from('master_card_definitions')
+          .select('id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url, set_id')
+          .ilike('player', '%$queryTrim%')
+          .limit(50);
+
+      for (final c in cardData as List) {
+        final cardMap = c as Map<String, dynamic>;
+        final setId = cardMap['set_id'] as String?;
+
+        if (setId != null) {
+          try {
+            // Fetch set info
+            final setData = await _supabase
+                .from('sets')
+                .select('id, name, card_count, cardsight_id, release_id')
+                .eq('id', setId)
+                .single();
+
+            final setMap = setData as Map<String, dynamic>;
+            final releaseId = setMap['release_id'] as String?;
+
+            if (releaseId != null) {
+              // Get release info (use cache if already fetched)
+              ReleaseRecord? release = releaseCache[releaseId];
+              if (release == null) {
+                try {
+                  final releaseData = await _supabase
+                      .from('releases')
+                      .select('id, name, year, sport, cardsight_id')
+                      .eq('id', releaseId)
+                      .single();
+                  release = ReleaseRecord.fromJson(releaseData as Map<String, dynamic>);
+                  releaseCache[releaseId] = release;
+                } catch (_) {}
+              }
+
+              if (release != null) {
+                final card = MasterCard.fromJson(cardMap);
+                final set = SetRecord(
+                  id: setMap['id'] as String,
+                  name: setMap['name'] as String,
+                  cardCount: _tryParseInt(setMap['card_count']),
+                  cardsightId: setMap['cardsight_id'] as String?,
+                );
+                cards.add((card, set, release));
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    return (releases: releases, sets: sets, cards: cards);
+  }
 }
 
 final cardsServiceProvider = Provider<CardsService>((ref) {

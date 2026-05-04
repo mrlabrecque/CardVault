@@ -12,11 +12,15 @@ import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/theme/fonts.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
+import 'widgets/filter_sort_action_bar.dart';
 
 // Persisted navigation state
 class _CatalogNavState {
@@ -89,6 +93,7 @@ const _catalogSports = [
 ];
 
 enum _CatalogStep { browsing, sets, card, parallel, detail, addCopy }
+enum _CatalogMode { browse, search }
 
 class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({super.key});
@@ -98,6 +103,15 @@ class CatalogScreen extends ConsumerStatefulWidget {
 }
 
 class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindingObserver {
+  // ── Catalog mode (Browse vs Search) ──────────────────────────
+  _CatalogMode _mode = _CatalogMode.browse;
+
+  // ── Global search state ──────────────────────────────────────
+  final _globalSearchCtrl = TextEditingController();
+  List<dynamic> _globalSearchResults = [];
+  bool _globalSearchLoading = false;
+  Timer? _searchDebounceTimer;
+
   // ── Catalog step ─────────────────────────────────────────────
   _CatalogStep _catalogStep = _CatalogStep.browsing;
   String _catalogFilterYear = '';
@@ -240,6 +254,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_saveNavigationState());
+    _searchDebounceTimer?.cancel();
     _browseSearchCtrl.dispose();
     _setSearchCtrl.dispose();
     _cardCtrl.dispose();
@@ -249,6 +264,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     _pricePaidCtrl.dispose();
     _serialNumberCtrl.dispose();
     _gradeValueCtrl.dispose();
+    _globalSearchCtrl.dispose();
     super.dispose();
   }
 
@@ -621,14 +637,59 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      body: switch (_catalogStep) {
-        _CatalogStep.browsing  => _buildBrowseView(colors),
-        _CatalogStep.sets      => _buildSetsView(colors),
-        _CatalogStep.card      => _buildCardSearchView(colors),
-        _CatalogStep.parallel  => _buildParallelView(colors),
-        _CatalogStep.detail    => _buildCardDetailView(colors),
-        _CatalogStep.addCopy   => _buildYourCopyFormView(colors),
-      },
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Catalog',
+            style: AppFonts.appBarTitle,
+          ),
+        ),
+        actions: const [AppBarAvatar()],
+      ),
+      body: Column(
+        children: [
+          // Mode tabs (Browse/Search)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: colors.onSurface.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _buildModeTab('Browse', _mode == _CatalogMode.browse, colors, () {
+                    setState(() => _mode = _CatalogMode.browse);
+                  }),
+                  _buildModeTab('Search', _mode == _CatalogMode.search, colors, () {
+                    setState(() {
+                      _mode = _CatalogMode.search;
+                      _globalSearchCtrl.clear();
+                      _globalSearchResults = [];
+                    });
+                  }),
+                ],
+              ),
+            ),
+          ),
+          // Content
+          Expanded(
+            child: _mode == _CatalogMode.browse
+                ? switch (_catalogStep) {
+                    _CatalogStep.browsing  => _buildBrowseView(colors),
+                    _CatalogStep.sets      => _buildSetsView(colors),
+                    _CatalogStep.card      => _buildCardSearchView(colors),
+                    _CatalogStep.parallel  => _buildParallelView(colors),
+                    _CatalogStep.detail    => _buildCardDetailView(colors),
+                    _CatalogStep.addCopy   => _buildYourCopyFormView(colors),
+                  }
+                : _buildSearchMode(colors),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1427,6 +1488,215 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           fontWeight: FontWeight.w600,
           color: colors.onSurface.withValues(alpha: 0.6),
           letterSpacing: 0.5),
+    );
+  }
+
+  // ── Global search ────────────────────────────────────────────
+  void _onSearchChanged(String query) {
+    _searchDebounceTimer?.cancel();
+    if (query.isEmpty) {
+      setState(() {
+        _globalSearchResults = [];
+        _globalSearchLoading = false;
+      });
+      return;
+    }
+    setState(() => _globalSearchLoading = true);
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performGlobalSearch(query);
+    });
+  }
+
+  Future<void> _performGlobalSearch(String query) async {
+    if (!mounted) return;
+    try {
+      final result = await ref.read(cardsServiceProvider).searchCatalog(query);
+
+      final results = <dynamic>[];
+
+      // Add releases
+      for (final release in result.releases) {
+        results.add(('release', release));
+      }
+
+      // Add sets
+      for (final (set, release) in result.sets) {
+        results.add(('set', set, release));
+      }
+
+      // Add cards
+      for (final (card, set, release) in result.cards) {
+        results.add(('card', card, set, release));
+      }
+
+      if (mounted) {
+        setState(() {
+          _globalSearchResults = results;
+          _globalSearchLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _globalSearchLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Search error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildSearchMode(ColorScheme colors) {
+    return StickySubHeaderLayout(
+      useScaffold: false,
+      header: const SizedBox.shrink(),
+      subHeader: FilterSortActionBar<void>(
+        searchText: _globalSearchCtrl.text,
+        onSearchChanged: _onSearchChanged,
+        onSearchClear: () => setState(() {
+          _globalSearchCtrl.clear();
+          _globalSearchResults = [];
+        }),
+        searchHint: 'Search releases, sets, or cards…',
+      ),
+      label: const SizedBox.shrink(),
+      body: _globalSearchLoading
+          ? const Center(child: CardFanLoader())
+          : _globalSearchResults.isEmpty
+              ? Center(
+                  child: Text(
+                    _globalSearchCtrl.text.isEmpty
+                        ? 'Search releases, sets, or cards…'
+                        : 'No results found.',
+                    style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+                  ),
+                )
+              : ListView.separated(
+                  padding: EdgeInsets.zero,
+                  itemCount: _globalSearchResults.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final result = _globalSearchResults[i];
+                    if (result.$1 == 'release') {
+                      final release = result.$2 as ReleaseRecord;
+                      return ListTile(
+                        title: Text(
+                          release.displayName,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: release.sport != null ? Text(release.sport!) : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF3B82F6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Release', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.chevron_right, size: 18),
+                          ],
+                        ),
+                        onTap: () {
+                          setState(() => _mode = _CatalogMode.browse);
+                          _selectBrowseRelease(release);
+                        },
+                      );
+                    } else if (result.$1 == 'set') {
+                      final set = result.$2 as SetRecord;
+                      final release = result.$3 as ReleaseRecord;
+                      return ListTile(
+                        title: Text(
+                          set.name,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(release.displayName, style: const TextStyle(fontSize: 12)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B5CF6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Set', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.chevron_right, size: 18),
+                          ],
+                        ),
+                        onTap: () {
+                          setState(() {
+                            _mode = _CatalogMode.browse;
+                            _browseSelectedRelease = release;
+                          });
+                          _selectBrowseSet(set);
+                        },
+                      );
+                    } else if (result.$1 == 'card') {
+                      final card = result.$2 as MasterCard;
+                      final set = result.$3 as SetRecord;
+                      final release = result.$4 as ReleaseRecord;
+                      return ListTile(
+                        title: Text(
+                          card.displayName,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text('${release.displayName} • ${set.name}', style: const TextStyle(fontSize: 12)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Card', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.chevron_right, size: 18),
+                          ],
+                        ),
+                        onTap: () async {
+                          setState(() => _mode = _CatalogMode.browse);
+                          setState(() {
+                            _browseSelectedRelease = release;
+                            _selectedRelease = release;
+                          });
+                          await _selectBrowseSet(set);
+                          if (mounted) _selectCard(card);
+                        },
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+    );
+  }
+
+  Widget _buildModeTab(String label, bool active, ColorScheme colors, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: active ? colors.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: active ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))] : null,
+          ),
+          child: Text(label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                color: active ? colors.onSurface : colors.onSurface.withValues(alpha: 0.45)),
+          ),
+        ),
+      ),
     );
   }
 }

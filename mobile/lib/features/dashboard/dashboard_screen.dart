@@ -2,8 +2,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 
 const _burgundy = Color(0xFF800020);
 
@@ -37,6 +39,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final cardsAsync = ref.watch(userCardsProvider);
 
     return Scaffold(
+      appBar: AppBar(
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Dashboard',
+            style: AppFonts.appBarTitle,
+          ),
+        ),
+        actions: const [AppBarAvatar()],
+      ),
       body: cardsAsync.when(
         loading: () => _buildSkeleton(),
         error: (e, _) => Center(child: Text('Error: $e')),

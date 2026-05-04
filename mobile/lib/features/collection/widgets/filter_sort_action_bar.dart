@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/filter_pill.dart';
 
 typedef SortMenuBuilder<T> = List<PopupMenuItem<T>> Function(BuildContext);
 
@@ -46,8 +47,8 @@ class FilterSortActionBar<T> extends StatelessWidget {
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     hintText: searchHint,
-                    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+                    hintStyle: TextStyle(color: colors.outline, fontSize: 14),
+                    prefixIcon: Icon(Icons.search, size: 18, color: colors.outline),
                     suffixIcon: searchText!.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
@@ -59,11 +60,11 @@ class FilterSortActionBar<T> extends StatelessWidget {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: BorderSide(color: colors.outline),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: BorderSide(color: colors.outline),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -97,7 +98,7 @@ class FilterSortActionBar<T> extends StatelessWidget {
         // Row 2: Filters + Action
         if (filters.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: 0),
+            padding: EdgeInsets.only(top: 8),
             child: Row(
               children: [
                 Expanded(
@@ -107,19 +108,11 @@ class FilterSortActionBar<T> extends StatelessWidget {
                       children: [
                         for (final f in filters)
                           Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            
-                            child: FilterChip(
-                              label: DefaultTextStyle(
-                              style: TextStyle(
-                                color: Colors.black87,
-                                fontFamily: Theme.of(context).textTheme.labelSmall?.fontFamily,
-                                fontSize: 11,
-                              ),
-                                child: Text(f),
-                              ),
-                              selected: activeFilters.contains(f),
-                              onSelected: (_) => onFilterToggle?.call(f),
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterPill(
+                              label: f,
+                              isActive: activeFilters.contains(f),
+                              onTap: () => onFilterToggle?.call(f),
                             ),
                           ),
                       ],
@@ -127,7 +120,7 @@ class FilterSortActionBar<T> extends StatelessWidget {
                   ),
                 ),
                 if (actionButton != null) ...[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   actionButton!,
                 ],
               ],

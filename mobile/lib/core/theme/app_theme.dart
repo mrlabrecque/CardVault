@@ -3,14 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
+  // ── Primary colors ────────────────────────────────────────────
   static const primary       = Color(0xFF800020);
   static const primaryDark   = Color(0xFF5C0017);
   static const primaryLight  = Color(0xFFA0002A);
+
+  // ── Gray colors (light to dark) ───────────────────────────────
+  static const grayLight     = Color(0xFFE5E7EB); // Light borders, backgrounds
+  static const grayMedium    = Color(0xFF9CA3AF); // Secondary icons, muted text
+  static const grayDark      = Color(0xFF6B7280); // Primary muted text
+
+  // ── Other ─────────────────────────────────────────────────────
   static const surface       = Color(0xFFFFFFFF);
   static const surfaceElev   = Color(0xFFF8F9FA);
-  static const border        = Color(0xFFE0E0E0);
+  static const border        = grayLight;
   static const textMain      = Color(0xFF1F2937);
-  static const textMuted     = Color(0xFF6B7280);
+  static const textMuted     = grayDark;
 
   static ThemeData light() {
     final base = ColorScheme.fromSeed(
