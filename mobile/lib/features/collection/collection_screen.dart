@@ -125,7 +125,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         children: [
           // ── Tab toggle ───────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(

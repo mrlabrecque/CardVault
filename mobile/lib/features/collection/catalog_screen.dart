@@ -21,7 +21,7 @@ import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 import 'widgets/filter_sort_action_bar.dart';
 
-// Persisted navigation state
+// Persisted navigation state (browse only)
 class _CatalogNavState {
   final _CatalogStep step;
   final String browseSearchQuery;
@@ -110,12 +110,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   List<dynamic> _globalSearchResults = [];
   bool _globalSearchLoading = false;
   Timer? _searchDebounceTimer;
+  MasterCard? _searchSelectedCard;
+  SetRecord? _searchSelectedSet;
+  ReleaseRecord? _searchSelectedRelease;
+  List<SetParallel> _searchParallels = [];
+  SetParallel? _searchSelectedParallel;
+  String _searchParallelName = 'Base';
+  bool _searchParallelSelected = false;
+  bool _searchParallelsLoading = false;
 
   // ── Catalog step ─────────────────────────────────────────────
   _CatalogStep _catalogStep = _CatalogStep.browsing;
   String _catalogFilterYear = '';
   String _catalogFilterSport = '';
   final _browseSearchCtrl = TextEditingController();
+  bool _restoringState = true;
 
   // ── Browse step (release list) ───────────────────────────────
   List<ReleaseRecord> _browseResults = [];
@@ -177,9 +186,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      unawaited(_saveNavigationState());
-    }
+    // Removed - no longer saving search state
   }
 
   Future<void> _restoreNavigationState() async {
@@ -238,6 +245,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           } else {
             await _loadBrowseReleases(reset: true);
           }
+          if (mounted) {
+            setState(() => _restoringState = false);
+          }
           return;
         }
       }
@@ -246,6 +256,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
     if (mounted) {
       await _loadBrowseReleases(reset: true);
+      setState(() => _restoringState = false);
     }
   }
 
@@ -527,16 +538,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   }
 
   void _showAddCopySheet() {
+    final card = _mode == _CatalogMode.search ? _searchSelectedCard : _selectedCard;
+    final set = _mode == _CatalogMode.search ? _searchSelectedSet : _selectedSet;
+    final release = _mode == _CatalogMode.search ? _searchSelectedRelease : _selectedRelease;
+    final selectedParallel = _mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel;
+
     showAdaptiveSheet(
       context: context,
       builder: (_) => CardSheet(
         title: 'Add to Your Collection',
-        card: _selectedCard,
-        setName: _selectedSet?.name,
-        releaseName: _selectedRelease?.displayName,
+        card: card,
+        setName: set?.name,
+        releaseName: release?.displayName,
         showPricePaid: true,
         pricePaidCtrl: _pricePaidCtrl,
-        showSerialNumber: _selectedParallel?.serialMax != null,
+        showSerialNumber: selectedParallel?.serialMax != null,
         serialNumberCtrl: _serialNumberCtrl,
         showGraded: true,
         isGraded: _isGraded,
@@ -545,21 +561,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         onGradedChanged: (v) => setState(() => _isGraded = v),
         onGraderChanged: (g) => setState(() => _grader = g ?? 'PSA'),
         onSave: (data) async {
-          if (!_canSave) return 'Unable to save';
           setState(() => _saving = true);
           try {
+            final parallelName = _mode == _CatalogMode.search ? _searchParallelName : _parallelName;
             final form = AddCardFormData(
-              masterCardId: _selectedCard?.id,
-              setId: _selectedSet?.id,
-              player: _isNewCard ? _newPlayerCtrl.text.trim() : (_selectedCard?.player ?? ''),
-              cardNumber: _isNewCard ? (_newCardNumberCtrl.text.trim().isEmpty ? null : _newCardNumberCtrl.text.trim()) : null,
-              serialMax: _isNewCard ? int.tryParse(_newSerialMaxCtrl.text.trim()) : null,
-              isRookie: _isNewCard ? _newIsRookie : false,
-              isAuto: _isNewCard ? _newIsAuto : false,
-              isPatch: _isNewCard ? _newIsPatch : false,
-              isSSP: _isNewCard ? _newIsSSP : false,
-              parallelId: _selectedParallel?.id,
-              parallelName: _parallelName,
+              masterCardId: card?.id,
+              setId: set?.id,
+              player: card?.player ?? '',
+              cardNumber: card?.cardNumber,
+              serialMax: card?.serialMax,
+              isRookie: card?.isRookie ?? false,
+              isAuto: card?.isAuto ?? false,
+              isPatch: card?.isPatch ?? false,
+              isSSP: card?.isSSP ?? false,
+              parallelId: selectedParallel?.id,
+              parallelName: parallelName,
               pricePaid: double.tryParse(_pricePaidCtrl.text.trim()),
               serialNumber: _serialNumberCtrl.text.trim().isEmpty ? null : _serialNumberCtrl.text.trim(),
               isGraded: _isGraded,
@@ -595,25 +611,30 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   }
 
   Future<void> _addToWishlist() async {
+    final card = _mode == _CatalogMode.search ? _searchSelectedCard : _selectedCard;
+    final set = _mode == _CatalogMode.search ? _searchSelectedSet : _selectedSet;
+    final release = _mode == _CatalogMode.search ? _searchSelectedRelease : _selectedRelease;
+    final parallelName = _mode == _CatalogMode.search ? _searchParallelName : (_selectedParallel?.name ?? 'Base');
+
     try {
       await ref.read(wishlistProvider.notifier).add({
-        'player': (_selectedCard?.player ?? '').trim(),
-        'year': _selectedRelease?.year,
-        'set_name': _selectedRelease?.name,
-        'card_number': (_selectedCard?.cardNumber ?? '').trim(),
-        'parallel': (_selectedParallel?.name ?? 'Base').trim(),
-        'is_rookie': _selectedCard?.isRookie ?? false,
-        'is_auto': _selectedCard?.isAuto ?? false,
-        'is_patch': _selectedCard?.isPatch ?? false,
-        'serial_max': _selectedCard?.serialMax,
+        'player': (card?.player ?? '').trim(),
+        'year': release?.year,
+        'set_name': release?.name,
+        'card_number': (card?.cardNumber ?? '').trim(),
+        'parallel': parallelName,
+        'is_rookie': card?.isRookie ?? false,
+        'is_auto': card?.isAuto ?? false,
+        'is_patch': card?.isPatch ?? false,
+        'serial_max': card?.serialMax,
         'grade': null,
         'ebay_query': null,
         'exclude_terms': [],
         'target_price': null,
-        'master_card_id': _selectedCard?.id,
-        'release_id': _selectedRelease?.id,
-        'set_id': _selectedSet?.id,
-        'sport': _selectedRelease?.sport,
+        'master_card_id': card?.id,
+        'release_id': release?.id,
+        'set_id': set?.id,
+        'sport': release?.sport,
       });
       ref.invalidate(wishlistProvider);
       if (mounted) {
@@ -633,7 +654,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   // ── AppBar helpers ─────────────────────────────────────────────
 
   String _appBarTitle() {
-    if (_mode == _CatalogMode.search) return 'Catalog';
+    if (_mode == _CatalogMode.search) {
+      if (_searchSelectedCard != null && (_searchParallels.isEmpty || _searchParallelSelected)) {
+        return _searchSelectedCard!.player;
+      }
+      if (_searchSelectedCard != null && _searchParallels.isNotEmpty) {
+        return 'Select Parallel';
+      }
+      if (_searchSelectedSet != null) return _searchSelectedSet!.name;
+      if (_searchSelectedRelease != null) return _searchSelectedRelease!.displayName;
+      return 'Catalog';
+    }
     return switch (_catalogStep) {
       _CatalogStep.browsing  => 'Catalog',
       _CatalogStep.sets      => _browseSelectedRelease?.displayName ?? 'Sets',
@@ -645,6 +676,28 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   }
 
   void _handleStepBack() {
+    if (_mode == _CatalogMode.search) {
+      if (_searchParallelSelected && _searchParallels.isNotEmpty) {
+        // Going back from card details - show parallel selection again
+        setState(() {
+          _searchSelectedParallel = null;
+          _searchParallelName = 'Base';
+          _searchParallelSelected = false;
+        });
+      } else {
+        // Going back from card/set/release selection - clear everything
+        setState(() {
+          _searchSelectedCard = null;
+          _searchSelectedSet = null;
+          _searchSelectedRelease = null;
+          _searchParallels = [];
+          _searchSelectedParallel = null;
+          _searchParallelName = 'Base';
+          _searchParallelSelected = false;
+        });
+      }
+      return;
+    }
     switch (_catalogStep) {
       case _CatalogStep.browsing:
         context.pop();
@@ -705,7 +758,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        leading: _catalogStep == _CatalogStep.browsing && _mode == _CatalogMode.browse
+        leading: (_catalogStep == _CatalogStep.browsing && _mode == _CatalogMode.browse) ||
+                 (_mode == _CatalogMode.search && _searchSelectedCard == null)
             ? null
             : BackButton(onPressed: _handleStepBack),
         centerTitle: false,
@@ -719,7 +773,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         children: [
           // Mode tabs (Browse/Search)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
@@ -732,11 +786,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                     setState(() => _mode = _CatalogMode.browse);
                   }),
                   _buildModeTab('Search', _mode == _CatalogMode.search, colors, () {
-                    setState(() {
-                      _mode = _CatalogMode.search;
-                      _globalSearchCtrl.clear();
-                      _globalSearchResults = [];
-                    });
+                    setState(() => _mode = _CatalogMode.search);
                   }),
                 ],
               ),
@@ -744,16 +794,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           ),
           // Content
           Expanded(
-            child: _mode == _CatalogMode.browse
-                ? switch (_catalogStep) {
-                    _CatalogStep.browsing  => _buildBrowseView(colors),
-                    _CatalogStep.sets      => _buildSetsView(colors),
-                    _CatalogStep.card      => _buildCardSearchView(colors),
-                    _CatalogStep.parallel  => _buildParallelView(colors),
-                    _CatalogStep.detail    => _buildCardDetailView(colors),
-                    _CatalogStep.addCopy   => _buildYourCopyFormView(colors),
-                  }
-                : _buildSearchMode(colors),
+            child: _restoringState
+                ? const Center(child: CardFanLoader())
+                : _mode == _CatalogMode.browse
+                    ? switch (_catalogStep) {
+                        _CatalogStep.browsing  => _buildBrowseView(colors),
+                        _CatalogStep.sets      => _buildSetsView(colors),
+                        _CatalogStep.card      => _buildCardSearchView(colors),
+                        _CatalogStep.parallel  => _buildParallelView(colors),
+                        _CatalogStep.detail    => _buildCardDetailView(colors),
+                        _CatalogStep.addCopy   => _buildYourCopyFormView(colors),
+                      }
+                    : _buildSearchMode(colors),
           ),
         ],
       ),
@@ -1021,8 +1073,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                       _parallelName = p?.name ?? 'Base';
                       _catalogStep = _CatalogStep.detail;
                     });
-                    unawaited(_saveNavigationState());
-                  },
+                                },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Row(
@@ -1439,7 +1490,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           _globalSearchResults = results;
           _globalSearchLoading = false;
         });
-      }
+        }
     } catch (e) {
       if (mounted) {
         setState(() => _globalSearchLoading = false);
@@ -1450,7 +1501,172 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-  Widget _buildSearchMode(ColorScheme colors) {
+Widget _buildSearchMode(ColorScheme colors) {
+    // Show loader while parallels are loading
+    if (_searchSelectedCard != null && _searchParallelsLoading) {
+      return const Center(child: CardFanLoader());
+    }
+
+    // Show parallel selection if card selected but parallels exist and none chosen yet
+    if (_searchSelectedCard != null && _searchParallels.isNotEmpty && !_searchParallelSelected) {
+      return Column(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: _searchParallels.length + 1,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final isBase = i == 0;
+                final p = isBase ? null : _searchParallels[i - 1];
+                final label = isBase ? 'Base' : p!.name;
+                final attrs = isBase ? null : _parallelAttrPills(p!);
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _searchSelectedParallel = p;
+                        _searchParallelName = p?.name ?? 'Base';
+                        _searchParallelSelected = true;
+                      });
+                                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    label,
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (attrs != null) ...[
+                                  const SizedBox(width: 6),
+                                  attrs,
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Show card detail if a card is selected
+    if (_searchSelectedCard != null) {
+      return Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                CardDetailView(
+                  masterCard: _searchSelectedCard,
+                  setName: _searchSelectedSet?.name,
+                  releaseName: _searchSelectedRelease?.displayName,
+                  parallelName: _searchParallelName,
+                  year: _searchSelectedRelease?.year != null ? int.tryParse(_searchSelectedRelease!.year.toString()) : null,
+                  sport: _searchSelectedRelease?.sport,
+                  sections: const [CardDetailSection.hero],
+                ),
+                const SizedBox(height: 16),
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final userCardsAsync = ref.watch(userCardsProvider);
+                          final copyCount = userCardsAsync.whenData((allCards) {
+                            if (_searchSelectedCard == null) return 0;
+                            return allCards.where((card) {
+                              final cardMatch = card.masterCardId == _searchSelectedCard!.id;
+                              final cardNumberMatch = (card.cardNumber?.trim() ?? '') ==
+                                  (_searchSelectedCard!.cardNumber?.trim() ?? '');
+                              final parallelMatch = card.parallel.trim() == _searchParallelName.trim();
+                              return cardMatch && cardNumberMatch && parallelMatch;
+                            }).length;
+                          }).value ?? 0;
+
+                          return copyCount > 0
+                              ? FilledButton.icon(
+                                  onPressed: null,
+                                  icon: const Icon(Icons.check_circle, size: 18),
+                                  label: Text('In Collection ($copyCount)'),
+                                )
+                              : FilledButton(
+                                  onPressed: _showAddCopySheet,
+                                  child: const Text('Add to Collection'),
+                                );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final wishlistAsync = ref.watch(wishlistProvider);
+                          final isInWishlist = wishlistAsync.whenData((wishlist) {
+                            if (_searchSelectedCard == null) return false;
+                            return wishlist.any((item) {
+                              final playerMatch = (item.player?.trim().toLowerCase() ?? '') ==
+                                  (_searchSelectedCard!.player.trim().toLowerCase());
+                              final cardNumberMatch = (item.cardNumber?.trim() ?? '') ==
+                                  (_searchSelectedCard!.cardNumber?.trim() ?? '');
+                              final parallelMatch = (item.parallel?.trim() ?? 'Base') == _searchParallelName;
+                              return playerMatch && cardNumberMatch && parallelMatch;
+                            });
+                          }).value ?? false;
+
+                          return isInWishlist
+                              ? FilledButton.icon(
+                                  onPressed: null,
+                                  icon: const Icon(Icons.favorite, size: 18),
+                                  label: const Text('In Wishlist'),
+                                )
+                              : OutlinedButton.icon(
+                                  onPressed: _addToWishlist,
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.favorite_border, size: 18),
+                                  label: const Text('Add to Wishlist'),
+                                );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Comps section
+                if (_searchSelectedCard != null)
+                  CardCompsSection(
+                    masterCardId: _searchSelectedCard!.id,
+                    parallelName: _searchParallelName,
+                    initialGrade: 'Raw',
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Show search results list
     return StickySubHeaderLayout(
       useScaffold: false,
       header: const SizedBox.shrink(),
@@ -1505,8 +1721,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                           ],
                         ),
                         onTap: () {
-                          setState(() => _mode = _CatalogMode.browse);
-                          _selectBrowseRelease(release);
+                          setState(() {
+                            _searchSelectedRelease = release;
+                            _searchSelectedSet = null;
+                            _searchSelectedCard = null;
+                          });
                         },
                       );
                     } else if (result.$1 == 'set') {
@@ -1535,10 +1754,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                         ),
                         onTap: () {
                           setState(() {
-                            _mode = _CatalogMode.browse;
-                            _browseSelectedRelease = release;
+                            _searchSelectedRelease = release;
+                            _searchSelectedSet = set;
+                            _searchSelectedCard = null;
                           });
-                          _selectBrowseSet(set);
                         },
                       );
                     } else if (result.$1 == 'card') {
@@ -1567,13 +1786,32 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                           ],
                         ),
                         onTap: () async {
-                          setState(() => _mode = _CatalogMode.browse);
                           setState(() {
-                            _browseSelectedRelease = release;
-                            _selectedRelease = release;
+                            _searchSelectedRelease = release;
+                            _searchSelectedSet = set;
+                            _searchSelectedCard = card;
+                            _searchSelectedParallel = null;
+                            _searchParallelName = 'Base';
+                            _searchParallelSelected = false;
+                            _searchParallelsLoading = true;
                           });
-                          await _selectBrowseSet(set);
-                          if (mounted) _selectCard(card);
+                          unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
+                    
+                          // Load parallels for the set
+                          try {
+                            final parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
+                            if (mounted) {
+                              setState(() {
+                                _searchParallels = parallels;
+                                _searchParallelsLoading = false;
+                              });
+                                                    }
+                          } catch (_) {
+                            // Parallels load failed, continue without them
+                            if (mounted) {
+                              setState(() => _searchParallelsLoading = false);
+                            }
+                          }
                         },
                       );
                     }
