@@ -82,16 +82,7 @@ const _catalogYears = [
   '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017',
 ];
 
-const _catalogSports = [
-  ('Any sport', ''),
-  ('Baseball', 'Baseball'),
-  ('Basketball', 'Basketball'),
-  ('Football', 'Football'),
-  ('Soccer', 'Soccer'),
-  ('Hockey', 'Hockey'),
-];
-
-enum _CatalogStep { browsing, sets, card, parallel, detail, addCopy }
+enum _CatalogStep { sportPicker, browsing, sets, card, parallel, detail, addCopy }
 enum _CatalogMode { browse, search }
 
 class CatalogScreen extends ConsumerStatefulWidget {
@@ -120,7 +111,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   bool _searchParallelsLoading = false;
 
   // ── Catalog step ─────────────────────────────────────────────
-  _CatalogStep _catalogStep = _CatalogStep.browsing;
+  _CatalogStep _catalogStep = _CatalogStep.sportPicker;
   String _catalogFilterYear = '';
   String _catalogFilterSport = '';
   final _browseSearchCtrl = TextEditingController();
@@ -207,7 +198,14 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
           // Load data based on which step we're restoring to
           if (saved.step == _CatalogStep.browsing) {
-            await _loadBrowseReleases(reset: true);
+            // If restoring to browsing but no sport is selected, go back to sportPicker
+            if (saved.browseFilterSport.isEmpty) {
+              if (mounted) {
+                setState(() => _catalogStep = _CatalogStep.sportPicker);
+              }
+            } else {
+              await _loadBrowseReleases(reset: true);
+            }
           } else if ((saved.step == _CatalogStep.sets || saved.step == _CatalogStep.card || saved.step == _CatalogStep.parallel || saved.step == _CatalogStep.detail) &&
                      saved.selectedReleaseId != null) {
             // Reload the selected release and its sets
@@ -666,7 +664,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       return 'Catalog';
     }
     return switch (_catalogStep) {
-      _CatalogStep.browsing  => 'Catalog',
+      _CatalogStep.sportPicker => 'Catalog',
+      _CatalogStep.browsing  => _catalogFilterSport.isNotEmpty ? _catalogFilterSport : 'Sports',
       _CatalogStep.sets      => _browseSelectedRelease?.displayName ?? 'Sets',
       _CatalogStep.card      => _selectedSet?.name ?? 'Find a Card',
       _CatalogStep.parallel  => _selectedCard?.player ?? 'Select Parallel',
@@ -699,8 +698,14 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       return;
     }
     switch (_catalogStep) {
-      case _CatalogStep.browsing:
+      case _CatalogStep.sportPicker:
         context.pop();
+      case _CatalogStep.browsing:
+        setState(() {
+          _catalogStep = _CatalogStep.sportPicker;
+          _catalogFilterSport = '';
+          _browseResults = [];
+        });
       case _CatalogStep.sets:
         setState(() {
           _catalogStep = _CatalogStep.browsing;
@@ -758,7 +763,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        leading: (_catalogStep == _CatalogStep.browsing && _mode == _CatalogMode.browse) ||
+        leading: (_catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse) ||
                  (_mode == _CatalogMode.search && _searchSelectedCard == null)
             ? null
             : BackButton(onPressed: _handleStepBack),
@@ -798,6 +803,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                 ? const Center(child: CardFanLoader())
                 : _mode == _CatalogMode.browse
                     ? switch (_catalogStep) {
+                        _CatalogStep.sportPicker => _buildSportPickerView(colors),
                         _CatalogStep.browsing  => _buildBrowseView(colors),
                         _CatalogStep.sets      => _buildSetsView(colors),
                         _CatalogStep.card      => _buildCardSearchView(colors),
@@ -830,52 +836,24 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: AdaptiveDropdown<String>(
-                  value: _catalogFilterYear,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
-                    ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
-                  ],
-                  onChanged: (v) {
-                    setState(() {
-                      _catalogFilterYear = v ?? '';
-                      _browseSearchCtrl.clear();
-                    });
-                    _loadBrowseReleases(reset: true);
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: AdaptiveDropdown<String>(
-                  value: _catalogFilterSport,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  ),
-                  items: _catalogSports.map((s) => DropdownMenuItem(
-                    value: s.$2,
-                    child: Text(s.$1, style: const TextStyle(fontSize: 13)),
-                  )).toList(),
-                  onChanged: (v) {
-                    setState(() {
-                      _catalogFilterSport = v ?? '';
-                      _browseSearchCtrl.clear();
-                    });
-                    _loadBrowseReleases(reset: true);
-                  },
-                ),
-              ),
+          child: AdaptiveDropdown<String>(
+            value: _catalogFilterYear,
+            decoration: InputDecoration(
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            ),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
+              ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
             ],
+            onChanged: (v) {
+              setState(() {
+                _catalogFilterYear = v ?? '';
+                _browseSearchCtrl.clear();
+              });
+              _loadBrowseReleases(reset: true);
+            },
           ),
         ),
         // Search bar
@@ -946,6 +924,81 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                         );
                       },
                     ),
+        ),
+      ],
+    );
+  }
+
+  // ── Sport picker view ─────────────────────────────────────────
+
+  Widget _buildSportPickerView(ColorScheme colors) {
+    final sports = [
+      ('Baseball', 'Baseball', '⚾', Color(0xFFB45309)),
+      ('Basketball', 'Basketball', '🏀', Color(0xFFF97316)),
+      ('Football', 'Football', '🏈', Color(0xFF8B5CF6)),
+      ('Soccer', 'Soccer', '⚽', Color(0xFF16A34A)),
+      ('Hockey', 'Hockey', '🏒', Color(0xFF2563EB)),
+    ];
+
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+            child: Column(
+              children: [
+                // 2-column grid of sports
+                GridView.count(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: 1.2,
+                  children: sports.map((sport) {
+                    final (name, value, emoji, tintColor) = sport;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _catalogFilterSport = value;
+                          _catalogFilterYear = '';
+                          _browseSearchCtrl.clear();
+                        });
+                        _loadBrowseReleases(reset: true);
+                        setState(() => _catalogStep = _CatalogStep.browsing);
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: tintColor.withValues(alpha: 0.15),
+                          border: Border.all(
+                            color: tintColor.withValues(alpha: 0.3),
+                            width: 1.5,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(emoji, style: const TextStyle(fontSize: 48)),
+                            const SizedBox(height: 12),
+                            Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: colors.onSurface,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );

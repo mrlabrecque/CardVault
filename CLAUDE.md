@@ -303,6 +303,11 @@ Running list of small things to implement that aren't full features:
 - [ ] Show card image in add-card-dialog search results dropdown
 - [ ] Empty `image_url` fallback in item-detail — show a nicer placeholder than just the sport emoji
 - [ ] Password login option alongside magic link — magic link clicks open in the browser breaking the PWA experience. Add email + password sign-in (Supabase `signInWithPassword`) as the primary flow; keep magic link as a fallback. Also needs a "Set Password" flow for existing magic-link-only users (send password reset email via `resetPasswordForEmail`).
+- [ ] Fix market movers page
+- [ ] Make card details show comps and for sale as segmentedLabels
+- [x] On scan card, ensure you can actually snap the photo. When it identifies, show the card detail with the parallel selected
+- [ ] Revamp the bulk add screen
+- [ ] Revisit the Collection importer
 
 ---
 

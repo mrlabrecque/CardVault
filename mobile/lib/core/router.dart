@@ -12,6 +12,7 @@ import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
 import '../features/scan/scan_screen.dart';
+import '../features/scan/scan_result_screen.dart';
 import '../features/tools/tools_screen.dart';
 import '../features/collection/catalog_screen.dart';
 import '../features/collection/bulk_add_screen.dart';
@@ -58,6 +59,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/grading', pageBuilder: (context, state) => _page(const GradingScreen())),
           GoRoute(path: '/wishlist', pageBuilder: (context, state) => _page(const WishlistScreen())),
           GoRoute(path: '/scan', pageBuilder: (context, state) => _page(const ScanScreen())),
+          GoRoute(
+            path: '/scan/result',
+            pageBuilder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              final detection = extra?['detection'];
+              final sport = extra?['sport'] as String? ?? 'baseball';
+              if (detection == null) return _page(const ScanScreen());
+              return _page(ScanResultScreen(detection: detection, sport: sport));
+            },
+          ),
           GoRoute(path: '/market-movers', pageBuilder: (context, state) => _page(const MarketMoversScreen())),
           GoRoute(path: '/admin/catalog', pageBuilder: (_, _) => _page(const AdminCatalogScreen())),
           GoRoute(path: '/admin/pending-parallels', pageBuilder: (_, _) => _page(const PendingParallelsScreen())),
