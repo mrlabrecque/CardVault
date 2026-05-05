@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/filter_pill.dart';
 
 typedef SortMenuBuilder<T> = List<PopupMenuItem<T>> Function(BuildContext);
@@ -42,17 +44,34 @@ class FilterSortActionBar<T> extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: TextField(
+                child: AdaptiveTextField(
                   onChanged: onSearchChanged!,
+                  placeholder: searchHint,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                  suffixIcon: searchText!.isNotEmpty
+                      ? GestureDetector(
+                          onTap: onSearchClear!,
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(Icons.clear, size: 16),
+                          ),
+                        )
+                      : null,
+                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
+                    labelText: searchHint == null || searchHint!.isEmpty ? 'Search' : searchHint,
                     hintText: searchHint,
                     hintStyle: TextStyle(color: colors.onSurface.withValues(alpha: 0.4), fontSize: 14),
                     prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
                     suffixIcon: searchText!.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: onSearchClear!,
+                        ? GestureDetector(
+                            onTap: onSearchClear!,
+                            child: const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(Icons.clear, size: 16),
+                            ),
                           )
                         : null,
                     filled: true,

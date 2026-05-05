@@ -63,6 +63,7 @@ Future<T?> showAdaptiveSheet<T>({
 }) async {
   return showModalBottomSheet<T>(
     context: context,
+    useRootNavigator: true,
     backgroundColor: Colors.white,
     useSafeArea: false,
     isScrollControlled: true,

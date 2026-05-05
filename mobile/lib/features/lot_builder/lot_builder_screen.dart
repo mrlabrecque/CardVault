@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
@@ -120,82 +121,17 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final basketLabel = basketCount > 0 ? 'Basket ($basketCount)' : 'Basket';
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Builder(builder: (context) {
-            return Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  _TabBtn(label: 'Browse', active: !showBasket, onTap: () => onToggle(false)),
-                  _TabBtn(
-                    label: 'Basket',
-                    active: showBasket,
-                    badge: basketCount > 0 ? basketCount : null,
-                    onTap: () => onToggle(true),
-                  ),
-                ],
-              ),
+            return AdaptiveSegmentedControl(
+              labels: ['Browse', basketLabel],
+              selectedIndex: showBasket ? 1 : 0,
+              onValueChanged: (index) => onToggle(index == 1),
+              color: Theme.of(context).colorScheme.primary,
             );
           }),
-    );
-  }
-}
-
-class _TabBtn extends StatelessWidget {
-  const _TabBtn({required this.label, required this.active, required this.onTap, this.badge});
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final int? badge;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: active ? colors.surface : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-            boxShadow: active
-                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: active ? colors.onSurface : colors.onSurface.withValues(alpha: 0.45),
-                ),
-              ),
-              if (badge != null) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text('$badge', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -509,18 +445,9 @@ class _BasketView extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              OutlinedButton(
+              AdaptiveButton.child(
                 onPressed: notifier.clear,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF9CA3AF),
-                  side: const BorderSide(color: Color(0xFFE5E7EB)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                style: AdaptiveButtonStyle.bordered,
                 child: const Text(
                   'Clear',
                   style: TextStyle(fontSize: 12),
@@ -596,18 +523,10 @@ class _BasketCardRow extends StatelessWidget {
                 SizedBox(
                   width: 28,
                   height: 28,
-                  child: OutlinedButton(
+                  child: AdaptiveButton.child(
                     onPressed: onRemove,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFF87171),
-                      side: const BorderSide(color: Color(0xFFFECACA)),
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(28, 28),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+                    style: AdaptiveButtonStyle.bordered,
+                    color: const Color(0xFFF87171),
                     child: const Icon(Icons.close, size: 14),
                   ),
                 ),

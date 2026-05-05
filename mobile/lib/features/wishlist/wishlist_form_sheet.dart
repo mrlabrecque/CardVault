@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/models/wishlist_item.dart';
 import 'wishlist_screen.dart';
 
@@ -141,56 +144,12 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final isEditing = widget.editing != null;
-    return AnimatedPadding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 4),
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: colors.outline.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
-              child: Row(
-                children: [
-                  Text(
-                    isEditing ? 'Edit Wishlist Item' : 'Add to Wishlist',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.onSurface),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.close, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    return ModalSheetScaffold(
+      title: isEditing ? 'Edit Wishlist Item' : 'Add to Wishlist',
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
                     if (_error != null) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -207,33 +166,82 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    _label('Player', required: true),
-                    _field(_playerCtrl, colors: colors, hint: 'e.g. Connor Bedard', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                    _field(
+                      _playerCtrl,
+                      colors: colors,
+                      label: 'Player *',
+                      hint: 'e.g. Connor Bedard',
+                      onChanged: (_) {
+                        setState(() {});
+                        _rebuildQuery();
+                      },
+                    ),
                     const SizedBox(height: 16),
                     Row(children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        _label('Year'),
-                        _field(_yearCtrl, colors: colors, hint: '2024', numeric: true, onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(
+                          _yearCtrl,
+                          colors: colors,
+                          label: 'Year',
+                          hint: '2024',
+                          numeric: true,
+                          onChanged: (_) {
+                            setState(() {});
+                            _rebuildQuery();
+                          },
+                        ),
                       ])),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        _label('Card #'),
-                        _field(_cardNumCtrl, colors: colors, hint: 'e.g. 201', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(
+                          _cardNumCtrl,
+                          colors: colors,
+                          label: 'Card #',
+                          hint: 'e.g. 201',
+                          onChanged: (_) {
+                            setState(() {});
+                            _rebuildQuery();
+                          },
+                        ),
                       ])),
                     ]),
                     const SizedBox(height: 16),
-                    _label('Set'),
-                    _field(_setCtrl, colors: colors, hint: 'e.g. Upper Deck Series 1', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                    _field(
+                      _setCtrl,
+                      colors: colors,
+                      label: 'Set',
+                      hint: 'e.g. Upper Deck Series 1',
+                      onChanged: (_) {
+                        setState(() {});
+                        _rebuildQuery();
+                      },
+                    ),
                     const SizedBox(height: 16),
                     Row(children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        _label('Parallel'),
-                        _field(_parallelCtrl, colors: colors, hint: 'e.g. Silver', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(
+                          _parallelCtrl,
+                          colors: colors,
+                          label: 'Parallel',
+                          hint: 'e.g. Silver',
+                          onChanged: (_) {
+                            setState(() {});
+                            _rebuildQuery();
+                          },
+                        ),
                       ])),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        _label('Grade'),
-                        _field(_gradeCtrl, colors: colors, hint: 'e.g. PSA 10', onChanged: (_) { setState(() {}); _rebuildQuery(); }),
+                        _field(
+                          _gradeCtrl,
+                          colors: colors,
+                          label: 'Grade',
+                          hint: 'e.g. PSA 10',
+                          onChanged: (_) {
+                            setState(() {});
+                            _rebuildQuery();
+                          },
+                        ),
                       ])),
                     ]),
                     const SizedBox(height: 16),
@@ -250,17 +258,19 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
                       const Spacer(),
                       Text('/', style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.4), fontWeight: FontWeight.w600)),
                       const SizedBox(width: 6),
-                      SizedBox(width: 64, child: _field(_serialMaxCtrl, colors: colors, hint: '99', numeric: true,
+                      SizedBox(width: 64, child: _field(_serialMaxCtrl, colors: colors, label: 'Serial', hint: '99', numeric: true,
                           onChanged: (_) { setState(() {}); _rebuildQuery(); })),
                     ]),
                     const SizedBox(height: 16),
-                    Row(children: [
-                      Text('EBAY SEARCH QUERY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.5)),
-                      const SizedBox(width: 6),
-                      Text('auto-built · editable', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.3))),
-                    ]),
-                    const SizedBox(height: 6),
-                    _field(_queryCtrl, colors: colors, hint: 'e.g. Connor Bedard RC PSA 10',
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'auto-built · editable',
+                        style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.3)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _field(_queryCtrl, colors: colors, label: 'eBay Search Query', hint: 'e.g. Connor Bedard RC PSA 10',
                         onChanged: (_) => setState(() => _queryEdited = true)),
                     const SizedBox(height: 16),
                     Row(children: [
@@ -298,8 +308,11 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
                             ),
                           SizedBox(
                             width: double.infinity,
-                            child: TextField(
+                            child: AdaptiveTextField(
                               controller: _excludeCtrl,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              placeholder: _excludeTerms.isEmpty ? 'e.g. draft picks' : '',
+                              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                               decoration: InputDecoration(
                                 border: InputBorder.none,
                                 hintText: _excludeTerms.isEmpty ? 'e.g. draft picks' : '',
@@ -315,11 +328,14 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _label('Target Price'),
-                    TextField(
+                    AdaptiveTextField(
                       controller: _targetPriceCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      placeholder: '0.00',
+                      cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                       decoration: InputDecoration(
+                        labelText: 'Target Price',
                         hintText: '0.00',
                         prefixText: '\$ ',
                         hintStyle: TextStyle(color: colors.onSurface.withValues(alpha: 0.3), fontSize: 14),
@@ -336,14 +352,11 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
                       ),
                       style: TextStyle(fontSize: 14, color: colors.onSurface),
                     ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-            ),
+            const SizedBox(height: 12),
             Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+            const SizedBox(height: 12),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              padding: EdgeInsets.zero,
               child: Row(children: [
                 Expanded(
                   child: GestureDetector(
@@ -386,7 +399,6 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -402,13 +414,17 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, {ColorScheme? colors, String? hint, bool numeric = false, void Function(String)? onChanged}) {
+  Widget _field(TextEditingController ctrl, {ColorScheme? colors, String? label, String? hint, bool numeric = false, void Function(String)? onChanged}) {
     final colorScheme = colors ?? Theme.of(context).colorScheme;
-    return TextField(
+    return AdaptiveTextField(
       controller: ctrl,
       keyboardType: numeric ? TextInputType.number : TextInputType.text,
       onChanged: onChanged,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      placeholder: hint,
+      cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
       decoration: InputDecoration(
+        labelText: label,
         hintText: hint,
         hintStyle: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.3), fontSize: 14),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

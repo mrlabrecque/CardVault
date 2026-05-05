@@ -20,6 +20,21 @@ class AppTheme {
   static const textMain      = Color(0xFF1F2937);
   static const textMuted     = grayDark;
 
+  static BoxDecoration cupertinoTextFieldDecoration(
+    BuildContext context, {
+    double radius = 12,
+    bool enabled = true,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return BoxDecoration(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: colors.outline,
+      ),
+    );
+  }
+
   static ThemeData light() {
     final base = ColorScheme.fromSeed(
       seedColor: primary,

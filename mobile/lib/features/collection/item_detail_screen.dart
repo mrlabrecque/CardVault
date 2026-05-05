@@ -3,7 +3,9 @@ import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/user_card.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/card_detail_view.dart';
@@ -28,14 +30,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
   late bool _weeklyPriceCheck = widget.card.weeklyPriceCheck;
   late bool _isGraded = widget.card.isGraded;
   String? _selectedParallelId;   // null = Base, '__other__' = custom
-  late String _selectedParallelName = widget.card.parallel;
   bool get _isOtherParallel => _selectedParallelId == '__other__';
-
-  void _startEdit() => setState(() {
-    _editing = true;
-    _selectedParallelId = widget.card.parallelId;
-    _selectedParallelName = widget.card.parallel;
-  });
 
   void _cancelEdit() {
     _pricePaidCtrl.text = widget.card.pricePaid?.toStringAsFixed(2) ?? '';
@@ -47,7 +42,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
       _editing = false;
       _isGraded = widget.card.isGraded;
       _selectedParallelId = widget.card.parallelId;
-      _selectedParallelName = widget.card.parallel;
     });
   }
 
@@ -56,9 +50,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
       _selectedParallelId = id;
       _otherParallelCtrl.text = '';
       if (id == null) {
-        _selectedParallelName = 'Base';
       } else if (id != '__other__') {
-        _selectedParallelName = parallels.firstWhere((p) => p.id == id).name;
       }
     });
   }
@@ -100,10 +92,225 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
 
   static const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
-  Widget _parallelFallback() => TextField(
+  Future<void> _openEditSheet() async {
+    final pricePaidCtrl = TextEditingController(text: widget.card.pricePaid?.toStringAsFixed(2) ?? '');
+    final serialCtrl = TextEditingController(text: widget.card.serialNumber ?? '');
+    final graderCtrl = TextEditingController(text: widget.card.grader ?? 'PSA');
+    final gradeCtrl = TextEditingController(text: widget.card.grade ?? '');
+    final otherParallelCtrl = TextEditingController();
+    var isGraded = widget.card.isGraded;
+    var selectedParallelId = widget.card.parallelId;
+    var saving = false;
+
+    List<SetParallel> parallels = const [];
+    if (widget.card.setId != null) {
+      try {
+        parallels = await ref.read(cardsServiceProvider).getParallels(widget.card.setId!);
+      } catch (_) {
+        parallels = const [];
+      }
+    }
+    if (!mounted) return;
+
+    await showAdaptiveSheet(
+      context: context,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final isOtherParallel = selectedParallelId == '__other__';
+
+            Future<void> saveFromSheet() async {
+              setSheetState(() => saving = true);
+              try {
+                final parallelName = isOtherParallel
+                    ? (otherParallelCtrl.text.trim().isEmpty ? 'Base' : otherParallelCtrl.text.trim())
+                    : (selectedParallelId == null ? 'Base' : null);
+                await ref.read(cardsServiceProvider).updateCard(widget.card.id, {
+                  'price_paid': double.tryParse(pricePaidCtrl.text),
+                  'serial_number': serialCtrl.text.isEmpty ? null : serialCtrl.text,
+                  'is_graded': isGraded,
+                  'grader': isGraded ? graderCtrl.text : null,
+                  'grade_value': isGraded ? gradeCtrl.text : null,
+                  'parallel_id': isOtherParallel ? null : selectedParallelId,
+                  'parallel_name': parallelName,
+                });
+                ref.invalidate(userCardsProvider);
+                if (mounted) {
+                  Navigator.of(sheetContext).pop();
+                  AdaptiveSnackBar.show(context, message: 'Card updated.', type: AdaptiveSnackBarType.success);
+                }
+              } catch (e) {
+                if (mounted) {
+                  AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
+                }
+              } finally {
+                if (mounted) {
+                  setSheetState(() => saving = false);
+                }
+              }
+            }
+
+            return ModalSheetScaffold(
+              title: 'Edit Your Copy',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                      if (parallels.isNotEmpty)
+                        AdaptiveDropdown<String?>(
+                          value: selectedParallelId,
+                          decoration: const InputDecoration(labelText: 'Parallel', border: OutlineInputBorder()),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('Base')),
+                            ...parallels.map((p) => DropdownMenuItem(
+                                  value: p.id,
+                                  child: Text('${p.name}${p.serialMax != null ? ' /${p.serialMax}' : ''}'),
+                                )),
+                            const DropdownMenuItem(value: '__other__', child: Text('Other…')),
+                          ],
+                          onChanged: (id) => setSheetState(() {
+                            selectedParallelId = id;
+                            otherParallelCtrl.text = '';
+                          }),
+                        )
+                      else
+                        AdaptiveTextField(
+                          controller: otherParallelCtrl,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          placeholder: 'Parallel',
+                          cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
+                          decoration: const InputDecoration(labelText: 'Parallel', border: OutlineInputBorder()),
+                        ),
+                      if (isOtherParallel) ...[
+                        const SizedBox(height: 12),
+                        AdaptiveTextField(
+                          controller: otherParallelCtrl,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          placeholder: 'Parallel name',
+                          cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
+                          decoration: const InputDecoration(labelText: 'Parallel name', border: OutlineInputBorder()),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      AdaptiveTextField(
+                        controller: pricePaidCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: 'Price Paid',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
+                        decoration: const InputDecoration(
+                          labelText: 'Price Paid',
+                          prefixText: '\$',
+                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.white,
+                        ),
+                      ),
+                      if (widget.card.serialMax != null) ...[
+                        const SizedBox(height: 12),
+                        AdaptiveTextField(
+                          controller: serialCtrl,
+                          keyboardType: TextInputType.number,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          placeholder: 'Serial #',
+                          cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
+                          decoration: InputDecoration(
+                            labelText: 'Serial # (your copy, e.g. 34 of /${widget.card.serialMax})',
+                            border: const OutlineInputBorder(),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text('Graded', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                          const Spacer(),
+                          AdaptiveSwitch(
+                            value: isGraded,
+                            onChanged: (v) => setSheetState(() => isGraded = v),
+                            activeColor: const Color(0xFF800020),
+                          ),
+                        ],
+                      ),
+                      if (isGraded) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: AdaptiveDropdown<String>(
+                                value: graderCtrl.text.isEmpty ? 'PSA' : graderCtrl.text,
+                                decoration: const InputDecoration(
+                                  labelText: 'Grader',
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                                items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                                onChanged: (v) => setSheetState(() => graderCtrl.text = v ?? 'PSA'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: AdaptiveTextField(
+                                controller: gradeCtrl,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                placeholder: 'Grade',
+                                cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
+                                decoration: const InputDecoration(
+                                  labelText: 'Grade',
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AdaptiveButton(
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              label: 'Cancel',
+                              style: AdaptiveButtonStyle.bordered,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: AdaptiveButton(
+                              onPressed: saving ? null : saveFromSheet,
+                              label: saving ? 'Saving…' : 'Save',
+                              style: AdaptiveButtonStyle.filled,
+                              color: const Color(0xFF800020),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+            );
+          },
+        );
+      },
+    );
+
+    pricePaidCtrl.dispose();
+    serialCtrl.dispose();
+    graderCtrl.dispose();
+    gradeCtrl.dispose();
+    otherParallelCtrl.dispose();
+  }
+
+  Widget _parallelFallback() => AdaptiveTextField(
     controller: _otherParallelCtrl,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    placeholder: 'Parallel',
+    cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
     decoration: const InputDecoration(labelText: 'Parallel', border: OutlineInputBorder()),
-    onChanged: (v) => setState(() => _selectedParallelName = v.trim().isEmpty ? 'Base' : v.trim()),
+    onChanged: (_) => setState(() {}),
   );
 
   Widget _parallelDropdown(List<SetParallel> parallels) => Column(
@@ -125,10 +332,13 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
       ),
       if (_isOtherParallel) ...[
         const SizedBox(height: 12),
-        TextField(
+        AdaptiveTextField(
           controller: _otherParallelCtrl,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          placeholder: 'Parallel name',
+          cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
           decoration: const InputDecoration(labelText: 'Parallel name', border: OutlineInputBorder()),
-          onChanged: (v) => setState(() => _selectedParallelName = v.trim().isEmpty ? 'Base' : v.trim()),
+          onChanged: (_) => setState(() {}),
         ),
       ],
     ],
@@ -255,7 +465,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               ),
               if (!_editing)
                 TextButton.icon(
-                  onPressed: _startEdit,
+                  onPressed: _openEditSheet,
                   icon: const Icon(Icons.edit_outlined, size: 14),
                   label: const Text('Edit'),
                   style: TextButton.styleFrom(foregroundColor: colors.onSurface.withValues(alpha: 0.5), visualDensity: VisualDensity.compact),
@@ -276,9 +486,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               _parallelFallback(),
             const SizedBox(height: 12),
             // Edit form
-            TextField(
+            AdaptiveTextField(
               controller: _pricePaidCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              placeholder: 'Price Paid',
+              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
               decoration: const InputDecoration(
                 labelText: 'Price Paid',
                 prefixText: '\$',
@@ -289,9 +502,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
             ),
             if (card.serialMax != null) ...[
               const SizedBox(height: 12),
-              TextField(
+              AdaptiveTextField(
                 controller: _serialCtrl,
                 keyboardType: TextInputType.number,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                placeholder: 'Serial #',
+                cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                 decoration: InputDecoration(
                   labelText: 'Serial # (your copy, e.g. 34 of /${card.serialMax})',
                   border: const OutlineInputBorder(),
@@ -306,29 +522,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Graded', style: TextStyle(color: colors.onSurface.withValues(alpha: 0.6))),
-                GestureDetector(
-                  onTap: () => setState(() => _isGraded = !_isGraded),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 44, height: 24,
-                    decoration: BoxDecoration(
-                      color: _isGraded ? const Color(0xFF800020) : Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: _isGraded ? const Color(0xFF800020) : colors.outline),
-                    ),
-                    child: AnimatedAlign(
-                      duration: const Duration(milliseconds: 200),
-                      alignment: _isGraded ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.all(3),
-                        width: 18, height: 18,
-                        decoration: BoxDecoration(
-                          color: _isGraded ? Colors.white : colors.outline,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
+                Switch.adaptive(
+                  value: _isGraded,
+                  activeColor: const Color(0xFF800020),
+                  onChanged: (value) => setState(() => _isGraded = value),
                 ),
               ],
             ),
@@ -352,8 +549,11 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextField(
+                    child: AdaptiveTextField(
                       controller: _gradeCtrl,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      placeholder: 'Grade',
+                      cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                       decoration: const InputDecoration(
                         labelText: 'Grade',
                         border: OutlineInputBorder(),
@@ -369,20 +569,19 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: AdaptiveButton(
                     onPressed: _cancelEdit,
-                    style: OutlinedButton.styleFrom(backgroundColor: Colors.white),
-                    child: const Text('Cancel'),
+                    label: 'Cancel',
+                    style: AdaptiveButtonStyle.bordered,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: FilledButton(
+                  child: AdaptiveButton(
                     onPressed: _saving ? null : _save,
-                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFF800020)),
-                    child: _saving
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Save'),
+                    label: _saving ? 'Saving…' : 'Save',
+                    style: AdaptiveButtonStyle.filled,
+                    color: const Color(0xFF800020),
                   ),
                 ),
               ],
@@ -544,26 +743,10 @@ class _PriceCheckToggle extends StatelessWidget {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () => onChanged(!enabled),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 44, height: 24,
-              decoration: BoxDecoration(
-                color: enabled ? const Color(0xFF16A34A) : colors.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: enabled ? const Color(0xFF16A34A) : colors.outline.withValues(alpha: 0.3)),
-              ),
-              child: AnimatedAlign(
-                duration: const Duration(milliseconds: 200),
-                alignment: enabled ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.all(3),
-                  width: 18, height: 18,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                ),
-              ),
-            ),
+          Switch.adaptive(
+            value: enabled,
+            activeColor: const Color(0xFF16A34A),
+            onChanged: onChanged,
           ),
         ],
       ),

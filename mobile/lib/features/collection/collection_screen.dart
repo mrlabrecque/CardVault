@@ -126,16 +126,11 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           // ── Tab toggle ───────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: colors.onSurface.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(children: [
-                _tab('Cards', !_showSets, colors, () => setState(() => _showSets = false)),
-                _tab('Sets',   _showSets, colors, () => setState(() => _showSets = true)),
-              ]),
+            child: AdaptiveSegmentedControl(
+              labels: const ['Cards', 'Sets'],
+              selectedIndex: _showSets ? 1 : 0,
+              onValueChanged: (index) => setState(() => _showSets = index == 1),
+              color: colors.primary,
             ),
           ),
 
@@ -308,28 +303,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       const SizedBox(width: 8),
       Text(label),
     ]);
-  }
-
-  Widget _tab(String label, bool active, ColorScheme colors, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: active ? colors.surface : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-            boxShadow: active ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))] : null,
-          ),
-          child: Text(label,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                color: active ? colors.onSurface : colors.onSurface.withValues(alpha: 0.45)),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _sortItem(IconData icon, String label, bool active, ColorScheme colors) {

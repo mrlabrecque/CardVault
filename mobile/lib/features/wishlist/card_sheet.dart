@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/widgets/modal_sheet_scaffold.dart';
 import 'wishlist_card_preview.dart';
 
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
@@ -109,50 +112,14 @@ class _CardSheetState extends State<CardSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return AnimatedPadding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      child: Material(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        child: Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: DefaultTextStyle(
-            style: const TextStyle(color: Colors.black87),
-            child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return ModalSheetScaffold(
+      title: widget.title,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: DefaultTextStyle(
+        style: const TextStyle(color: Colors.black87),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: 12, bottom: 16),
-                decoration: BoxDecoration(
-                  color: colors.outline.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Text(
-                  widget.title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                child: Column(
-                  children: [
                     if (_error != null) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -204,9 +171,12 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 16),
                     ],
                     if (widget.showPricePaid) ...[
-                      TextField(
+                      AdaptiveTextField(
                         controller: widget.pricePaidCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: '\$0.00',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: InputDecoration(
                           labelText: 'Price Paid',
                           hintText: '\$0.00',
@@ -217,8 +187,11 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 16),
                     ],
                     if (widget.showSerialNumber) ...[
-                      TextField(
+                      AdaptiveTextField(
                         controller: widget.serialNumberCtrl,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: 'e.g., 45 (from 45/99)',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: InputDecoration(
                           labelText: 'Serial #',
                           hintText: 'e.g., 45 (from 45/99)',
@@ -229,8 +202,11 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 16),
                     ],
                     if (widget.showWatchWords) ...[
-                      TextField(
+                      AdaptiveTextField(
                         controller: widget.watchWordsCtrl,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: 'e.g. draft picks',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: InputDecoration(
                           labelText: 'Excluded Words',
                           hintText: 'e.g. draft picks',
@@ -272,9 +248,12 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 16),
                     ],
                     if (widget.showTargetPrice) ...[
-                      TextField(
+                      AdaptiveTextField(
                         controller: widget.targetPriceCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: '\$0.00',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: InputDecoration(
                           labelText: 'Target Price',
                           hintText: '\$0.00',
@@ -285,11 +264,14 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 12),
                     ],
                     if (widget.showGraded) ...[
-                      SwitchListTile(
-                        title: const Text('Graded?'),
-                        value: widget.isGraded,
-                        onChanged: widget.onGradedChanged,
-                        contentPadding: EdgeInsets.zero,
+                      Row(
+                        children: [
+                          const Expanded(child: Text('Graded?')),
+                          AdaptiveSwitch(
+                            value: widget.isGraded,
+                            onChanged: widget.onGradedChanged,
+                          ),
+                        ],
                       ),
                       if (widget.isGraded) ...[
                         const SizedBox(height: 12),
@@ -309,8 +291,11 @@ class _CardSheetState extends State<CardSheet> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: TextField(
+                              child: AdaptiveTextField(
                                 controller: widget.gradeValueCtrl,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                placeholder: '10',
+                                cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                                 decoration: InputDecoration(
                                   labelText: 'Grade',
                                   hintText: '10',
@@ -323,31 +308,25 @@ class _CardSheetState extends State<CardSheet> {
                         ),
                       ],
                     ],
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Save'),
-                ),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: AdaptiveButton.child(
+                onPressed: _saving ? null : _save,
+                style: AdaptiveButtonStyle.filled,
+                child: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Save'),
               ),
             ),
           ],
         ),
-      ),
-      ),
       ),
     );
   }

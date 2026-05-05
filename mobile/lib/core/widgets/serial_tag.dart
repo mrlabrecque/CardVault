@@ -42,9 +42,19 @@ class SerialTag extends StatelessWidget {
   Widget build(BuildContext context) {
     if (_label.isEmpty) return const SizedBox.shrink();
     return Container(
+      constraints: const BoxConstraints(maxWidth: 96),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: _decoration(serialMax),
-      child: Text(_label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textColor(serialMax))),
+      child: Text(
+        _label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: _textColor(serialMax),
+        ),
+      ),
     );
   }
 }

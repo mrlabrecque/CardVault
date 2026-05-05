@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/card_fan_loader.dart';
 
 final _pendingParallelsProvider = FutureProvider<List<PendingParallel>>((ref) {
@@ -176,9 +177,12 @@ class _PendingRow extends StatelessWidget {
               children: [
                 Row(children: [
                   Expanded(
-                    child: TextField(
+                    child: AdaptiveTextField(
                       controller: serialCtrl,
                       keyboardType: TextInputType.number,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      placeholder: 'Serial Max (optional)',
+                      cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
                       decoration: InputDecoration(
                         labelText: 'Serial Max (optional)',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -188,8 +192,11 @@ class _PendingRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: TextField(
+                    child: AdaptiveTextField(
                       controller: hexCtrl,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      placeholder: 'Color Hex (optional)',
+                      cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
                       decoration: InputDecoration(
                         labelText: 'Color Hex (optional)',
                         hintText: '#C0C0C0',
@@ -200,26 +207,32 @@ class _PendingRow extends StatelessWidget {
                   ),
                 ]),
                 const SizedBox(height: 8),
-                SwitchListTile(
-                  value: isAuto,
-                  onChanged: onIsAutoChanged,
-                  title: const Text('Auto', style: TextStyle(fontSize: 14)),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Auto', style: TextStyle(fontSize: 14)),
+                    ),
+                    Switch.adaptive(
+                      value: isAuto,
+                      onChanged: onIsAutoChanged,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Row(children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: AdaptiveButton.child(
                       onPressed: acting ? null : onDismiss,
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade400),
+                      style: AdaptiveButtonStyle.bordered,
+                      color: Colors.red.shade400,
                       child: const Text('Dismiss'),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: FilledButton(
+                    child: AdaptiveButton.child(
                       onPressed: acting ? null : onPromote,
+                      style: AdaptiveButtonStyle.filled,
                       child: acting
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Text('Promote'),

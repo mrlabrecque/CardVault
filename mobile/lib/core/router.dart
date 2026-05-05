@@ -46,7 +46,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/collection', pageBuilder: (context, state) => _page(const CollectionScreen())),
           GoRoute(
             path: '/collection/card',
-            pageBuilder: (_, state) => _page(ItemDetailScreen(card: state.extra as UserCard)),
+            pageBuilder: (_, state) {
+              final card = state.extra;
+              if (card is! UserCard) {
+                return _page(const CollectionScreen());
+              }
+              return _page(ItemDetailScreen(card: card));
+            },
           ),
           GoRoute(path: '/catalog', pageBuilder: (context, state) => _page(const CatalogScreen())),
           GoRoute(path: '/bulk-add', pageBuilder: (context, state) => _page(const BulkAddScreen())),

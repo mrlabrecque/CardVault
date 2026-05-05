@@ -225,14 +225,16 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton(
+                  AdaptiveButton.child(
                     onPressed: _addToCollection,
-                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFF800020)),
+                    style: AdaptiveButtonStyle.filled,
+                    color: const Color(0xFF800020),
                     child: const Text('Add to Collection'),
                   ),
                   const SizedBox(height: 12),
-                  OutlinedButton(
+                  AdaptiveButton.child(
                     onPressed: _addToWishlist,
+                    style: AdaptiveButtonStyle.bordered,
                     child: const Text('Add to Wishlist'),
                   ),
                 ],

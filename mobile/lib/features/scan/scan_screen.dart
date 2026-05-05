@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
@@ -353,9 +354,10 @@ class _ScanScreenState extends State<ScanScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            FilledButton(
+            AdaptiveButton.child(
               onPressed: _resetToSportPicker,
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF800020)),
+              style: AdaptiveButtonStyle.filled,
+              color: const Color(0xFF800020),
               child: const Text('Try Again'),
             ),
           ],
@@ -484,20 +486,19 @@ class _ScanScreenState extends State<ScanScreen> {
                 const SizedBox(height: 32),
 
                 // View Card Details button
-                FilledButton(
+                AdaptiveButton.child(
                   onPressed: _goToCardDetails,
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF800020)),
+                  style: AdaptiveButtonStyle.filled,
+                  color: const Color(0xFF800020),
                   child: const Text('View Card Details'),
                 ),
 
                 const SizedBox(height: 12),
 
                 // Try Again button
-                OutlinedButton(
+                AdaptiveButton.child(
                   onPressed: _resetToSportPicker,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.black12),
-                  ),
+                  style: AdaptiveButtonStyle.bordered,
                   child: const Text('Try Again'),
                 ),
               ],

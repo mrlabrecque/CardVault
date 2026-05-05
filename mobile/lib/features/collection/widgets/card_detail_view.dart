@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/models/user_card.dart';
 import '../../../core/services/cards_service.dart';
@@ -199,16 +200,18 @@ class CardDetailView extends StatelessWidget {
         children: [
           if (onAddToCollection != null)
             Expanded(
-              child: FilledButton(
+              child: AdaptiveButton.child(
                 onPressed: onAddToCollection,
+                style: AdaptiveButtonStyle.filled,
                 child: const Text('Add to Collection'),
               ),
             ),
           if (onAddToWishlist != null) ...[
             if (onAddToCollection != null) const SizedBox(width: 12),
             Expanded(
-              child: OutlinedButton(
+              child: AdaptiveButton.child(
                 onPressed: onAddToWishlist,
+                style: AdaptiveButtonStyle.bordered,
                 child: const Text('Add to Wishlist'),
               ),
             ),

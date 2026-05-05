@@ -1,4 +1,5 @@
 import 'dart:math' show pi;
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -415,21 +416,25 @@ class _LoginForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
+        AdaptiveTextField(
           controller: emailCtrl,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
-          autofillHints: const [AutofillHints.email],
           autocorrect: false,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          placeholder: 'Email address',
+          prefixIcon: const Icon(Icons.mail_outline_rounded),
           style: const TextStyle(color: Colors.white, fontSize: 15),
           decoration: fieldDeco('Email address', icon: Icons.mail_outline_rounded),
         ),
         const SizedBox(height: 12),
-        TextField(
+        AdaptiveTextField(
           controller: passwordCtrl,
           obscureText: true,
           textInputAction: TextInputAction.done,
-          autofillHints: const [AutofillHints.password],
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          placeholder: 'Password',
+          prefixIcon: const Icon(Icons.lock_outline_rounded),
           style: const TextStyle(color: Colors.white, fontSize: 15),
           decoration: fieldDeco('Password', icon: Icons.lock_outline_rounded),
           onSubmitted: (_) { if (!busy) onSignIn(); },
@@ -480,30 +485,36 @@ class _CreateAccountForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
+        AdaptiveTextField(
           controller: emailCtrl,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
-          autofillHints: const [AutofillHints.email],
           autocorrect: false,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          placeholder: 'Email address',
+          prefixIcon: const Icon(Icons.mail_outline_rounded),
           style: const TextStyle(color: Colors.white, fontSize: 15),
           decoration: fieldDeco('Email address', icon: Icons.mail_outline_rounded),
         ),
         const SizedBox(height: 12),
-        TextField(
+        AdaptiveTextField(
           controller: passwordCtrl,
           obscureText: true,
           textInputAction: TextInputAction.next,
-          autofillHints: const [AutofillHints.newPassword],
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          placeholder: 'Password',
+          prefixIcon: const Icon(Icons.lock_outline_rounded),
           style: const TextStyle(color: Colors.white, fontSize: 15),
           decoration: fieldDeco('Password', icon: Icons.lock_outline_rounded),
         ),
         const SizedBox(height: 12),
-        TextField(
+        AdaptiveTextField(
           controller: confirmCtrl,
           obscureText: true,
           textInputAction: TextInputAction.done,
-          autofillHints: const [AutofillHints.newPassword],
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          placeholder: 'Confirm password',
+          prefixIcon: const Icon(Icons.lock_outline_rounded),
           style: const TextStyle(color: Colors.white, fontSize: 15),
           decoration: fieldDeco('Confirm password', icon: Icons.lock_outline_rounded),
           onSubmitted: (_) { if (!busy) onSubmit(); },
@@ -562,13 +573,10 @@ class _GlowButton extends StatelessWidget {
       },
       child: SizedBox(
         height: 50,
-        child: FilledButton(
+        child: AdaptiveButton.child(
           onPressed: enabled ? onPressed : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.primary,
-            disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.4),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-          ),
+          style: AdaptiveButtonStyle.filled,
+          color: AppTheme.primary,
           child: loading
               ? const SizedBox(
                   height: 20, width: 20,
@@ -593,23 +601,24 @@ class _MagicLinkButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 50,
-      child: OutlinedButton.icon(
+      child: AdaptiveButton.child(
         onPressed: enabled ? () { HapticFeedback.lightImpact(); onPressed(); } : null,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white.withValues(alpha: 0.85),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.18), width: 1),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-          backgroundColor: Colors.white.withValues(alpha: 0.04),
-        ),
-        icon: Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.white.withValues(alpha: 0.7)),
-        label: Text(
-          'Send Magic Link',
-          style: GoogleFonts.oswald(
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-            letterSpacing: 0.3,
-            color: Colors.white.withValues(alpha: enabled ? 0.85 : 0.35),
-          ),
+        style: AdaptiveButtonStyle.bordered,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.white.withValues(alpha: 0.7)),
+            const SizedBox(width: 8),
+            Text(
+              'Send Magic Link',
+              style: GoogleFonts.oswald(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                letterSpacing: 0.3,
+                color: Colors.white.withValues(alpha: enabled ? 0.85 : 0.35),
+              ),
+            ),
+          ],
         ),
       ),
     );

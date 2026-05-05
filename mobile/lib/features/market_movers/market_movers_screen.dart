@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/filter_pill.dart';
+import '../../core/widgets/modal_sheet_scaffold.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/market_movers_service.dart';
 import '../../core/models/market_mover.dart';
@@ -90,10 +91,10 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
   void _showMarketMoversInfo(BuildContext context) {
     showAdaptiveSheet(
       context: context,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      builder: (_) => ModalSheetScaffold(
+        title: 'What is Market Movers',
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -107,13 +108,10 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
                   child: const Icon(Icons.info_outline, size: 18, color: Color(0xFFF97316)),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'What is Market Movers',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
-                ),
+                const SizedBox.shrink(),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
             const Text(
               'Market Movers shows players whose card values are rapidly changing based on recent eBay sold listings.',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),

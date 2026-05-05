@@ -491,8 +491,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
+                      child: AdaptiveTextField(
                         controller: _boxPriceCtrl,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: 'Box Price',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: const InputDecoration(
                           labelText: 'Box Price',
                           prefixText: '\$',
@@ -504,8 +507,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: TextField(
+                      child: AdaptiveTextField(
                         controller: _boxQtyCtrl,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: '# Cards',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: const InputDecoration(
                           labelText: '# Cards',
                           isDense: true,
@@ -532,8 +538,14 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
+                      child: AdaptiveTextField(
                         controller: _cardCtrl,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        placeholder: 'Player or card #...',
+                        cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
+                          context,
+                          enabled: _selectedRelease?.cardsightId != null,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Player or card #...',
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -696,10 +708,13 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  AdaptiveTextField(
                     controller: _pricePaidCtrl,
                     enabled: false,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    placeholder: 'Price Paid',
+                    cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, enabled: false),
                     decoration: InputDecoration(
                       labelText: 'Price Paid',
                       prefixText: '\$',
@@ -709,9 +724,12 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  AdaptiveTextField(
                     controller: _serialNumberCtrl,
                     keyboardType: TextInputType.number,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    placeholder: 'Serial #',
+                    cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                     decoration: const InputDecoration(
                       labelText: 'Serial #',
                       border: OutlineInputBorder(),
@@ -724,29 +742,10 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Graded', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
-                      GestureDetector(
-                        onTap: () => setState(() => _isGraded = !_isGraded),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 44, height: 24,
-                          decoration: BoxDecoration(
-                            color: _isGraded ? const Color(0xFF800020) : Colors.white,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: _isGraded ? const Color(0xFF800020) : Theme.of(context).colorScheme.outline),
-                          ),
-                          child: AnimatedAlign(
-                            duration: const Duration(milliseconds: 200),
-                            alignment: _isGraded ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.all(3),
-                              width: 18, height: 18,
-                              decoration: BoxDecoration(
-                                color: _isGraded ? Colors.white : Theme.of(context).colorScheme.outline,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ),
+                      Switch.adaptive(
+                        value: _isGraded,
+                        activeColor: const Color(0xFF800020),
+                        onChanged: (value) => setState(() => _isGraded = value),
                       ),
                     ],
                   ),
@@ -769,8 +768,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: TextField(
+                          child: AdaptiveTextField(
                             controller: _gradeValueCtrl,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            placeholder: 'Grade',
+                            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                             decoration: const InputDecoration(
                               labelText: 'Grade',
                               border: OutlineInputBorder(),

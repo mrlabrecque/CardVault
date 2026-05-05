@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/card_fan_loader.dart';
@@ -241,17 +242,34 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-                            TextField(
+                            AdaptiveTextField(
                 controller: _searchCtrl,
                 onChanged: (_) => setState(() {}),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                placeholder: 'Filter releases…',
+                prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                suffixIcon: _searchCtrl.text.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () => setState(() => _searchCtrl.clear()),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(Icons.close, size: 16),
+                        ),
+                      )
+                    : null,
+                cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                 decoration: InputDecoration(
+                  labelText: 'Filter releases',
                   hintText: 'Filter releases…',
                   hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
                   prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
                   suffixIcon: _searchCtrl.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.close, size: 16),
-                          onPressed: () => setState(() => _searchCtrl.clear()),
+                      ? GestureDetector(
+                          onTap: () => setState(() => _searchCtrl.clear()),
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(Icons.close, size: 16),
+                          ),
                         )
                       : null,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -261,14 +279,23 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: AdaptiveButton.child(
                   onPressed: (_importingReleases || _year.isEmpty || _segment.isEmpty) ? null : _importReleases,
-                  icon: _importingReleases
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.download_outlined, size: 16),
-                  label: Text(_year.isEmpty || _segment.isEmpty
-                      ? 'Select a year and sport to import'
-                      : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
+                  style: AdaptiveButtonStyle.filled,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _importingReleases
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.download_outlined, size: 16),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(_year.isEmpty || _segment.isEmpty
+                            ? 'Select a year and sport to import'
+                            : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -345,10 +372,17 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                               style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
                           const SizedBox(height: 16),
                           if (_selectedRelease?.cardsightId != null)
-                            FilledButton.icon(
+                            AdaptiveButton.child(
                               onPressed: _importingSets ? null : _importSets,
-                              icon: const Icon(Icons.download_outlined, size: 16),
-                              label: const Text('Import Sets from CardSight'),
+                              style: AdaptiveButtonStyle.filled,
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.download_outlined, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Import Sets from CardSight'),
+                                ],
+                              ),
                             ),
                         ],
                       ),
@@ -403,10 +437,17 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: AdaptiveButton.child(
                 onPressed: _importingSets ? null : _importSets,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Re-import sets from CardSight'),
+                style: AdaptiveButtonStyle.bordered,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.refresh, size: 16),
+                    SizedBox(width: 8),
+                    Text('Re-import sets from CardSight'),
+                  ],
+                ),
               ),
             ),
           ),

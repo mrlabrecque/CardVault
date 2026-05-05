@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import '../utils/platform_utils.dart';
 
 class AdaptiveDropdown<T> extends StatefulWidget {
@@ -35,22 +36,21 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
   }
 
   Widget _buildIOSDropdown() {
+    final colors = Theme.of(context).colorScheme;
+    final effectiveLabel = widget.labelText ?? widget.decoration?.labelText;
+    final effectiveHint = widget.hint ?? widget.decoration?.hintText ?? 'Select...';
     final selectedIndex = widget.items.indexWhere((item) => item.value == widget.value);
     final displayText = selectedIndex >= 0
         ? (widget.items[selectedIndex].child is Text
             ? (widget.items[selectedIndex].child as Text).data ?? ''
             : widget.items[selectedIndex].child.toString())
-        : (widget.hint ?? 'Select...');
+        : effectiveHint;
 
     return GestureDetector(
       onTap: () => _showIOSPicker(),
       child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFD1D5DB)),
-          borderRadius: BorderRadius.circular(8),
-          color: Colors.white,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: AppTheme.cupertinoTextFieldDecoration(context),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: DefaultTextStyle(
           style: const TextStyle(color: Colors.black87),
           child: Row(
@@ -61,29 +61,35 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (widget.labelText != null)
+                  if (effectiveLabel != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
-                        widget.labelText!,
-                        style: const TextStyle(
+                        effectiveLabel,
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF6B7280),
+                          color: colors.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ),
                   Text(
                     displayText,
                     style: TextStyle(
-                      fontSize: 16,
-                      color: selectedIndex >= 0 ? Colors.black87 : Colors.grey,
+                      fontSize: 14,
+                      color: selectedIndex >= 0
+                          ? colors.onSurface
+                          : colors.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(CupertinoIcons.chevron_down, size: 18, color: Color(0xFF9CA3AF)),
+            Icon(
+              CupertinoIcons.chevron_down,
+              size: 18,
+              color: colors.onSurface.withValues(alpha: 0.4),
+            ),
           ],
           ),
         ),
@@ -101,7 +107,7 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
             labelText: widget.labelText,
             hintText: widget.hint,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
     );

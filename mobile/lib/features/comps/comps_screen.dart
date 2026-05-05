@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/comp.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/modal_sheet_scaffold.dart';
 
 class CompsScreen extends ConsumerStatefulWidget {
   const CompsScreen({super.key});
@@ -27,10 +28,10 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
   void _showValueDisclaimer(BuildContext context) {
     showAdaptiveSheet(
       context: context,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      builder: (_) => ModalSheetScaffold(
+        title: 'Why values may differ',
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -44,13 +45,10 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
                   child: const Icon(Icons.info_outline, size: 18, color: Color(0xFFF97316)),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Why values may differ',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
-                ),
+                const SizedBox.shrink(),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
             const Text(
               'This search returns broad eBay sold results based on whatever you type — it doesn\'t know your specific card.',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
@@ -130,12 +128,17 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
           Row(
             children: [
               Expanded(
-                child: TextField(
+                child: AdaptiveTextField(
                   controller: _searchCtrl,
                   onSubmitted: (_) => _search(),
                   textInputAction: TextInputAction.search,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  placeholder: 'Search player, set, year, grade…',
+                  prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
+                    labelText: 'Comp search',
                     hintText: 'Search player, set, year, grade…',
                     hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
                     prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),

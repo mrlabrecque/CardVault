@@ -12,6 +12,7 @@ import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/app_overflow_menu.dart';
@@ -775,22 +776,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           // Mode tabs (Browse/Search)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: colors.onSurface.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  _buildModeTab('Browse', _mode == _CatalogMode.browse, colors, () {
-                    setState(() => _mode = _CatalogMode.browse);
-                  }),
-                  _buildModeTab('Search', _mode == _CatalogMode.search, colors, () {
-                    setState(() => _mode = _CatalogMode.search);
-                  }),
-                ],
-              ),
+            child: AdaptiveSegmentedControl(
+              labels: const ['Browse', 'Search'],
+              selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
+              onValueChanged: (index) {
+                setState(() {
+                  _mode = index == 0 ? _CatalogMode.browse : _CatalogMode.search;
+                });
+              },
+              color: colors.primary,
             ),
           ),
           // Content
@@ -858,17 +852,37 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
-          child: TextField(
+          child: AdaptiveTextField(
             controller: _browseSearchCtrl,
             onChanged: (_) => setState(() {}),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Search releases…',
+            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+            suffixIcon: _browseSearchCtrl.text.isNotEmpty
+                ? GestureDetector(
+                    onTap: () => setState(() => _browseSearchCtrl.clear()),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(Icons.close, size: 16),
+                    ),
+                  )
+                : null,
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
+              context,
+              radius: 10,
+            ),
             decoration: InputDecoration(
+              labelText: 'Search releases',
               hintText: 'Search releases…',
               hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
               prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
               suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => setState(() => _browseSearchCtrl.clear()),
+                  ? GestureDetector(
+                      onTap: () => setState(() => _browseSearchCtrl.clear()),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.close, size: 16),
+                      ),
                     )
                   : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -1018,17 +1032,37 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
           ),
-          child: TextField(
+          child: AdaptiveTextField(
             controller: _setSearchCtrl,
             onChanged: (_) => setState(() {}),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Search sets…',
+            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+            suffixIcon: _setSearchCtrl.text.isNotEmpty
+                ? GestureDetector(
+                    onTap: () => setState(() => _setSearchCtrl.clear()),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(Icons.close, size: 16),
+                    ),
+                  )
+                : null,
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
+              context,
+              radius: 10,
+            ),
             decoration: InputDecoration(
+              labelText: 'Search sets',
               hintText: 'Search sets…',
               hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
               prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
               suffixIcon: _setSearchCtrl.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => setState(() => _setSearchCtrl.clear()),
+                  ? GestureDetector(
+                      onTap: () => setState(() => _setSearchCtrl.clear()),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.close, size: 16),
+                      ),
                     )
                   : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -1077,10 +1111,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         // Search field
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: TextField(
+          child: AdaptiveTextField(
             controller: _cardCtrl,
             onChanged: _searchCards,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Search player name…',
+            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+            suffixIcon: _loadingCards
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                : null,
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
             decoration: InputDecoration(
+              labelText: 'Search players',
               hintText: 'Search player name…',
               hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
               prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
@@ -1170,24 +1215,37 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                         }).value ?? 0;
 
                         return copyCount > 0
-                            ? FilledButton.icon(
+                            ? AdaptiveButton.child(
                                 onPressed: null,
-                                icon: TweenAnimationBuilder<double>(
-                                  tween: Tween(begin: 0.0, end: 1.0),
-                                  duration: const Duration(milliseconds: 800),
-                                  curve: Curves.elasticOut,
-                                  builder: (context, scale, child) {
-                                    return Transform.scale(
-                                      scale: scale,
-                                      child: child,
-                                    );
-                                  },
-                                  child: const Icon(Icons.check_circle, size: 18),
+                                style: AdaptiveButtonStyle.filled,
+                                size: AdaptiveButtonSize.medium,
+                                useNative: true,
+                                enabled: false,
+                                useSmoothRectangleBorder: true,
+                                minSize: const Size(double.infinity, 0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0.0, end: 1.0),
+                                      duration: const Duration(milliseconds: 800),
+                                      curve: Curves.elasticOut,
+                                      builder: (context, scale, child) {
+                                        return Transform.scale(
+                                          scale: scale,
+                                          child: child,
+                                        );
+                                      },
+                                      child: const Icon(Icons.check_circle, size: 18),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('In Collection ($copyCount)'),
+                                  ],
                                 ),
-                                label: Text('In Collection ($copyCount)'),
                               )
-                            : FilledButton(
+                            : AdaptiveButton.child(
                                 onPressed: _showAddCopySheet,
+                                style: AdaptiveButtonStyle.filled,
                                 child: const Text('Add to Collection'),
                               );
                       },
@@ -1213,29 +1271,41 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                         }).value ?? false;
 
                         return isInWishlist
-                            ? FilledButton.icon(
+                            ? AdaptiveButton.child(
                                 onPressed: null,
-                                icon: TweenAnimationBuilder<double>(
-                                  tween: Tween(begin: 0.0, end: 1.0),
-                                  duration: const Duration(milliseconds: 800),
-                                  curve: Curves.elasticOut,
-                                  builder: (context, scale, child) {
-                                    return Transform.scale(
-                                      scale: scale,
-                                      child: child,
-                                    );
-                                  },
-                                  child: const Icon(Icons.favorite, size: 18),
+                                style: AdaptiveButtonStyle.filled,
+                                enabled: false,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0.0, end: 1.0),
+                                      duration: const Duration(milliseconds: 800),
+                                      curve: Curves.elasticOut,
+                                      builder: (context, scale, child) {
+                                        return Transform.scale(
+                                          scale: scale,
+                                          child: child,
+                                        );
+                                      },
+                                      child: const Icon(Icons.favorite, size: 18),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text('In Wishlist'),
+                                  ],
                                 ),
-                                label: const Text('In Wishlist'),
                               )
-                            : OutlinedButton.icon(
+                            : AdaptiveButton.child(
                                 onPressed: _addToWishlist,
-                                style: OutlinedButton.styleFrom(
-                                  backgroundColor: Colors.white,
+                                style: AdaptiveButtonStyle.bordered,
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.favorite_border, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Add to Wishlist'),
+                                  ],
                                 ),
-                                icon: const Icon(Icons.favorite_border, size: 18),
-                                label: const Text('Add to Wishlist'),
                               );
                       },
                     ),
@@ -1348,8 +1418,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               ),
               const SizedBox(height: 24),
               // Save button
-              FilledButton(
+              AdaptiveButton.child(
                 onPressed: _canSave ? _save : null,
+                style: AdaptiveButtonStyle.filled,
                 child: _saving
                     ? const SizedBox(
                         width: 18,
@@ -1601,13 +1672,22 @@ Widget _buildSearchMode(ColorScheme colors) {
                           }).value ?? 0;
 
                           return copyCount > 0
-                              ? FilledButton.icon(
+                              ? AdaptiveButton.child(
                                   onPressed: null,
-                                  icon: const Icon(Icons.check_circle, size: 18),
-                                  label: Text('In Collection ($copyCount)'),
+                                  style: AdaptiveButtonStyle.filled,
+                                  enabled: false,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.check_circle, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text('In Collection ($copyCount)'),
+                                    ],
+                                  ),
                                 )
-                              : FilledButton(
+                              : AdaptiveButton.child(
                                   onPressed: _showAddCopySheet,
+                                  style: AdaptiveButtonStyle.filled,
                                   child: const Text('Add to Collection'),
                                 );
                         },
@@ -1631,18 +1711,30 @@ Widget _buildSearchMode(ColorScheme colors) {
                           }).value ?? false;
 
                           return isInWishlist
-                              ? FilledButton.icon(
+                              ? AdaptiveButton.child(
                                   onPressed: null,
-                                  icon: const Icon(Icons.favorite, size: 18),
-                                  label: const Text('In Wishlist'),
-                                )
-                              : OutlinedButton.icon(
-                                  onPressed: _addToWishlist,
-                                  style: OutlinedButton.styleFrom(
-                                    backgroundColor: Colors.white,
+                                  style: AdaptiveButtonStyle.filled,
+                                  enabled: false,
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.favorite, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('In Wishlist'),
+                                    ],
                                   ),
-                                  icon: const Icon(Icons.favorite_border, size: 18),
-                                  label: const Text('Add to Wishlist'),
+                                )
+                              : AdaptiveButton.child(
+                                  onPressed: _addToWishlist,
+                                  style: AdaptiveButtonStyle.bordered,
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.favorite_border, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('Add to Wishlist'),
+                                    ],
+                                  ),
                                 );
                         },
                       ),
@@ -1820,27 +1912,6 @@ Widget _buildSearchMode(ColorScheme colors) {
     );
   }
 
-  Widget _buildModeTab(String label, bool active, ColorScheme colors, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: active ? colors.surface : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-            boxShadow: active ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))] : null,
-          ),
-          child: Text(label,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                color: active ? colors.onSurface : colors.onSurface.withValues(alpha: 0.45)),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ── New Card Fields Widget ────────────────────────────────────────────────────
@@ -1875,36 +1946,54 @@ class _NewCardFields extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _field(playerCtrl, 'Player Name *', TextInputType.text),
+        _field(context, playerCtrl, 'Player Name *', TextInputType.text),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: _field(cardNumberCtrl, 'Card #', TextInputType.text)),
+          Expanded(child: _field(context, cardNumberCtrl, 'Card #', TextInputType.text)),
           const SizedBox(width: 8),
-          Expanded(child: _field(serialMaxCtrl, 'Serial Number (e.g. 99)', TextInputType.number)),
+          Expanded(child: _field(context, serialMaxCtrl, 'Serial Number (e.g. 99)', TextInputType.number)),
         ]),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: [
-            FilterChip(label: const Text('RC'), selected: isRookie, onSelected: onToggleRookie),
-            FilterChip(label: const Text('AUTO'), selected: isAuto, onSelected: onToggleAuto),
-            FilterChip(label: const Text('PATCH'), selected: isPatch, onSelected: onTogglePatch),
-            FilterChip(label: const Text('SSP'), selected: isSSP, onSelected: onToggleSSP),
-          ],
-        ),
+        _toggleRow('RC', isRookie, onToggleRookie),
+        const SizedBox(height: 8),
+        _toggleRow('AUTO', isAuto, onToggleAuto),
+        const SizedBox(height: 8),
+        _toggleRow('PATCH', isPatch, onTogglePatch),
+        const SizedBox(height: 8),
+        _toggleRow('SSP', isSSP, onToggleSSP),
       ],
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, TextInputType type) {
-    return TextField(
+  Widget _field(BuildContext context, TextEditingController ctrl, String label, TextInputType type) {
+    return AdaptiveTextField(
       controller: ctrl,
       keyboardType: type,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      placeholder: label,
+      cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         isDense: true,
       ),
+    );
+  }
+
+  Widget _toggleRow(String label, bool value, void Function(bool) onChanged) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+        Switch.adaptive(
+          value: value,
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 }
@@ -1966,8 +2055,11 @@ class _YourCopyFields extends StatelessWidget {
             onChanged: onParallelChanged,
           )
         else
-          TextField(
+          AdaptiveTextField(
             onChanged: onParallelNameChanged,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Parallel (e.g. Silver)',
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
             decoration: InputDecoration(
               labelText: 'Parallel (e.g. Silver)',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1977,9 +2069,12 @@ class _YourCopyFields extends StatelessWidget {
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
-            child: TextField(
+            child: AdaptiveTextField(
               controller: pricePaidCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              placeholder: 'Price Paid',
+              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
               decoration: InputDecoration(
                 labelText: 'Price Paid',
                 prefixText: '\$ ',
@@ -1990,9 +2085,12 @@ class _YourCopyFields extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: TextField(
+            child: AdaptiveTextField(
               controller: serialNumberCtrl,
               keyboardType: TextInputType.text,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              placeholder: 'Serial # (e.g. 34)',
+              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
               decoration: InputDecoration(
                 labelText: 'Serial # (e.g. 34)',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -2002,12 +2100,16 @@ class _YourCopyFields extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 12),
-        SwitchListTile(
-          title: const Text('Graded', style: TextStyle(fontSize: 14)),
-          value: isGraded,
-          onChanged: onGradedChanged,
-          contentPadding: EdgeInsets.zero,
-          dense: true,
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Graded', style: TextStyle(fontSize: 14)),
+            ),
+            Switch.adaptive(
+              value: isGraded,
+              onChanged: onGradedChanged,
+            ),
+          ],
         ),
         if (isGraded) ...[
           const SizedBox(height: 8),
@@ -2026,9 +2128,12 @@ class _YourCopyFields extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: TextField(
+              child: AdaptiveTextField(
                 controller: gradeValueCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                placeholder: 'Grade (e.g. 9.5)',
+                cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                 decoration: InputDecoration(
                   labelText: 'Grade (e.g. 9.5)',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

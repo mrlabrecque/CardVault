@@ -6,6 +6,7 @@ import '../auth/auth_service.dart';
 import '../services/cards_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/adaptive_ui.dart';
+import 'modal_sheet_scaffold.dart';
 
 class AppBarAvatar extends ConsumerWidget {
   const AppBarAvatar({super.key, this.iconOnly = false});
@@ -146,33 +147,13 @@ class _AvatarSheet extends ConsumerWidget {
         ? (ref.watch(pendingParallelCountProvider).asData?.value ?? 0)
         : 0;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Account',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 16),
+    return ModalSheetScaffold(
+      title: 'Account',
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             if (email != null) ...[
               Text(
                 email!,
@@ -202,6 +183,7 @@ class _AvatarSheet extends ConsumerWidget {
               Divider(color: Colors.grey.shade100),
               const SizedBox(height: 4),
             ],
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: TextButton.icon(
@@ -225,7 +207,6 @@ class _AvatarSheet extends ConsumerWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }

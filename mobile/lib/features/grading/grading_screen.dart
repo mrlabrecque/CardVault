@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
@@ -440,18 +441,10 @@ class _CardRow extends StatelessWidget {
         else
           SizedBox(
             width: 88,
-            child: OutlinedButton(
+            child: AdaptiveButton.child(
               onPressed: onAnalyze,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.primary,
-                side: BorderSide(color: AppTheme.primary),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                minimumSize: const Size(88, 28),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+              style: AdaptiveButtonStyle.bordered,
+              color: AppTheme.primary,
               child: const Text(
                 'Analyze',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),

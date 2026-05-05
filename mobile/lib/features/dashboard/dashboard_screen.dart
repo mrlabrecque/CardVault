@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -199,13 +200,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(chartTitle, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
-                    _ToggleButtons(
-                      options: const [
-                        (Icons.donut_large, 'breakdown'),
-                        (Icons.show_chart, 'timeline'),
-                      ],
-                      selected: _chartView,
-                      onSelect: (v) => setState(() => _chartView = v),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 128),
+                          child: _ToggleButtons(
+                            options: const [
+                              (Icons.donut_large, 'breakdown', 'chart.pie'),
+                              (Icons.show_chart, 'timeline', 'chart.line.uptrend.xyaxis'),
+                            ],
+                            selected: _chartView,
+                            onSelect: (v) => setState(() => _chartView = v),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -238,13 +247,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _bottomView == 'top-cards' ? 'Top Cards by Value' : 'Top Players by Count',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
                     ),
-                    _ToggleButtons(
-                      options: const [
-                        (Icons.attach_money, 'top-cards'),
-                        (Icons.person_outline, 'top-players'),
-                      ],
-                      selected: _bottomView,
-                      onSelect: (v) => setState(() => _bottomView = v),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 128),
+                          child: _ToggleButtons(
+                            options: const [
+                              (Icons.attach_money, 'top-cards', 'dollarsign.circle'),
+                              (Icons.person_outline, 'top-players', 'person'),
+                            ],
+                            selected: _bottomView,
+                            onSelect: (v) => setState(() => _bottomView = v),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -410,42 +427,24 @@ class _Panel extends StatelessWidget {
 
 class _ToggleButtons extends StatelessWidget {
   const _ToggleButtons({required this.options, required this.selected, required this.onSelect});
-  final List<(IconData, String)> options;
+  final List<(IconData, String, String)> options;
   final String selected;
   final ValueChanged<String> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (int i = 0; i < options.length; i++) ...[
-            if (i > 0) Container(width: 1, height: 28, color: const Color(0xFFE5E7EB)),
-            GestureDetector(
-              onTap: () => onSelect(options[i].$2),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: selected == options[i].$2 ? _burgundy : Colors.transparent,
-                  borderRadius: BorderRadius.horizontal(
-                    left: i == 0 ? const Radius.circular(7) : Radius.zero,
-                    right: i == options.length - 1 ? const Radius.circular(7) : Radius.zero,
-                  ),
-                ),
-                child: Icon(options[i].$1,
-                    size: 14,
-                    color: selected == options[i].$2 ? Colors.white : Colors.grey.shade400),
-              ),
-            ),
-          ],
-        ],
-      ),
+    final selectedIndex = options.indexWhere((option) => option.$2 == selected);
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    return AdaptiveSegmentedControl(
+      labels: const [],
+      sfSymbols: isIOS
+          ? options.map((option) => option.$3).toList()
+          : options.map((option) => option.$1).toList(),
+      selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
+      onValueChanged: (index) => onSelect(options[index].$2),
+      color: _burgundy,
+      iconSize: 16,
+      shrinkWrap: true,
     );
   }
 }
