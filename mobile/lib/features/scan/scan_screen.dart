@@ -257,9 +257,6 @@ class _ScanScreenState extends State<ScanScreen> {
           alignment: Alignment.centerLeft,
           child: Text('Scan Card', style: AppFonts.appBarTitle),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
         actions: const [
           AppOverflowMenu(),
           AppBarAvatar(iconOnly: true),
@@ -372,9 +369,6 @@ class _ScanScreenState extends State<ScanScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
         actions: const [
           AppOverflowMenu(),
           AppBarAvatar(iconOnly: true),

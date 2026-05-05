@@ -83,9 +83,6 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
             alignment: Alignment.centerLeft,
             child: Text('Card Details', style: AppFonts.appBarTitle),
           ),
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 0,
           actions: const [
             AppOverflowMenu(),
             AppBarAvatar(iconOnly: true),
@@ -100,9 +97,6 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Card Details'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
         actions: const [
           AppOverflowMenu(),
           AppBarAvatar(iconOnly: true),
