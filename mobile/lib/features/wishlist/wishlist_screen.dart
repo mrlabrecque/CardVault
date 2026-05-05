@@ -1,7 +1,9 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_service.dart';
@@ -206,7 +208,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             style: AppFonts.appBarTitle,
           ),
         ),
-        actions: const [AppBarAvatar()],
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: async.when(
         loading: () => const Center(child: CardFanLoader()),
@@ -238,15 +243,13 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             Text('Add cards to watch for deals on eBay.',
                 style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5), fontFamily: AppFonts.fontFamily)),
             const SizedBox(height: 20),
-            ElevatedButton(
+            AdaptiveButton(
               onPressed: () => _showWishlistForm(context, ref),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colors.primary,
-                foregroundColor: colors.onPrimary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: Text('Add a Card', style: TextStyle(fontWeight: FontWeight.w600, color: colors.onPrimary, fontFamily: AppFonts.fontFamily)),
+              label: 'Add a Card',
+              style: AdaptiveButtonStyle.filled,
+              color: colors.primary,
+              textColor: colors.onPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ],
         ),

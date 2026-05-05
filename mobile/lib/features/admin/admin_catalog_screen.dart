@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
@@ -105,18 +106,17 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
       final total    = _tryParseInt(result['total']) ?? 0; // used to detect full page (more batches available)
       if (mounted) {
         setState(() { if (imported > 0) _importSkip += 100; });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(imported > 0
+        AdaptiveSnackBar.show(context,
+          message: imported > 0
               ? '$imported new release${imported == 1 ? '' : 's'} added'
-              : total == 100 ? 'Already up to date — tap again to check next batch' : 'Already up to date'),
-        ));
+              : total == 100 ? 'Already up to date — tap again to check next batch' : 'Already up to date',
+          type: imported > 0 ? AdaptiveSnackBarType.success : AdaptiveSnackBarType.info,
+        );
         await _loadReleases();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _importingReleases = false);
@@ -157,9 +157,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
       await _loadSets();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _importingSets = false);
@@ -179,9 +177,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
       await _loadSets();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _importingCards.remove(set.id));
@@ -303,7 +299,8 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final r = filtered[i];
-                        return ListTile(
+                        return AdaptiveListTile(
+                          hideBottomDivider: true,
                           leading: _StatusDot(imported: r.importedSetCount, total: r.setCount),
                           title: Text(r.displayName,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
@@ -363,7 +360,8 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                         final s = _sets[i];
                         final isImporting = _importingCards.contains(s.id);
                         final isImported = s.importedCount > 0;
-                        return ListTile(
+                        return AdaptiveListTile(
+                          hideBottomDivider: true,
                           leading: _StatusDot(imported: s.importedCount, total: s.cardCount ?? 0),
                           title: Text(s.name,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../wishlist/wishlist_screen.dart';
@@ -351,9 +353,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load sets: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Failed to load sets: $e', type: AdaptiveSnackBarType.error);
         setState(() => _catalogStep = _CatalogStep.browsing);
       }
     } finally {
@@ -404,11 +404,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         _catalogStep = _CatalogStep.card;
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
     } finally {
       if (mounted) setState(() => _lazyImporting = false);
     }
@@ -485,13 +481,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       ref.invalidate(userCardsProvider);
       unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
       if (mounted) {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
-          );
-        } catch (_) {
-          // Silently fail if snackbar can't be shown
-        }
+        AdaptiveSnackBar.show(context, message: 'Card added!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
         unawaited(_clearNavigationState());
         setState(() {
           _catalogStep = _CatalogStep.sets;
@@ -521,15 +511,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         });
       }
     } catch (e) {
-      if (mounted) {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-          );
-        } catch (_) {
-          // Silently fail if snackbar can't be shown
-        }
-      }
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -591,11 +573,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                 _grader = 'PSA';
               });
               _gradeValueCtrl.clear();
-              try {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Card added!'), duration: Duration(seconds: 2)),
-                );
-              } catch (_) {}
+              AdaptiveSnackBar.show(context, message: 'Card added!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
             }
             return null;
           } catch (e) {
@@ -635,17 +613,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         'sport': release?.sport,
       });
       ref.invalidate(wishlistProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Added to Wishlist!'), duration: Duration(seconds: 2)),
-        );
-      }
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Added to Wishlist!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
     }
   }
 
@@ -766,13 +736,39 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         leading: (_catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse) ||
                  (_mode == _CatalogMode.search && _searchSelectedCard == null)
             ? null
-            : BackButton(onPressed: _handleStepBack),
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x22000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                   ],
+                  ),
+                  child: ClipOval(
+                    child: AdaptiveButton.sfSymbol(
+                      onPressed: _handleStepBack,
+                      sfSymbol: const SFSymbol('chevron.left', size: 14),
+                      style: AdaptiveButtonStyle.glass,
+                      size: AdaptiveButtonSize.small,
+                    ),
+                  ),
+                ),
+              ),
         centerTitle: false,
         title: Text(
           _appBarTitle(),
           style: AppFonts.appBarTitle,
         ),
-        actions: const [AppBarAvatar()],
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: Column(
         children: [
@@ -905,7 +901,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                                   padding: EdgeInsets.all(16),
                                   child: Center(child: CircularProgressIndicator()),
                                 )
-                              : ListTile(
+                              : AdaptiveListTile(
+                                  hideBottomDivider: true,
                                   title: Text('Load more',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(color: colors.primary, fontSize: 14)),
@@ -913,7 +910,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                                 );
                         }
                         final r = filtered[i];
-                        return ListTile(
+                        return AdaptiveListTile(
+                          hideBottomDivider: true,
                           title: Text(r.displayName,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                           subtitle: r.sport != null
@@ -1054,7 +1052,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final s = filtered[i];
-                        return ListTile(
+                        return AdaptiveListTile(
+                          hideBottomDivider: true,
                           title: Text(s.name,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                           subtitle: s.cardCount != null
@@ -1115,45 +1114,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
             itemBuilder: (_, i) {
               final isBase = i == 0;
               final p = isBase ? null : _parallels[i - 1];
-              final label = isBase ? 'Base' : p!.name;
-              final attrs = isBase ? null : _parallelAttrPills(p!);
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedParallel = p;
-                      _parallelName = p?.name ?? 'Base';
-                      _catalogStep = _CatalogStep.detail;
-                    });
-                                },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  label,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (attrs != null) ...[
-                                const SizedBox(width: 6),
-                                attrs,
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
-                      ],
-                    ),
-                  ),
-                ),
+              return _buildParallelListTile(
+                parallel: p,
+                onTap: () {
+                  setState(() {
+                    _selectedParallel = p;
+                    _parallelName = p?.name ?? 'Base';
+                    _catalogStep = _CatalogStep.detail;
+                  });
+                },
               );
             },
           ),
@@ -1418,37 +1387,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
             itemBuilder: (_, i) {
               final c = _cardResults[i];
               final attrs = _cardAttributePills(c);
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _selectCard(c),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  c.displayName,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (attrs != null) ...[
-                                const SizedBox(width: 6),
-                                attrs,
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
-                      ],
-                    ),
-                  ),
-                ),
+              return AdaptiveListTile(
+                hideBottomDivider: true,
+                onTap: () => _selectCard(c),
+                title: _buildNameWithAttributes(c.displayName, attrs),
+                trailing: const Icon(Icons.chevron_right, size: 18),
               );
             },
           ),
@@ -1466,6 +1409,40 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       children: [
         if (p.isAuto) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
         if (p.serialMax != null) AttrTag('/${p.serialMax}', color: const Color(0xFF6366F1)),
+      ],
+    );
+  }
+
+  Widget _buildParallelListTile({
+    required SetParallel? parallel,
+    required VoidCallback onTap,
+  }) {
+    final isBase = parallel == null;
+    final label = isBase ? 'Base' : parallel.name;
+    final attrs = isBase ? null : _parallelAttrPills(parallel);
+
+    return AdaptiveListTile(
+      hideBottomDivider: true,
+      onTap: onTap,
+      title: _buildNameWithAttributes(label, attrs),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+    );
+  }
+
+  Widget _buildNameWithAttributes(String label, Widget? attrs) {
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (attrs != null) ...[
+          const SizedBox(width: 6),
+          attrs,
+        ],
       ],
     );
   }
@@ -1547,9 +1524,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     } catch (e) {
       if (mounted) {
         setState(() => _globalSearchLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Search error: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Search error: $e', type: AdaptiveSnackBarType.error);
       }
     }
   }
@@ -1572,45 +1547,15 @@ Widget _buildSearchMode(ColorScheme colors) {
               itemBuilder: (_, i) {
                 final isBase = i == 0;
                 final p = isBase ? null : _searchParallels[i - 1];
-                final label = isBase ? 'Base' : p!.name;
-                final attrs = isBase ? null : _parallelAttrPills(p!);
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _searchSelectedParallel = p;
-                        _searchParallelName = p?.name ?? 'Base';
-                        _searchParallelSelected = true;
-                      });
-                                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    label,
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (attrs != null) ...[
-                                  const SizedBox(width: 6),
-                                  attrs,
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
-                        ],
-                      ),
-                    ),
-                  ),
+                return _buildParallelListTile(
+                  parallel: p,
+                  onTap: () {
+                    setState(() {
+                      _searchSelectedParallel = p;
+                      _searchParallelName = p?.name ?? 'Base';
+                      _searchParallelSelected = true;
+                    });
+                  },
                 );
               },
             ),
@@ -1752,7 +1697,8 @@ Widget _buildSearchMode(ColorScheme colors) {
                     final result = _globalSearchResults[i];
                     if (result.$1 == 'release') {
                       final release = result.$2 as ReleaseRecord;
-                      return ListTile(
+                      return AdaptiveListTile(
+                        hideBottomDivider: true,
                         title: Text(
                           release.displayName,
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
@@ -1784,7 +1730,8 @@ Widget _buildSearchMode(ColorScheme colors) {
                     } else if (result.$1 == 'set') {
                       final set = result.$2 as SetRecord;
                       final release = result.$3 as ReleaseRecord;
-                      return ListTile(
+                      return AdaptiveListTile(
+                        hideBottomDivider: true,
                         title: Text(
                           set.name,
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
@@ -1817,11 +1764,10 @@ Widget _buildSearchMode(ColorScheme colors) {
                       final card = result.$2 as MasterCard;
                       final set = result.$3 as SetRecord;
                       final release = result.$4 as ReleaseRecord;
-                      return ListTile(
-                        title: Text(
-                          card.displayName,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
+                      final attrs = _cardAttributePills(card);
+                      return AdaptiveListTile(
+                        hideBottomDivider: true,
+                        title: _buildNameWithAttributes(card.displayName, attrs),
                         subtitle: Text('${release.displayName} • ${set.name}', style: const TextStyle(fontSize: 12)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,

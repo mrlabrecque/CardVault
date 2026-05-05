@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
@@ -51,9 +52,7 @@ class _PendingParallelsScreenState extends ConsumerState<PendingParallelsScreen>
       ref.invalidate(_pendingParallelsProvider);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _actingMap[p.id] = false);
@@ -67,9 +66,7 @@ class _PendingParallelsScreenState extends ConsumerState<PendingParallelsScreen>
       ref.invalidate(_pendingParallelsProvider);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _actingMap[id] = false);
@@ -145,8 +142,9 @@ class _PendingRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ListTile(
+        AdaptiveListTile(
           onTap: onTap,
+          hideBottomDivider: true,
           title: Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           subtitle: Text(
             [if (item.releaseName != null) item.releaseName!, if (item.setName != null) item.setName!].join(' · '),

@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/fonts.dart';
+import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 
 // CardSight detection result model
 class CardSightDetection {
@@ -250,10 +252,6 @@ class _ScanScreenState extends State<ScanScreen> {
   Widget _buildSportPicker() {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
         title: Align(
           alignment: Alignment.centerLeft,
           child: Text('Scan Card', style: AppFonts.appBarTitle),
@@ -261,6 +259,10 @@ class _ScanScreenState extends State<ScanScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: Column(
         children: [
@@ -368,13 +370,13 @@ class _ScanScreenState extends State<ScanScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: _resetToSportPicker,
-        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: SingleChildScrollView(
         child: Padding(

@@ -10,6 +10,7 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 enum _SortOption { dateDesc, playerAz, valueDesc }
@@ -69,13 +70,16 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
+        automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
           'Lot Builder',
           style: AppFonts.appBarTitle,
         ),
-        actions: const [AppBarAvatar()],
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: Column(
         children: [
@@ -505,15 +509,21 @@ class _BasketView extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              GestureDetector(
-                onTap: notifier.clear,
-                child: Container(
+              OutlinedButton(
+                onPressed: notifier.clear,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF9CA3AF),
+                  side: const BorderSide(color: Color(0xFFE5E7EB)),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text('Clear', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+                ),
+                child: const Text(
+                  'Clear',
+                  style: TextStyle(fontSize: 12),
                 ),
               ),
             ],
@@ -583,16 +593,22 @@ class _BasketCardRow extends StatelessWidget {
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
                 ),
                 const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: onRemove,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFFECACA)),
-                      borderRadius: BorderRadius.circular(10),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: OutlinedButton(
+                    onPressed: onRemove,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFF87171),
+                      side: const BorderSide(color: Color(0xFFFECACA)),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(28, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    child: const Icon(Icons.close, size: 14, color: Color(0xFFF87171)),
+                    child: const Icon(Icons.close, size: 14),
                   ),
                 ),
               ],

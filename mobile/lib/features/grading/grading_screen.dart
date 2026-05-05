@@ -10,6 +10,7 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
@@ -156,13 +157,16 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     final cardsAsync = ref.watch(userCardsProvider);
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
+        automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
           'Grading',
           style: AppFonts.appBarTitle,
         ),
-        actions: const [AppBarAvatar()],
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
@@ -412,22 +416,46 @@ class _CardRow extends StatelessWidget {
           const SizedBox(height: 4),
           const _ShimmerBox(width: 88, height: 30),
         ] else if (state.error)
-          GestureDetector(
-            onTap: onAnalyze,
-            child: const Text('Retry', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), decoration: TextDecoration.underline)),
+          SizedBox(
+            width: 88,
+            child: TextButton(
+              onPressed: onAnalyze,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(88, 28),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(
+                  fontSize: 11,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           )
         else if (state.result != null)
           ..._buildResultBoxes(state.result!)
         else
-          GestureDetector(
-            onTap: onAnalyze,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppTheme.primary),
-                borderRadius: BorderRadius.circular(8),
+          SizedBox(
+            width: 88,
+            child: OutlinedButton(
+              onPressed: onAnalyze,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                side: BorderSide(color: AppTheme.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                minimumSize: const Size(88, 28),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-              child: Text('Analyze', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.primary)),
+              child: const Text(
+                'Analyze',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
       ],

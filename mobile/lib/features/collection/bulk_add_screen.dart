@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -357,7 +358,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() { _committing = false; });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
     }
   }
 
@@ -448,7 +449,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (_, i) {
                           final r = _browseResults[i];
-                          return ListTile(
+                          return AdaptiveListTile(
+                            hideBottomDivider: true,
                             title: Text(r.displayName,
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                             subtitle: r.sport != null
@@ -584,7 +586,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     ),
                     child: ListView(
                       shrinkWrap: true,
-                      children: _cardResults.map((card) => ListTile(
+                      children: _cardResults.map((card) => AdaptiveListTile(
+                        hideBottomDivider: true,
                         title: Text(card.name, style: const TextStyle(fontSize: 13)),
                         subtitle: Row(
                           children: [
@@ -603,7 +606,6 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                             ],
                           ],
                         ),
-                        dense: true,
                         onTap: () => _selectCsCard(card),
                       )).toList(),
                     ),

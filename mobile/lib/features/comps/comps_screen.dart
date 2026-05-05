@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/app_breadcrumb.dart';
@@ -148,26 +149,31 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _loading ? null : _search,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: _loading ? 0.4 : 1.0),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: _loading
-                      ? const Center(
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: _loading
+                    ? Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
                           child: SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           ),
-                        )
-                      : const Icon(Icons.search, color: Colors.white, size: 18),
-                ),
+                        ),
+                      )
+                    : AdaptiveButton.icon(
+                        onPressed: _search,
+                        icon: Icons.search,
+                        style: AdaptiveButtonStyle.filled,
+                        color: AppTheme.primary,
+                        iconColor: Colors.white,
+                        padding: EdgeInsets.zero,
+                      ),
               ),
             ],
           ),
@@ -395,14 +401,22 @@ class _CompCard extends StatelessWidget {
             const SizedBox(height: 10),
             const Divider(color: Color(0xFFF9FAFB), height: 1),
             const SizedBox(height: 10),
-            GestureDetector(
-              onTap: () => launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication),
-              child: const Row(
-                children: [
-                  Icon(Icons.open_in_new, size: 12, color: Color(0xFF800020)),
-                  SizedBox(width: 4),
-                  Text('View on eBay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF800020))),
-                ],
+            SizedBox(
+              height: 24,
+              child: AdaptiveButton.child(
+                onPressed: () => launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication),
+                style: AdaptiveButtonStyle.plain,
+                size: AdaptiveButtonSize.small,
+                color: const Color(0xFF800020),
+                padding: EdgeInsets.zero,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.open_in_new, size: 12, color: Color(0xFF800020)),
+                    SizedBox(width: 4),
+                    Text('View on eBay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF800020))),
+                  ],
+                ),
               ),
             ),
           ],
@@ -463,17 +477,17 @@ class _PageButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Icon(icon, size: 20, color: enabled ? const Color(0xFF6B7280) : const Color(0xFFD1D5DB)),
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: AdaptiveButton.icon(
+        onPressed: enabled ? onTap : null,
+        icon: icon,
+        style: AdaptiveButtonStyle.bordered,
+        size: AdaptiveButtonSize.small,
+        color: const Color(0xFF6B7280),
+        iconColor: enabled ? const Color(0xFF6B7280) : const Color(0xFFD1D5DB),
+        padding: EdgeInsets.zero,
       ),
     );
   }

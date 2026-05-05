@@ -1,11 +1,13 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/fonts.dart';
 import '../collection/widgets/card_detail_view.dart';
 import '../collection/widgets/card_comps_section.dart';
 import 'scan_screen.dart';
+import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 
 class ScanResultScreen extends ConsumerStatefulWidget {
   const ScanResultScreen({
@@ -61,20 +63,12 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     }
   }
 
-  void _goBackToScan() {
-    context.pop();
-  }
-
   void _addToCollection() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Add to collection feature coming soon')),
-    );
+    AdaptiveSnackBar.show(context, message: 'Add to collection feature coming soon');
   }
 
   void _addToWishlist() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Add to wishlist feature coming soon')),
-    );
+    AdaptiveSnackBar.show(context, message: 'Add to wishlist feature coming soon');
   }
 
   @override
@@ -85,10 +79,6 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     if (_loading) {
       return Scaffold(
         appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-            onPressed: _goBackToScan,
-          ),
           title: Align(
             alignment: Alignment.centerLeft,
             child: Text('Card Details', style: AppFonts.appBarTitle),
@@ -96,6 +86,10 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
           backgroundColor: Colors.white,
           foregroundColor: Colors.black87,
           elevation: 0,
+          actions: const [
+            AppOverflowMenu(),
+            AppBarAvatar(iconOnly: true),
+          ],
         ),
         body: const Center(
           child: CircularProgressIndicator(),
@@ -105,14 +99,14 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: _goBackToScan,
-        ),
         title: const Text('Card Details'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(

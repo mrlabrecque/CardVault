@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,12 +8,67 @@ import '../theme/app_theme.dart';
 import '../utils/adaptive_ui.dart';
 
 class AppBarAvatar extends ConsumerWidget {
-  const AppBarAvatar({super.key});
+  const AppBarAvatar({super.key, this.iconOnly = false});
+
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final initial = (user?.email ?? '?')[0].toUpperCase();
+    final isAdmin = ref.watch(isAppAdminProvider).asData?.value ?? false;
+    final pendingCount = isAdmin
+        ? (ref.watch(pendingParallelCountProvider).asData?.value ?? 0)
+        : 0;
+
+    if (iconOnly) {
+      final menuItems = <AdaptivePopupMenuEntry>[
+        if ((user?.email ?? '').isNotEmpty)
+          AdaptivePopupMenuItem<String>(
+            label: user!.email!,
+            icon: 'envelope',
+            enabled: false,
+          ),
+        if (isAdmin) ...[
+          const AdaptivePopupMenuDivider(),
+          const AdaptivePopupMenuItem<String>(
+            label: 'Catalog',
+            icon: 'books.vertical',
+            value: '/admin/catalog',
+          ),
+          AdaptivePopupMenuItem<String>(
+            label: pendingCount > 0
+                ? 'Pending Parallels ($pendingCount)'
+                : 'Pending Parallels',
+            icon: 'clock.badge.exclamationmark',
+            value: '/admin/pending-parallels',
+          ),
+        ],
+        const AdaptivePopupMenuDivider(),
+        const AdaptivePopupMenuItem<String>(
+          label: 'Sign Out',
+          icon: 'rectangle.portrait.and.arrow.right',
+          value: '__signout__',
+        ),
+      ];
+
+      return Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: AdaptivePopupMenuButton.icon<String>(
+          icon: 'person.circle',
+          items: menuItems,
+          onSelected: (_, entry) async {
+            final value = entry.value;
+            if (value == null) return;
+            if (value == '__signout__') {
+              await ref.read(supabaseProvider).auth.signOut();
+              return;
+            }
+            if (context.mounted) context.go(value);
+          },
+        ),
+      );
+    }
 
     return GestureDetector(
       onTap: () {
@@ -35,24 +91,39 @@ class AppBarAvatar extends ConsumerWidget {
       },
       child: Padding(
         padding: const EdgeInsets.only(right: 12),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(
-            color: AppTheme.primary,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
+        child: iconOnly
+            ? Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                ),
+                child: const Icon(
+                  Icons.person_outline,
+                  size: 18,
+                  color: Color(0xFF6B7280),
+                ),
+              )
+            : Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: AppTheme.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }

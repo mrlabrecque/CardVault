@@ -6,6 +6,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 
 const _burgundy = Color(0xFF800020);
 
@@ -47,7 +48,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             style: AppFonts.appBarTitle,
           ),
         ),
-        actions: const [AppBarAvatar()],
+        actions: [
+          const AppOverflowMenu(),
+          const AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: cardsAsync.when(
         loading: () => _buildSkeleton(),

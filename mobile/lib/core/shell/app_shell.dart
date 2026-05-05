@@ -1,52 +1,24 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
-
-// TODO: Liquid glass tab bar (iOS)
-// Explored liquid_glass_easy + liquid_glacier — the backgroundWidget snapshot
-// mechanism causes a flicker on tab switch that needs solving before shipping.
-// Re-add the packages, restore _buildIOSGlassShell, and tackle the timing fix.
+import '../utils/platform_utils.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
   final Widget child;
 
-  static const _tabs = [
-    (
-      path: '/dashboard',
-      icon: Icons.bar_chart_outlined,
-      activeIcon: Icons.bar_chart,
-      label: 'Dashboard',
-    ),
-    (
-      path: '/catalog',
-      icon: Icons.travel_explore_outlined,
-      activeIcon: Icons.travel_explore,
-      label: 'Catalog',
-    ),
-    (
-      path: '/collection',
-      icon: Icons.style_outlined,
-      activeIcon: Icons.style,
-      label: 'Collection',
-    ),
-    (
-      path: '/wishlist',
-      icon: Icons.bookmark_outline,
-      activeIcon: Icons.bookmark,
-      label: 'Wishlist',
-    ),
-    (
-      path: '/tools',
-      icon: Icons.handyman_outlined,
-      activeIcon: Icons.handyman,
-      label: 'Tools',
-    ),
+  static const _paths = [
+    '/dashboard',
+    '/catalog',
+    '/scan',
+    '/collection',
+    '/wishlist',
   ];
 
   int _selectedIndex(String location) {
-    final idx = _tabs.indexWhere((t) => location.startsWith(t.path));
+    final idx = _paths.indexWhere((p) => location.startsWith(p));
     return idx < 0 ? 0 : idx;
   }
 
@@ -55,21 +27,129 @@ class AppShell extends ConsumerWidget {
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIdx = _selectedIndex(location);
 
+    if (isIOS) {
+      return IOSAppShell(
+        selectedIndex: selectedIdx,
+        onTabSelected: (i) => context.go(_paths[i]),
+        child: child,
+      );
+    }
+
+    return AndroidAppShell(
+      selectedIndex: selectedIdx,
+      onTabSelected: (i) => context.go(_paths[i]),
+      child: child,
+    );
+  }
+}
+
+class IOSAppShell extends StatelessWidget {
+  const IOSAppShell({
+    super.key,
+    required this.child,
+    required this.selectedIndex,
+    required this.onTabSelected,
+  });
+
+  final Widget child;
+  final int selectedIndex;
+  final ValueChanged<int> onTabSelected;
+
+  static const _iosItems = <AdaptiveNavigationDestination>[
+    AdaptiveNavigationDestination(
+      icon: 'chart.bar',
+      selectedIcon: 'chart.bar.fill',
+      label: 'Dashboard',
+    ),
+    AdaptiveNavigationDestination(
+      icon: 'square.stack.3d.up',
+      selectedIcon: 'square.stack.3d.up.fill',
+      label: 'Catalog',
+    ),
+    AdaptiveNavigationDestination(
+      icon: 'camera',
+      selectedIcon: 'camera.fill',
+      label: 'Scan',
+    ),
+    AdaptiveNavigationDestination(
+      icon: 'creditcard',
+      selectedIcon: 'creditcard.fill',
+      label: 'Collection',
+    ),
+    AdaptiveNavigationDestination(
+      icon: 'bookmark',
+      selectedIcon: 'bookmark.fill',
+      label: 'Wishlist',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return AdaptiveScaffold(
+      minimizeBehavior: TabBarMinimizeBehavior.never,
+      body: child,
+      bottomNavigationBar: AdaptiveBottomNavigationBar(
+        items: _iosItems,
+        selectedIndex: selectedIndex,
+        onTap: onTabSelected,
+        useNativeBottomBar: true,
+        selectedItemColor: AppTheme.primary,
+      ),
+    );
+  }
+}
+
+class AndroidAppShell extends StatelessWidget {
+  const AndroidAppShell({
+    super.key,
+    required this.child,
+    required this.selectedIndex,
+    required this.onTabSelected,
+  });
+
+  final Widget child;
+  final int selectedIndex;
+  final ValueChanged<int> onTabSelected;
+
+  static const _androidDestinations = <NavigationDestination>[
+    NavigationDestination(
+      icon: Icon(Icons.bar_chart_outlined),
+      selectedIcon: Icon(Icons.bar_chart),
+      label: 'Dashboard',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.travel_explore_outlined),
+      selectedIcon: Icon(Icons.travel_explore),
+      label: 'Catalog',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.qr_code_scanner_outlined),
+      selectedIcon: Icon(Icons.qr_code_scanner),
+      label: 'Scan',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.style_outlined),
+      selectedIcon: Icon(Icons.style),
+      label: 'Collection',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.bookmark_outline),
+      selectedIcon: Icon(Icons.bookmark),
+      label: 'Wishlist',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIdx,
-        onDestinationSelected: (i) => context.go(_tabs[i].path),
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onTabSelected,
         backgroundColor: AppTheme.primary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        destinations: _tabs.map((t) {
-          return NavigationDestination(
-            icon: Icon(t.icon),
-            selectedIcon: Icon(t.activeIcon),
-            label: t.label,
-          );
-        }).toList(),
+        destinations: _androidDestinations,
       ),
     );
   }

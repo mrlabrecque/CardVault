@@ -1,8 +1,10 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
@@ -18,7 +20,10 @@ class ToolsScreen extends StatelessWidget {
             style: AppFonts.appBarTitle,
           ),
         ),
-        actions: const [AppBarAvatar()],
+        actions: [
+          const AppOverflowMenu(),
+          const AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -103,82 +108,77 @@ class _ToolCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final disabled = comingSoon || onTap == null;
 
-    return GestureDetector(
-      onTap: disabled ? null : onTap,
-      child: Container(
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: AdaptiveListTile(
+        enabled: !disabled,
+        hideBottomDivider: true,
+        onTap: disabled ? null : onTap,
         padding: const EdgeInsets.all(16),
+        backgroundColor: Colors.white,
+        leading: Container(
+          width: 44,
+          height: 44,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFF3F4F6)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: disabled
+              ? const Color(0xFFF3F4F6)
+              : AppTheme.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Row(
+          child: Icon(
+            icon,
+            size: 22,
+            color: disabled ? const Color(0xFFD1D5DB) : AppTheme.primary,
+          ),
+        ),
+        title: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: disabled
-                    ? const Color(0xFFF3F4F6)
-                    : AppTheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                size: 22,
-                color: disabled ? const Color(0xFFD1D5DB) : AppTheme.primary,
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: disabled ? const Color(0xFF9CA3AF) : Colors.black87,
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: disabled ? const Color(0xFF9CA3AF) : Colors.black87,
-                        ),
-                      ),
-                      if (comingSoon) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'Soon',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF9CA3AF)),
-                          ),
-                        ),
-                      ],
-                    ],
+            if (comingSoon) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'Soon',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF9CA3AF),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  ),
-                ],
+                ),
               ),
-            ),
-            if (!disabled)
-              const Icon(Icons.chevron_right, color: Color(0xFFD1D5DB), size: 20),
+            ],
           ],
         ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+        ),
+        trailing: disabled
+            ? null
+            : const Icon(Icons.chevron_right, color: Color(0xFFD1D5DB), size: 20),
       ),
     );
   }

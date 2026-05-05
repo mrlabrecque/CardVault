@@ -1,6 +1,8 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
@@ -84,18 +86,13 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   Future<void> _refreshStack(CardStack stack) async {
     final key = _stackKey(stack);
     setState(() => _refreshingStacks.add(key));
-    final messenger = ScaffoldMessenger.of(context);
     final comps = ref.read(compsServiceProvider);
     try {
       await Future.wait(stack.cards.map((c) => comps.refreshCardValue(c.id)));
       ref.invalidate(userCardsProvider);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Market value updated'), duration: Duration(seconds: 2)),
-      );
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Market value updated', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Refresh failed: $e'), duration: const Duration(seconds: 3)),
-      );
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Refresh failed: $e', type: AdaptiveSnackBarType.error, duration: const Duration(seconds: 3));
     } finally {
       if (mounted) setState(() => _refreshingStacks.remove(key));
     }
@@ -119,7 +116,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           'Collection',
           style: AppFonts.appBarTitle,
         ),
-        actions: const [AppBarAvatar()],
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
       ),
       body: Column(
         children: [

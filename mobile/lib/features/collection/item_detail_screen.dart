@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -88,10 +89,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> with Single
       ref.invalidate(userCardsProvider);
       if (mounted) {
         setState(() => _editing = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Card updated.')));
+        AdaptiveSnackBar.show(context, message: 'Card updated.', type: AdaptiveSnackBarType.success);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

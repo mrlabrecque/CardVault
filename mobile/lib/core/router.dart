@@ -1,10 +1,8 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_service.dart';
-import 'utils/platform_utils.dart';
 import 'models/user_card.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/collection/item_detail_screen.dart';
@@ -24,8 +22,7 @@ import '../features/admin/pending_parallels_screen.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
 
-Page<void> _page(Widget child) =>
-  isIOS ? CupertinoPage(child: child) : MaterialPage(child: child);
+Page<void> _page(Widget child) => MaterialPage(child: child);
 
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = ref.watch(supabaseProvider);
