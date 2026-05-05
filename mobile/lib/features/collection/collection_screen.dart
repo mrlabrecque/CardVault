@@ -159,12 +159,12 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                     filters: const ['RC', 'AUTO', 'PATCH'],
                     activeFilters: _activeFilters,
                     onFilterToggle: _toggleFilter,
-                    sortMenuBuilder: (_) => [
-                      PopupMenuItem(value: SortOption.dateDesc,  child: _sortItem(Icons.calendar_today,  'Date Added',   _sort == SortOption.dateDesc,  colors)),
-                      PopupMenuItem(value: SortOption.playerAz,  child: _sortItem(Icons.sort_by_alpha,   'Player A–Z',   _sort == SortOption.playerAz,  colors)),
-                      PopupMenuItem(value: SortOption.valueDesc, child: _sortItem(Icons.trending_up,     'Value ↓',      _sort == SortOption.valueDesc, colors)),
-                      PopupMenuItem(value: SortOption.plPct,     child: _sortItem(Icons.percent,         'P/L %',        _sort == SortOption.plPct,     colors)),
-                      PopupMenuItem(value: SortOption.movingUp,  child: _sortItem(Icons.arrow_upward,    'Moving Up',    _sort == SortOption.movingUp,  colors)),
+                    sortOptions: [
+                      SortMenuOption(value: SortOption.dateDesc, label: 'Date Added', selected: _sort == SortOption.dateDesc, sfSymbol: 'calendar'),
+                      SortMenuOption(value: SortOption.playerAz, label: 'Player A–Z', selected: _sort == SortOption.playerAz, sfSymbol: 'textformat.abc'),
+                      SortMenuOption(value: SortOption.valueDesc, label: 'Value ↓', selected: _sort == SortOption.valueDesc, sfSymbol: 'chart.line.uptrend.xyaxis'),
+                      SortMenuOption(value: SortOption.plPct, label: 'P/L %', selected: _sort == SortOption.plPct, sfSymbol: 'percent'),
+                      SortMenuOption(value: SortOption.movingUp, label: 'Moving Up', selected: _sort == SortOption.movingUp, sfSymbol: 'arrow.up'),
                     ],
                     onSortSelected: (s) => setState(() => _sort = s),
                     actionButton: null,
@@ -262,10 +262,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
               ? _setViewSports.remove(sport)
               : _setViewSports.add(sport);
         }),
-        sortMenuBuilder: (_) => [
-          PopupMenuItem(value: SetSortOption.pctDesc, child: _setSortItem(Icons.percent, 'Most Complete', _setSort == SetSortOption.pctDesc, colors)),
-          PopupMenuItem(value: SetSortOption.valueDesc, child: _setSortItem(Icons.trending_up, 'Value ↓', _setSort == SetSortOption.valueDesc, colors)),
-          PopupMenuItem(value: SetSortOption.name, child: _setSortItem(Icons.sort_by_alpha, 'Name A–Z', _setSort == SetSortOption.name, colors)),
+        sortOptions: [
+          SortMenuOption(value: SetSortOption.pctDesc, label: 'Most Complete', selected: _setSort == SetSortOption.pctDesc, sfSymbol: 'percent'),
+          SortMenuOption(value: SetSortOption.valueDesc, label: 'Value ↓', selected: _setSort == SetSortOption.valueDesc, sfSymbol: 'chart.line.uptrend.xyaxis'),
+          SortMenuOption(value: SetSortOption.name, label: 'Name A–Z', selected: _setSort == SetSortOption.name, sfSymbol: 'textformat.abc'),
         ],
         onSortSelected: (s) => setState(() => _setSort = s),
       ),
@@ -297,19 +297,4 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     );
   }
 
-  Widget _setSortItem(IconData icon, String label, bool active, ColorScheme colors) {
-    return Row(children: [
-      Icon(icon, size: 16, color: active ? colors.primary : null),
-      const SizedBox(width: 8),
-      Text(label),
-    ]);
-  }
-
-  Widget _sortItem(IconData icon, String label, bool active, ColorScheme colors) {
-    return Row(children: [
-      Icon(icon, size: 16, color: active ? colors.primary : null),
-      const SizedBox(width: 8),
-      Text(label),
-    ]);
-  }
 }

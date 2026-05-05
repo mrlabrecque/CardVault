@@ -163,18 +163,9 @@ class _BrowseView extends ConsumerWidget {
   final ValueChanged<String> onFilterToggle;
   final List<UserCard> Function(List<UserCard>) filteredCards;
 
-  Widget _sortItem(IconData icon, String label, bool active, ColorScheme colors) {
-    return Row(children: [
-      Icon(icon, size: 16, color: active ? colors.primary : null),
-      const SizedBox(width: 8),
-      Text(label),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardsAsync = ref.watch(userCardsProvider);
-    final colors = Theme.of(context).colorScheme;
 
     return cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
@@ -194,10 +185,10 @@ class _BrowseView extends ConsumerWidget {
             filters: const ['RC', 'AUTO', 'PATCH'],
             activeFilters: filters,
             onFilterToggle: onFilterToggle,
-            sortMenuBuilder: (_) => [
-              PopupMenuItem(value: _SortOption.dateDesc,  child: _sortItem(Icons.calendar_today,  'Date Added', sort == _SortOption.dateDesc, colors)),
-              PopupMenuItem(value: _SortOption.playerAz,  child: _sortItem(Icons.sort_by_alpha,  'Player A–Z', sort == _SortOption.playerAz, colors)),
-              PopupMenuItem(value: _SortOption.valueDesc, child: _sortItem(Icons.trending_up,    'Value ↓',   sort == _SortOption.valueDesc, colors)),
+            sortOptions: [
+              SortMenuOption(value: _SortOption.dateDesc, label: 'Date Added', selected: sort == _SortOption.dateDesc, sfSymbol: 'calendar'),
+              SortMenuOption(value: _SortOption.playerAz, label: 'Player A–Z', selected: sort == _SortOption.playerAz, sfSymbol: 'textformat.abc'),
+              SortMenuOption(value: _SortOption.valueDesc, label: 'Value ↓', selected: sort == _SortOption.valueDesc, sfSymbol: 'chart.line.uptrend.xyaxis'),
             ],
             onSortSelected: onSortChanged,
             actionButton: const SizedBox.shrink(),

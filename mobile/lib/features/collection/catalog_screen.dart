@@ -740,22 +740,22 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
             : Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
                 child: Container(
+                  width: 46,
+                  height: 46,
                   decoration: BoxDecoration(
-                    color: colors.surface,
+                    color: Colors.black.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x22000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                   ],
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
                   ),
                   child: ClipOval(
                     child: AdaptiveButton.sfSymbol(
                       onPressed: _handleStepBack,
-                      sfSymbol: const SFSymbol('chevron.left', size: 14),
-                      style: AdaptiveButtonStyle.glass,
+                      sfSymbol: const SFSymbol(
+                        'chevron.left',
+                        size: 17,
+                        color: Colors.white,
+                      ),
+                      style: AdaptiveButtonStyle.plain,
                       size: AdaptiveButtonSize.small,
                     ),
                   ),

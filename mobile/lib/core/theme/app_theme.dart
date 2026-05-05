@@ -55,22 +55,32 @@ class AppTheme {
       scaffoldBackgroundColor: Color(0xFFFDFDFD),
 
       appBarTheme: const AppBarTheme(
-        backgroundColor: surface,
-        foregroundColor: textMain,
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.dark,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
           systemNavigationBarColor: primary,
           systemNavigationBarIconBrightness: Brightness.light,
         ),
         titleTextStyle: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          color: textMain,
+          color: Colors.white,
         ),
-        shape: Border(bottom: BorderSide(color: border)),
+        shape: Border(bottom: BorderSide(color: primaryDark)),
+      ),
+
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.white.withValues(alpha: 0.18),
+          shape: const CircleBorder(),
+          padding: const EdgeInsets.all(8),
+        ),
       ),
 
       navigationBarTheme: NavigationBarThemeData(

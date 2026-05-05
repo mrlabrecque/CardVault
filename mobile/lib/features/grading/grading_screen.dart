@@ -194,10 +194,10 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
             filters: const ['ALL', 'GRADE IT', 'BORDERLINE', 'SKIP IT', 'NOT ANALYZED'],
             activeFilters: {_tierFilterLabel(_tierFilterKey)},
             onFilterToggle: (f) => _setTierFilter(_tierKeyFromLabel(f)),
-            sortMenuBuilder: (_) => [
-              PopupMenuItem(value: 'value-desc',   child: _sortItem(Icons.trending_up,   'Value ↓',      _sortBy == 'value-desc')),
-              PopupMenuItem(value: 'player',        child: _sortItem(Icons.sort_by_alpha, 'Player A–Z',   _sortBy == 'player')),
-              PopupMenuItem(value: 'profit-desc',   child: _sortItem(Icons.percent,       'PSA 9 Profit', _sortBy == 'profit-desc')),
+            sortOptions: [
+              SortMenuOption(value: 'value-desc', label: 'Value ↓', selected: _sortBy == 'value-desc', sfSymbol: 'chart.line.uptrend.xyaxis'),
+              SortMenuOption(value: 'player', label: 'Player A–Z', selected: _sortBy == 'player', sfSymbol: 'textformat.abc'),
+              SortMenuOption(value: 'profit-desc', label: 'PSA 9 Profit', selected: _sortBy == 'profit-desc', sfSymbol: 'percent'),
             ],
             onSortSelected: (s) => setState(() => _sortBy = s),
             actionButton: const SizedBox.shrink(),
@@ -298,16 +298,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
       ),
     );
   }
-
-
-  Widget _sortItem(IconData icon, String label, bool active) {
-    return Row(children: [
-      Icon(icon, size: 16, color: active ? AppTheme.primary : null),
-      const SizedBox(width: 8),
-      Text(label, style: TextStyle(fontWeight: active ? FontWeight.w700 : FontWeight.normal)),
-    ]);
-  }
-
 
   Widget _buildEmpty() {
     return Padding(

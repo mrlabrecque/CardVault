@@ -57,27 +57,27 @@ class IOSAppShell extends StatelessWidget {
 
   static const _iosItems = <AdaptiveNavigationDestination>[
     AdaptiveNavigationDestination(
-      icon: 'chart.bar',
-      selectedIcon: 'chart.bar.fill',
+      icon: 'house.fill',
+      selectedIcon: 'house.fill',
       label: 'Dashboard',
     ),
     AdaptiveNavigationDestination(
-      icon: 'square.stack.3d.up',
-      selectedIcon: 'square.stack.3d.up.fill',
+      icon: 'square.grid.2x2.fill',
+      selectedIcon: 'square.grid.2x2.fill',
       label: 'Catalog',
     ),
     AdaptiveNavigationDestination(
-      icon: 'camera',
+      icon: 'camera.fill',
       selectedIcon: 'camera.fill',
       label: 'Scan',
     ),
     AdaptiveNavigationDestination(
-      icon: 'creditcard',
-      selectedIcon: 'creditcard.fill',
+      icon: 'square.stack.3d.up.fill',
+      selectedIcon: 'square.stack.3d.up.fill',
       label: 'Collection',
     ),
     AdaptiveNavigationDestination(
-      icon: 'bookmark',
+      icon: 'bookmark.fill',
       selectedIcon: 'bookmark.fill',
       label: 'Wishlist',
     ),
@@ -113,13 +113,13 @@ class AndroidAppShell extends StatelessWidget {
 
   static const _androidDestinations = <NavigationDestination>[
     NavigationDestination(
-      icon: Icon(Icons.bar_chart_outlined),
-      selectedIcon: Icon(Icons.bar_chart),
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
       label: 'Dashboard',
     ),
     NavigationDestination(
-      icon: Icon(Icons.travel_explore_outlined),
-      selectedIcon: Icon(Icons.travel_explore),
+      icon: Icon(Icons.search_outlined),
+      selectedIcon: Icon(Icons.search),
       label: 'Catalog',
     ),
     NavigationDestination(
@@ -128,8 +128,8 @@ class AndroidAppShell extends StatelessWidget {
       label: 'Scan',
     ),
     NavigationDestination(
-      icon: Icon(Icons.style_outlined),
-      selectedIcon: Icon(Icons.style),
+      icon: Icon(Icons.credit_card_outlined),
+      selectedIcon: Icon(Icons.credit_card),
       label: 'Collection',
     ),
     NavigationDestination(

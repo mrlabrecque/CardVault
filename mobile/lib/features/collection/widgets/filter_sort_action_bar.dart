@@ -3,7 +3,19 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/filter_pill.dart';
 
-typedef SortMenuBuilder<T> = List<PopupMenuItem<T>> Function(BuildContext);
+class SortMenuOption<T> {
+  const SortMenuOption({
+    required this.value,
+    required this.label,
+    this.selected = false,
+    this.sfSymbol = 'arrow.up.arrow.down',
+  });
+
+  final T value;
+  final String label;
+  final bool selected;
+  final String sfSymbol;
+}
 
 class FilterSortActionBar<T> extends StatelessWidget {
   const FilterSortActionBar({
@@ -15,7 +27,7 @@ class FilterSortActionBar<T> extends StatelessWidget {
     this.filters = const [],
     this.activeFilters = const {},
     this.onFilterToggle,
-    this.sortMenuBuilder,
+    this.sortOptions,
     this.onSortSelected,
     this.actionButton,
   });
@@ -29,13 +41,22 @@ class FilterSortActionBar<T> extends StatelessWidget {
   final Set<String> activeFilters;
   final ValueChanged<String>? onFilterToggle;
 
-  final SortMenuBuilder<T>? sortMenuBuilder;
+  final List<SortMenuOption<T>>? sortOptions;
   final ValueChanged<T>? onSortSelected;
   final Widget? actionButton;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final adaptiveSortItems = sortOptions
+        ?.map<AdaptivePopupMenuEntry>(
+          (opt) => AdaptivePopupMenuItem<T>(
+            value: opt.value,
+            label: opt.selected ? '✓ ${opt.label}' : opt.label,
+            icon: opt.sfSymbol,
+          ),
+        )
+        .toList();
 
     return Column(
       children: [
@@ -92,24 +113,32 @@ class FilterSortActionBar<T> extends StatelessWidget {
                   ),
                 ),
               ),
-              if (sortMenuBuilder != null) ...[
+              if (adaptiveSortItems != null && onSortSelected != null) ...[
                 const SizedBox(width: 6),
-                PopupMenuButton<T>(
-                  icon: const Icon(Icons.sort),
-                  itemBuilder: sortMenuBuilder!,
-                  onSelected: onSortSelected!,
+                AdaptivePopupMenuButton.icon<T>(
+                  icon: 'arrow.up.arrow.down',
+                  items: adaptiveSortItems,
+                  onSelected: (_, entry) {
+                    final value = entry.value;
+                    if (value == null) return;
+                    onSortSelected!(value);
+                  },
                 ),
               ],
             ],
           ),
-        ] else if (sortMenuBuilder != null) ...[
+        ] else if (adaptiveSortItems != null && onSortSelected != null) ...[
           // If no search but sort is enabled, just show sort button
           Align(
             alignment: Alignment.centerRight,
-            child: PopupMenuButton<T>(
-              icon: const Icon(Icons.sort),
-              itemBuilder: sortMenuBuilder!,
-              onSelected: onSortSelected!,
+            child: AdaptivePopupMenuButton.icon<T>(
+              icon: 'arrow.up.arrow.down',
+              items: adaptiveSortItems,
+              onSelected: (_, entry) {
+                final value = entry.value;
+                if (value == null) return;
+                onSortSelected!(value);
+              },
             ),
           ),
         ],
@@ -117,7 +146,7 @@ class FilterSortActionBar<T> extends StatelessWidget {
         // Row 2: Filters + Action
         if (filters.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
                 Expanded(

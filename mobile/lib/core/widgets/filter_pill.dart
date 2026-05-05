@@ -1,5 +1,5 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 
 /// iOS HIG-compliant filter pill widget.
 ///
@@ -23,25 +23,63 @@ class FilterPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? colors.primary : colors.surface,
-          border: Border.all(
-            color: isActive ? colors.primary : colors.outline,
-          ),
-          borderRadius: BorderRadius.circular(10),
+    final bgColor = isIOS
+        ? (isActive
+              ? colors.primary.withValues(alpha: 0.16)
+              : CupertinoColors.secondarySystemFill.resolveFrom(context))
+        : (isActive ? colors.primary : colors.surface);
+    final borderColor = isIOS
+        ? (isActive
+              ? colors.primary.withValues(alpha: 0.45)
+              : Colors.transparent)
+        : (isActive ? colors.primary : colors.outline);
+    final textColor = isIOS
+        ? (isActive
+              ? colors.primary
+              : CupertinoColors.label.resolveFrom(context))
+        : (isActive ? Colors.white : colors.onSurface);
+
+    final pill = AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: textColor,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: isActive ? Colors.white : colors.onSurface,
-          ),
+      ),
+    );
+
+    if (isIOS) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: CupertinoButton(
+          onPressed: onTap,
+          minSize: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+          pressedOpacity: 0.6,
+          child: Center(child: pill),
+        ),
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Center(
+          child: pill,
         ),
       ),
     );
