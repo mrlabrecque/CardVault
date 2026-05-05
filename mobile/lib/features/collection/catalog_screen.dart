@@ -20,6 +20,7 @@ import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
+import '../scan/scan_screen.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 import 'widgets/filter_sort_action_bar.dart';
@@ -88,8 +89,16 @@ const _catalogYears = [
 enum _CatalogStep { sportPicker, browsing, sets, card, parallel, detail, addCopy }
 enum _CatalogMode { browse, search }
 
+/// When set, catalog opens on the card detail step (e.g. after a scan).
+class CatalogScanEntry {
+  const CatalogScanEntry({required this.detection, required this.sport});
+  final CardSightDetection detection;
+  final String sport;
+}
+
 class CatalogScreen extends ConsumerStatefulWidget {
-  const CatalogScreen({super.key});
+  const CatalogScreen({super.key, this.scanEntry});
+  final CatalogScanEntry? scanEntry;
 
   @override
   ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
@@ -173,8 +182,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _restoreNavigationState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final entry = widget.scanEntry;
+      if (entry != null) {
+        await _openCatalogFromScan(entry.detection, entry.sport);
+      } else {
+        await _restoreNavigationState();
+      }
     });
   }
 
@@ -258,6 +272,100 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     if (mounted) {
       await _loadBrowseReleases(reset: true);
       setState(() => _restoringState = false);
+    }
+  }
+
+  Future<void> _openCatalogFromScan(CardSightDetection detection, String sport) async {
+    if (!mounted) return;
+    final card = detection.card;
+    if (card.id == null || card.releaseId == null || card.setId == null) {
+      if (mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: 'This match is incomplete — browse the catalog to find the card.',
+          type: AdaptiveSnackBarType.info,
+        );
+        await _restoreNavigationState();
+      }
+      return;
+    }
+
+    try {
+      final year = int.tryParse(card.year ?? '') ?? DateTime.now().year;
+      final releaseName = (card.releaseName?.trim().isNotEmpty == true)
+          ? card.releaseName!
+          : (card.manufacturer ?? 'Unknown Release');
+
+      final csResult = CardSightCardResult(
+        id: card.id!,
+        name: card.name ?? '',
+        number: card.number,
+        setId: card.setId!,
+        setName: card.setName ?? '',
+        releaseId: card.releaseId!,
+        attributes: const [],
+      );
+
+      final svc = ref.read(cardsServiceProvider);
+      final resolved = await svc.resolveCardFromCatalog(
+        card: csResult,
+        releaseName: releaseName,
+        releaseYear: year,
+        releaseSegmentId: card.segmentId ?? '',
+      );
+
+      final relSet = await svc.getReleaseAndSetForSetId(resolved.setId);
+      var cards = await svc.searchMasterCards(resolved.setId, '', limit: 10000);
+      final master = cards.where((c) => c.id == resolved.masterCardId).firstOrNull ??
+          await svc.fetchMasterCardById(resolved.masterCardId);
+      if (master == null) throw StateError('Card not found in catalog');
+      if (!cards.any((c) => c.id == master.id)) {
+        cards = [...cards, master];
+      }
+
+      final scanParallel = card.parallel;
+      SetParallel? matchedParallel;
+      if (scanParallel != null && scanParallel.name.isNotEmpty) {
+        final nameLower = scanParallel.name.toLowerCase();
+        for (final p in resolved.parallels) {
+          if (p.name.toLowerCase() == nameLower) {
+            matchedParallel = p;
+            break;
+          }
+        }
+      }
+      final parallelLabel = scanParallel?.name ?? 'Base';
+
+      if (!mounted) return;
+      setState(() {
+        _mode = _CatalogMode.browse;
+        _catalogFilterSport = sport;
+        _browseSelectedRelease = relSet.release;
+        _selectedRelease = relSet.release;
+        _browseSets = [];
+        _selectedSet = relSet.set;
+        _parallels = resolved.parallels;
+        _selectedParallel = matchedParallel;
+        _parallelName = parallelLabel;
+        _allCards = cards;
+        _cardResults = cards;
+        _selectedCard = master;
+        _cardCtrl.text = master.displayName;
+        _isNewCard = false;
+        _catalogStep = _CatalogStep.detail;
+        _restoringState = false;
+      });
+      unawaited(_saveNavigationState());
+      unawaited(ref.read(compsServiceProvider).fetchCardImage(master.id));
+    } catch (_) {
+      if (mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: 'Could not open this card in the catalog. Try browsing manually.',
+          type: AdaptiveSnackBarType.error,
+        );
+        await _restoreNavigationState();
+      }
     }
   }
 
@@ -748,15 +856,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                     border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
                   ),
                   child: ClipOval(
-                    child: AdaptiveButton.sfSymbol(
-                      onPressed: _handleStepBack,
-                      sfSymbol: const SFSymbol(
-                        'chevron.left',
-                        size: 17,
-                        color: Colors.white,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _handleStepBack,
+                        child: const Center(
+                          child: Icon(Icons.chevron_left, color: Colors.white, size: 26),
+                        ),
                       ),
-                      style: AdaptiveButtonStyle.plain,
-                      size: AdaptiveButtonSize.small,
                     ),
                   ),
                 ),

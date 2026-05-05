@@ -27,6 +27,7 @@ class CardDetailView extends StatelessWidget {
     this.isEditingCopy = false,
     this.yourCopyChild,
     this.children = const [],
+    this.showHeroThumbnail = true,
   });
 
   final UserCard? userCard;
@@ -45,6 +46,8 @@ class CardDetailView extends StatelessWidget {
   final bool isEditingCopy;
   final Widget? yourCopyChild;
   final List<Widget> children;
+  /// When false, the hero omits the small thumbnail (e.g. scan results show a large image above).
+  final bool showHeroThumbnail;
 
   String get _sportEmoji => switch ((userCard?.sport ?? sport ?? '').toLowerCase()) {
     'basketball' => '🏀',
@@ -104,27 +107,28 @@ class CardDetailView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Card image
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: _imageUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: _imageUrl!,
-                    width: 72,
-                    height: 100,
-                    fit: BoxFit.cover,
-                  )
-                : Container(
-                    width: 72,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+          if (showHeroThumbnail) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: _imageUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: _imageUrl!,
+                      width: 72,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      width: 72,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 32))),
                     ),
-                    child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 32))),
-                  ),
-          ),
-          const SizedBox(width: 16),
+            ),
+            const SizedBox(width: 16),
+          ],
           // Info
           Expanded(
             child: Column(

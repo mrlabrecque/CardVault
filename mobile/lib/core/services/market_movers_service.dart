@@ -14,6 +14,16 @@ class MarketMoversService {
   MarketMoversService(this._supabase);
   final SupabaseClient _supabase;
 
+  Future<Map<String, dynamic>> runRefreshNow() async {
+    final res = await _supabase.functions.invoke('market-movers-refresh', body: {});
+    if (res.status != 200) {
+      throw Exception('Refresh failed (${res.status}): ${res.data}');
+    }
+    final data = res.data;
+    if (data is Map<String, dynamic>) return data;
+    return {'result': data};
+  }
+
   Future<MarketMoversData> getMovers({String? sport, int days = 7}) async {
     // Fetch snapshots for the requested period + extra for previous week
     final now = DateTime.now();

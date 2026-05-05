@@ -37,6 +37,11 @@ class AppBarAvatar extends ConsumerWidget {
             icon: 'books.vertical',
             value: '/admin/catalog',
           ),
+          const AdaptivePopupMenuItem<String>(
+            label: 'Refresh Market Movers',
+            icon: 'arrow.clockwise.circle',
+            value: '/admin/market-movers',
+          ),
           AdaptivePopupMenuItem<String>(
             label: pendingCount > 0
                 ? 'Pending Parallels ($pendingCount)'
@@ -178,6 +183,11 @@ class _AvatarSheet extends ConsumerWidget {
                 icon: Icons.pending_outlined,
                 badge: pendingCount > 0 ? pendingCount : null,
                 onTap: () => onNavigate('/admin/pending-parallels'),
+              ),
+              _AdminLink(
+                label: 'Refresh Market Movers',
+                icon: Icons.refresh_outlined,
+                onTap: () => onNavigate('/admin/market-movers'),
               ),
               const SizedBox(height: 4),
               Divider(color: Colors.grey.shade100),

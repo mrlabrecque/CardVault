@@ -51,6 +51,7 @@ dependencies:
   google_sign_in: ^6.2.2
   crypto: ^3.0.6
   adaptive_platform_ui: ^0.1.106
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:

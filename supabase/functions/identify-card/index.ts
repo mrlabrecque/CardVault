@@ -48,13 +48,32 @@ Deno.serve(async (req) => {
     const url = `https://api.cardsight.ai/v1/identify/card/${sport}`;
     console.log('[identify-card] calling:', url);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'X-Api-Key': apiKey,
-      },
-      body: formData,
-    });
+    const controller = new AbortController();
+    const timeoutMs = 60000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': apiKey,
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        console.error('[identify-card] CardSight timeout after', timeoutMs, 'ms');
+        return new Response(
+          JSON.stringify({ error: 'CardSight request timed out' }),
+          { status: 504, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     console.log('[identify-card] CardSight response:', response.status);
 

@@ -10,7 +10,6 @@ import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
 import '../features/scan/scan_screen.dart';
-import '../features/scan/scan_result_screen.dart';
 import '../features/tools/tools_screen.dart';
 import '../features/collection/catalog_screen.dart';
 import '../features/collection/bulk_add_screen.dart';
@@ -18,11 +17,22 @@ import '../features/lot_builder/lot_builder_screen.dart';
 import '../features/grading/grading_screen.dart';
 import '../features/market_movers/market_movers_screen.dart';
 import '../features/admin/admin_catalog_screen.dart';
+import '../features/admin/admin_market_movers_screen.dart';
 import '../features/admin/pending_parallels_screen.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
 
 Page<void> _page(Widget child) => MaterialPage(child: child);
+
+/// `go_router` / map literals often yield `Map<String, Object?>`, not `Map<String, dynamic>`.
+CatalogScanEntry? _catalogScanEntryFromExtra(Object? extra) {
+  if (extra is! Map) return null;
+  final detection = extra['detection'];
+  final sportRaw = extra['sport'];
+  if (detection is! CardSightDetection) return null;
+  final sport = sportRaw is String ? sportRaw : '';
+  return CatalogScanEntry(detection: detection, sport: sport);
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = ref.watch(supabaseProvider);
@@ -54,7 +64,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               return _page(ItemDetailScreen(card: card));
             },
           ),
-          GoRoute(path: '/catalog', pageBuilder: (context, state) => _page(const CatalogScreen())),
+          GoRoute(
+            path: '/catalog',
+            pageBuilder: (context, state) {
+              final scanEntry = _catalogScanEntryFromExtra(state.extra);
+              return _page(CatalogScreen(scanEntry: scanEntry));
+            },
+          ),
           GoRoute(path: '/bulk-add', pageBuilder: (context, state) => _page(const BulkAddScreen())),
           GoRoute(path: '/tools', pageBuilder: (context, state) => _page(const ToolsScreen())),
           GoRoute(path: '/comps', pageBuilder: (context, state) => _page(const CompsScreen())),
@@ -62,18 +78,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/grading', pageBuilder: (context, state) => _page(const GradingScreen())),
           GoRoute(path: '/wishlist', pageBuilder: (context, state) => _page(const WishlistScreen())),
           GoRoute(path: '/scan', pageBuilder: (context, state) => _page(const ScanScreen())),
-          GoRoute(
-            path: '/scan/result',
-            pageBuilder: (context, state) {
-              final extra = state.extra as Map<String, dynamic>?;
-              final detection = extra?['detection'];
-              final sport = extra?['sport'] as String? ?? 'baseball';
-              if (detection == null) return _page(const ScanScreen());
-              return _page(ScanResultScreen(detection: detection, sport: sport));
-            },
-          ),
           GoRoute(path: '/market-movers', pageBuilder: (context, state) => _page(const MarketMoversScreen())),
           GoRoute(path: '/admin/catalog', pageBuilder: (_, _) => _page(const AdminCatalogScreen())),
+          GoRoute(path: '/admin/market-movers', pageBuilder: (_, _) => _page(const AdminMarketMoversScreen())),
           GoRoute(path: '/admin/pending-parallels', pageBuilder: (_, _) => _page(const PendingParallelsScreen())),
         ],
       ),

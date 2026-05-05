@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/card_fan_loader.dart';
 
 // CardSight detection result model
 class CardSightDetection {
@@ -129,11 +133,37 @@ enum _ScanState { sportPicker, processing, result, error }
 class _ScanScreenState extends State<ScanScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   final _supabase = Supabase.instance.client;
+  static const _scanFunctionName = 'identify-card';
+  static const _invokeTimeout = Duration(seconds: 75);
 
   _ScanState _state = _ScanState.sportPicker;
   String _selectedSport = '';
   CardSightDetection? _detection;
   String? _errorMessage;
+
+  Uint8List? _encodeScanJpeg(Uint8List raw, {int maxSide = 1200, int quality = 82}) {
+    final decoded = img.decodeImage(raw);
+    if (decoded == null) return null;
+    var im = decoded;
+    if (im.width > maxSide || im.height > maxSide) {
+      im = img.copyResize(
+        im,
+        width: im.width >= im.height ? maxSide : null,
+        height: im.height > im.width ? maxSide : null,
+        interpolation: img.Interpolation.linear,
+      );
+    }
+    return Uint8List.fromList(img.encodeJpg(im, quality: quality));
+  }
+
+  Future<FunctionResponse> _invokeIdentify(String base64) {
+    return _supabase.functions
+        .invoke(
+          _scanFunctionName,
+          body: {'imageBase64': base64, 'sport': _selectedSport},
+        )
+        .timeout(_invokeTimeout);
+  }
 
   static const _sports = [
     ('Baseball', 'baseball', '⚾', Color(0xFFB45309)),
@@ -152,7 +182,9 @@ class _ScanScreenState extends State<ScanScreen> {
   Future<void> _capturePhoto() async {
     final file = await _imagePicker.pickImage(
       source: ImageSource.camera,
-      imageQuality: 85,
+      imageQuality: 70,
+      maxWidth: 1600,
+      maxHeight: 1600,
     );
 
     if (file == null) {
@@ -169,16 +201,26 @@ class _ScanScreenState extends State<ScanScreen> {
     if (mounted) setState(() => _state = _ScanState.processing);
 
     try {
-      final bytes = await file.readAsBytes();
-      final base64String = base64Encode(bytes);
+      final raw = await file.readAsBytes();
+      final jpeg = _encodeScanJpeg(Uint8List.fromList(raw)) ?? Uint8List.fromList(raw);
+      var base64String = base64Encode(jpeg);
 
-      final res = await _supabase.functions.invoke(
-        'identify-card',
-        body: {'imageBase64': base64String, 'sport': _selectedSport},
-      );
+      FunctionResponse res;
+      try {
+        res = await _invokeIdentify(base64String);
+      } on TimeoutException {
+        final smaller =
+            _encodeScanJpeg(jpeg, maxSide: 900, quality: 78) ?? _encodeScanJpeg(raw, maxSide: 900, quality: 78) ?? jpeg;
+        base64String = base64Encode(smaller);
+        res = await _invokeIdentify(base64String);
+      }
 
       if (res.status != 200) {
-        throw Exception('Identification failed: ${res.status}');
+        final body = res.data;
+        if (body is Map && body['error'] != null) {
+          throw Exception(body['error']);
+        }
+        throw Exception('Identification failed (${res.status})');
       }
 
       final data = res.data as Map<String, dynamic>;
@@ -207,6 +249,26 @@ class _ScanScreenState extends State<ScanScreen> {
           _detection = detection;
         });
       }
+    } on FunctionException catch (e) {
+      final message = e.status == 404
+          ? 'Scan service is unavailable. Edge Function `$_scanFunctionName` was not found for this Supabase project. Deploy it with `supabase functions deploy $_scanFunctionName` and try again.'
+          : e.status == 504
+              ? 'Identification took too long (upstream timeout). Try Wi‑Fi or a simpler shot of the card front.'
+              : 'Scan failed (${e.status}). Please try again.';
+      if (mounted) {
+        setState(() {
+          _state = _ScanState.error;
+          _errorMessage = message;
+        });
+      }
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _state = _ScanState.error;
+          _errorMessage =
+              'Scan timed out. Try again on Wi‑Fi, or retake with the card closer and less glare.';
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -228,7 +290,10 @@ class _ScanScreenState extends State<ScanScreen> {
 
   void _goToCardDetails() {
     if (_detection == null) return;
-    context.push('/scan/result', extra: {'detection': _detection, 'sport': _selectedSport});
+    context.push('/catalog', extra: <String, dynamic>{
+      'detection': _detection!,
+      'sport': _selectedSport,
+    });
   }
 
   Color _getConfidenceColor(String confidence) {
@@ -324,7 +389,7 @@ class _ScanScreenState extends State<ScanScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Color(0xFF800020)),
+            const CardFanLoader(size: 72),
             const SizedBox(height: 20),
             Text(
               'Identifying card…',
@@ -369,6 +434,10 @@ class _ScanScreenState extends State<ScanScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Scan Results', style: AppFonts.appBarTitle),
+        ),
         actions: const [
           AppOverflowMenu(),
           AppBarAvatar(iconOnly: true),

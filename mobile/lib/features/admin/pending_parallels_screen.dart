@@ -2,7 +2,10 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_overflow_menu.dart';
 import '../../core/widgets/card_fan_loader.dart';
 
 final _pendingParallelsProvider = FutureProvider<List<PendingParallel>>((ref) {
@@ -78,6 +81,14 @@ class _PendingParallelsScreenState extends ConsumerState<PendingParallelsScreen>
   Widget build(BuildContext context) {
     final async = ref.watch(_pendingParallelsProvider);
     return Scaffold(
+      appBar: AppBar(
+        centerTitle: false,
+        title: Text('Pending Parallels', style: AppFonts.appBarTitle),
+        actions: const [
+          AppOverflowMenu(),
+          AppBarAvatar(iconOnly: true),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
@@ -245,7 +246,10 @@ class CardsService {
   final SupabaseClient _supabase;
 
   Future<List<UserCard>> loadUserCards() async {
-    final data = await _supabase.from('user_cards').select('''
+    try {
+      final data = await _supabase
+          .from('user_cards')
+          .select('''
       id, master_card_id, parallel_id, parallel_name,
       price_paid, current_value, previous_value, serial_number,
       is_graded, grader, grade_value, created_at,
@@ -255,10 +259,17 @@ class CardsService {
         sets ( id, name, card_count, releases ( year, sport, name ) )
       ),
       set_parallels!parallel_id ( name, serial_max, is_auto, color_hex )
-    ''').order('created_at', ascending: false);
-
-
-    return (data as List).map((r) => UserCard.fromJson(r as Map<String, dynamic>)).toList();
+    ''')
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 20));
+      return (data as List)
+          .map((r) => UserCard.fromJson(r as Map<String, dynamic>))
+          .toList();
+    } on TimeoutException {
+      throw Exception(
+        'Loading cards timed out. Check your network connection and Supabase settings.',
+      );
+    }
   }
 
   Future<void> deleteCard(String cardId) async {
@@ -361,6 +372,33 @@ class CardsService {
     }
     final data = await q.order('player', ascending: true).range(offset, offset + limit - 1);
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<MasterCard?> fetchMasterCardById(String id) async {
+    final data = await _supabase
+        .from('master_card_definitions')
+        .select('id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url')
+        .eq('id', id)
+        .maybeSingle();
+    if (data == null) return null;
+    return MasterCard.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<({ReleaseRecord release, SetRecord set})> getReleaseAndSetForSetId(String setId) async {
+    final setData = await _supabase
+        .from('sets')
+        .select('id, name, card_count, cardsight_id, master_card_definitions(count), release_id')
+        .eq('id', setId)
+        .single();
+    final releaseId = setData['release_id'] as String;
+    final setRecord = SetRecord.fromJson(Map<String, dynamic>.from(setData));
+    final releaseData = await _supabase
+        .from('releases')
+        .select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))')
+        .eq('id', releaseId)
+        .single();
+    final release = ReleaseRecord.fromJson(Map<String, dynamic>.from(releaseData));
+    return (release: release, set: setRecord);
   }
 
   Future<void> setWeeklyPriceCheck(String cardId, bool enabled) async {
