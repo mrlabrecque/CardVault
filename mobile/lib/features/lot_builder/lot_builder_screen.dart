@@ -8,10 +8,12 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
-import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/glass_nav_bar.dart';
+import '../../core/widgets/fixed_sliver_header_delegate.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 enum _SortOption { dateDesc, playerAz, valueDesc }
@@ -68,75 +70,199 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
   Widget build(BuildContext context) {
     final lot       = ref.watch(lotProvider);
     final notifier  = ref.read(lotProvider.notifier);
+    final colors = Theme.of(context).colorScheme;
+    final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
+    final hasActiveFilter = _filters.isNotEmpty;
+    final hasActiveSort = _sort != _SortOption.dateDesc;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
+        useBlurBackground: _showBasket,
         automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
           'Lot Builder',
-          style: AppFonts.appBarTitle,
+          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
         ),
-        actions: appBarShellTrailingActions(context),
+        actions: [
+          AppBarActionCapsule(
+            children: [
+              AdaptivePopupMenuButton.icon<String>(
+                icon: hasActiveFilter
+                    ? 'line.3.horizontal.decrease.circle.fill'
+                    : 'line.3.horizontal.decrease.circle',
+                tint: hasActiveFilter ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: [
+                  for (final filter in const ['RC', 'AUTO', 'PATCH'])
+                    AdaptivePopupMenuItem(
+                      label: _filters.contains(filter) ? '✓ $filter' : filter,
+                      icon: _filters.contains(filter) ? 'checkmark.circle.fill' : 'circle',
+                      value: filter,
+                    ),
+                  if (_filters.isNotEmpty)
+                    const AdaptivePopupMenuItem(
+                      label: 'Clear Filters',
+                      icon: 'xmark.circle',
+                      value: '__clear__',
+                    ),
+                ],
+                onSelected: (_, entry) {
+                  if (entry.value == '__clear__') {
+                    setState(_filters.clear);
+                    return;
+                  }
+                  final value = entry.value;
+                  if (value != null) _toggleFilter(value);
+                },
+              ),
+              AdaptivePopupMenuButton.icon<_SortOption>(
+                icon: hasActiveSort ? 'arrow.up.arrow.down.circle.fill' : 'arrow.up.arrow.down.circle',
+                tint: hasActiveSort ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: [
+                  AdaptivePopupMenuItem(
+                    value: _SortOption.dateDesc,
+                    label: _sort == _SortOption.dateDesc ? '✓ Date Added' : 'Date Added',
+                    icon: 'calendar',
+                  ),
+                  AdaptivePopupMenuItem(
+                    value: _SortOption.playerAz,
+                    label: _sort == _SortOption.playerAz ? '✓ Player A-Z' : 'Player A-Z',
+                    icon: 'textformat.abc',
+                  ),
+                  AdaptivePopupMenuItem(
+                    value: _SortOption.valueDesc,
+                    label: _sort == _SortOption.valueDesc ? '✓ Value ↓' : 'Value ↓',
+                    icon: 'chart.line.uptrend.xyaxis',
+                  ),
+                ],
+                onSelected: (_, entry) {
+                  final value = entry.value;
+                  if (value == null) return;
+                  setState(() => _sort = value);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
+          ...appBarShellTrailingActions(context),
+        ],
       ),
       body: Column(
         children: [
-          _Header(
-            showBasket: _showBasket,
-            basketCount: lot.items.length,
-            onToggle: (v) => setState(() => _showBasket = v),
-          ),
-          Expanded(
-            child: _showBasket
-                ? _BasketView(lot: lot, notifier: notifier)
-                : _BrowseView(
-                    searchCtrl: _searchCtrl,
-                    query: _query,
-                    sort: _sort,
-                    onSortChanged: (s) => setState(() => _sort = s),
-                    filters: _filters,
-                    lot: lot,
-                    notifier: notifier,
-                    onQueryChanged: (v) => setState(() => _query = v),
-                    onFilterToggle: _toggleFilter,
-                    filteredCards: _filtered,
-                  ),
-          ),
+          if (_showBasket) ...[
+            Expanded(
+              child: _BasketScrollView(
+                navOffset: navOffset,
+                basketCount: lot.items.length,
+                onToggleBrowseBasket: (v) => setState(() => _showBasket = v),
+                lot: lot,
+                notifier: notifier,
+              ),
+            ),
+          ] else
+            Expanded(
+              child: _BrowseView(
+                navOffset: navOffset,
+                basketCount: lot.items.length,
+                onToggleBrowseBasket: (v) => setState(() => _showBasket = v),
+                searchCtrl: _searchCtrl,
+                query: _query,
+                sort: _sort,
+                onSortChanged: (s) => setState(() => _sort = s),
+                filters: _filters,
+                lot: lot,
+                notifier: notifier,
+                onQueryChanged: (v) => setState(() => _query = v),
+                onFilterToggle: _toggleFilter,
+                filteredCards: _filtered,
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-// ── Header ────────────────────────────────────────────────────────────────────
+// ── Browse view ───────────────────────────────────────────────────────────────
 
-class _Header extends StatelessWidget {
-  const _Header({required this.showBasket, required this.basketCount, required this.onToggle});
-  final bool showBasket;
+class _BasketHeader extends StatelessWidget {
+  const _BasketHeader({
+    required this.navOffset,
+    required this.basketCount,
+    required this.onToggleBrowseBasket,
+  });
+
+  final double navOffset;
   final int basketCount;
-  final ValueChanged<bool> onToggle;
+  final ValueChanged<bool> onToggleBrowseBasket;
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final basketLabel = basketCount > 0 ? 'Basket ($basketCount)' : 'Basket';
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Builder(builder: (context) {
-            return AdaptiveSegmentedControl(
-              labels: ['Browse', basketLabel],
-              selectedIndex: showBasket ? 1 : 0,
-              onValueChanged: (index) => onToggle(index == 1),
-              color: Theme.of(context).colorScheme.primary,
-            );
-          }),
+    return AdaptiveBlurView(
+      blurStyle: BlurStyle.systemUltraThinMaterial,
+      child: Container(
+        color: colors.surface.withValues(alpha: 0.14),
+        padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
+        child: AdaptiveSegmentedControl(
+          labels: ['Browse', basketLabel],
+          selectedIndex: 1,
+          onValueChanged: (index) => onToggleBrowseBasket(index == 1),
+          color: colors.primary,
+        ),
+      ),
     );
   }
 }
 
-// ── Browse view ───────────────────────────────────────────────────────────────
+class _BasketScrollView extends StatelessWidget {
+  const _BasketScrollView({
+    required this.navOffset,
+    required this.basketCount,
+    required this.onToggleBrowseBasket,
+    required this.lot,
+    required this.notifier,
+  });
+
+  final double navOffset;
+  final int basketCount;
+  final ValueChanged<bool> onToggleBrowseBasket;
+  final LotState lot;
+  final LotNotifier notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: FixedSliverHeaderDelegate(
+            height: navOffset + 44,
+            child: _BasketHeader(
+              navOffset: navOffset,
+              basketCount: basketCount,
+              onToggleBrowseBasket: onToggleBrowseBasket,
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: _BasketView(lot: lot, notifier: notifier),
+        ),
+      ],
+    );
+  }
+}
 
 class _BrowseView extends ConsumerWidget {
   const _BrowseView({
+    required this.navOffset,
+    required this.basketCount,
+    required this.onToggleBrowseBasket,
     required this.searchCtrl,
     required this.query,
     required this.sort,
@@ -149,6 +275,9 @@ class _BrowseView extends ConsumerWidget {
     required this.filteredCards,
   });
 
+  final double navOffset;
+  final int basketCount;
+  final ValueChanged<bool> onToggleBrowseBasket;
   final TextEditingController searchCtrl;
   final String query;
   final _SortOption sort;
@@ -163,57 +292,97 @@ class _BrowseView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardsAsync = ref.watch(userCardsProvider);
+    final colors = Theme.of(context).colorScheme;
+    final basketLabel = basketCount > 0 ? 'Basket ($basketCount)' : 'Basket';
 
     return cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Color(0xFFDC2626)))),
       data: (allCards) {
         final cards = filteredCards(allCards);
-        return StickySubHeaderLayout(
-          header: const SizedBox.shrink(),
-          subHeader: FilterSortActionBar<_SortOption>(
-            searchText: query,
-            onSearchChanged: onQueryChanged,
-            onSearchClear: () {
-              searchCtrl.clear();
-              onQueryChanged('');
-            },
-            searchHint: 'Search player, set, sport…',
-            filters: const ['RC', 'AUTO', 'PATCH'],
-            activeFilters: filters,
-            onFilterToggle: onFilterToggle,
-            sortOptions: [
-              SortMenuOption(value: _SortOption.dateDesc, label: 'Date Added', selected: sort == _SortOption.dateDesc, sfSymbol: 'calendar'),
-              SortMenuOption(value: _SortOption.playerAz, label: 'Player A–Z', selected: sort == _SortOption.playerAz, sfSymbol: 'textformat.abc'),
-              SortMenuOption(value: _SortOption.valueDesc, label: 'Value ↓', selected: sort == _SortOption.valueDesc, sfSymbol: 'chart.line.uptrend.xyaxis'),
-            ],
-            onSortSelected: onSortChanged,
-            actionButton: const SizedBox.shrink(),
-          ),
-          label: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('${cards.length} cards', style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
-          ),
-          body: allCards.isEmpty
-              ? const Center(child: Text('No cards in your collection yet.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)))
-              : cards.isEmpty
-                  ? const Center(child: Text('No cards match your search.', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                      itemCount: cards.length,
-                      itemBuilder: (_, i) {
-                        final card = cards[i];
-                        final inLot = lot.itemIds.contains(card.id);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _BrowseCardRow(
-                            card: card,
-                            inLot: inLot,
-                            onToggle: () => notifier.toggle(card),
+        return CustomScrollView(
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: FixedSliverHeaderDelegate(
+                height: navOffset + 114,
+                child: AdaptiveBlurView(
+                  blurStyle: BlurStyle.systemUltraThinMaterial,
+                  child: Container(
+                    color: colors.surface.withValues(alpha: 0.14),
+                    child: Padding(
+                      padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
+                      child: Column(
+                        children: [
+                          AdaptiveSegmentedControl(
+                            labels: ['Browse', basketLabel],
+                            selectedIndex: 0,
+                            onValueChanged: (index) => onToggleBrowseBasket(index == 1),
+                            color: colors.primary,
                           ),
-                        );
-                      },
+                          const SizedBox(height: 8),
+                          FilterSortActionBar<_SortOption>(
+                            searchText: query,
+                            onSearchChanged: onQueryChanged,
+                            onSearchClear: () {
+                              searchCtrl.clear();
+                              onQueryChanged('');
+                            },
+                            searchHint: 'Search player, set, sport…',
+                          ),
+                        ],
+                      ),
                     ),
+                  ),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('${cards.length} cards',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+                ),
+              ),
+            ),
+            if (allCards.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text('No cards in your collection yet.',
+                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)),
+                ),
+              )
+            else if (cards.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text('No cards match your search.',
+                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                sliver: SliverList.builder(
+                  itemCount: cards.length,
+                  itemBuilder: (_, i) {
+                    final card = cards[i];
+                    final inLot = lot.itemIds.contains(card.id);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _BrowseCardRow(
+                        card: card,
+                        inLot: inLot,
+                        onToggle: () => notifier.toggle(card),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
         );
       },
     );
@@ -315,7 +484,9 @@ class _BasketView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (lot.items.isEmpty) {
-      return Center(
+      return SizedBox(
+        height: 420,
+        child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -334,11 +505,14 @@ class _BasketView extends StatelessWidget {
             const Text('Switch to Browse and tap cards to add them.', style: TextStyle(fontSize: 12, color: Color(0xFFD1D5DB))),
           ],
         ),
+        ),
       );
     }
 
-    return ListView(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Asking price card — centered
         Container(
@@ -446,6 +620,7 @@ class _BasketView extends StatelessWidget {
           child: _BasketCardRow(card: card, onRemove: () => notifier.remove(card.id)),
         )),
       ],
+      ),
     );
   }
 }

@@ -5,19 +5,23 @@ import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         title: Align(
           alignment: Alignment.centerLeft,
           child: Text(
             'Tools',
-            style: AppFonts.appBarTitle,
+            style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
           ),
         ),
         actions: appBarShellTrailingActions(context),

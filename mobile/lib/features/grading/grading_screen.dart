@@ -8,10 +8,12 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
-import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/glass_nav_bar.dart';
+import '../../core/widgets/fixed_sliver_header_delegate.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
@@ -88,24 +90,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     _            => null, // 'all'
   };
 
-  String _tierFilterLabel(String key) => switch (key) {
-    'grade'      => 'GRADE IT',
-    'borderline' => 'BORDERLINE',
-    'skip'       => 'SKIP IT',
-    'pending'    => 'NOT ANALYZED',
-    _            => 'ALL',
-  };
-
-  String _tierKeyFromLabel(String label) => switch (label) {
-    'GRADE IT'      => 'grade',
-    'BORDERLINE'    => 'borderline',
-    'SKIP IT'       => 'skip',
-    'NOT ANALYZED'  => 'pending',
-    _               => 'all',
-  };
-
-  void _setTierFilter(String key) => setState(() => _tierFilterKey = key);
-
   List<UserCard> _applyFiltersAndSort(List<UserCard> raw) {
     final q = _search.toLowerCase();
     final tierFilter = _tierFromKey(_tierFilterKey);
@@ -156,15 +140,70 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   @override
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(userCardsProvider);
+    final colors = Theme.of(context).colorScheme;
+    final hasActiveFilter = _tierFilterKey != 'all';
+    final hasActiveSort = _sortBy != 'value-desc';
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
+        useBlurBackground: false,
         automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
           'Grading',
-          style: AppFonts.appBarTitle,
+          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
         ),
-        actions: appBarShellTrailingActions(context),
+        actions: [
+          AppBarActionCapsule(
+            children: [
+              AdaptivePopupMenuButton.icon<String>(
+                icon: hasActiveFilter
+                    ? 'line.3.horizontal.decrease.circle.fill'
+                    : 'line.3.horizontal.decrease.circle',
+                tint: hasActiveFilter ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: const [
+                  AdaptivePopupMenuItem(label: 'All', icon: 'circle', value: 'all'),
+                  AdaptivePopupMenuItem(label: 'Grade It', icon: 'checkmark.seal', value: 'grade'),
+                  AdaptivePopupMenuItem(label: 'Borderline', icon: 'questionmark.circle', value: 'borderline'),
+                  AdaptivePopupMenuItem(label: 'Skip It', icon: 'xmark.circle', value: 'skip'),
+                  AdaptivePopupMenuItem(label: 'Not Analyzed', icon: 'clock', value: 'pending'),
+                ],
+                onSelected: (_, entry) => setState(() => _tierFilterKey = entry.value ?? 'all'),
+              ),
+              AdaptivePopupMenuButton.icon<String>(
+                icon: hasActiveSort ? 'arrow.up.arrow.down.circle.fill' : 'arrow.up.arrow.down.circle',
+                tint: hasActiveSort ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: [
+                  AdaptivePopupMenuItem(
+                    value: 'value-desc',
+                    label: _sortBy == 'value-desc' ? '✓ Value ↓' : 'Value ↓',
+                    icon: 'chart.line.uptrend.xyaxis',
+                  ),
+                  AdaptivePopupMenuItem(
+                    value: 'player',
+                    label: _sortBy == 'player' ? '✓ Player A-Z' : 'Player A-Z',
+                    icon: 'textformat.abc',
+                  ),
+                  AdaptivePopupMenuItem(
+                    value: 'profit-desc',
+                    label: _sortBy == 'profit-desc' ? '✓ PSA 9 Profit' : 'PSA 9 Profit',
+                    icon: 'percent',
+                  ),
+                ],
+                onSelected: (_, entry) {
+                  final next = entry.value;
+                  if (next == null) return;
+                  setState(() => _sortBy = next);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
+          ...appBarShellTrailingActions(context),
+        ],
       ),
       body: cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
@@ -173,63 +212,83 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
         final ungradedCards = allCards.where((c) => !c.isGraded).toList();
         final display = _applyFiltersAndSort(ungradedCards);
         final analyzedCount = _cardStates.values.where((s) => s.result != null).length;
+        final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
 
-        return StickySubHeaderLayout(
-          header: Column(
-            children: [
-              _buildFeeCard(),
-            ],
-          ),
-          subHeader: FilterSortActionBar<String>(
-            searchText: _search,
-            onSearchChanged: (v) => setState(() => _search = v),
-            onSearchClear: () {
-              _searchController.clear();
-              setState(() => _search = '');
-            },
-            searchHint: 'Search player, set, sport…',
-            filters: const ['ALL', 'GRADE IT', 'BORDERLINE', 'SKIP IT', 'NOT ANALYZED'],
-            activeFilters: {_tierFilterLabel(_tierFilterKey)},
-            onFilterToggle: (f) => _setTierFilter(_tierKeyFromLabel(f)),
-            sortOptions: [
-              SortMenuOption(value: 'value-desc', label: 'Value ↓', selected: _sortBy == 'value-desc', sfSymbol: 'chart.line.uptrend.xyaxis'),
-              SortMenuOption(value: 'player', label: 'Player A–Z', selected: _sortBy == 'player', sfSymbol: 'textformat.abc'),
-              SortMenuOption(value: 'profit-desc', label: 'PSA 9 Profit', selected: _sortBy == 'profit-desc', sfSymbol: 'percent'),
-            ],
-            onSortSelected: (s) => setState(() => _sortBy = s),
-            actionButton: const SizedBox.shrink(),
-          ),
-          label: ungradedCards.isNotEmpty
-              ? Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${display.length} card${display.length == 1 ? '' : 's'} · $analyzedCount analyzed',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                  ),
-                )
-              : null,
-          body: ungradedCards.isEmpty
-              ? _buildEmpty()
-              : display.isEmpty
-                  ? const Center(
-                      child: Text('No cards match your filters.',
-                          style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
-                      itemCount: display.length,
-                      itemBuilder: (_, i) {
-                        final c = display[i];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _CardRow(
-                            card: c,
-                            state: _cardStates[c.id] ?? const _CardState(),
-                            gradingFee: _gradingFee,
-                            onAnalyze: () => _analyze(c.id),
+        return CustomScrollView(
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: FixedSliverHeaderDelegate(
+                height: navOffset + 134,
+                child: AdaptiveBlurView(
+                  blurStyle: BlurStyle.systemUltraThinMaterial,
+                  child: Container(
+                    color: colors.surface.withValues(alpha: 0.14),
+                    child: Padding(
+                      padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
+                      child: Column(
+                        children: [
+                          _buildFeeCard(),
+                          const SizedBox(height: 8),
+                          FilterSortActionBar<String>(
+                            searchText: _search,
+                            onSearchChanged: (v) => setState(() => _search = v),
+                            onSearchClear: () {
+                              _searchController.clear();
+                              setState(() => _search = '');
+                            },
+                            searchHint: 'Search player, set, sport…',
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
+                  ),
+                ),
+              ),
+            ),
+            if (ungradedCards.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${display.length} card${display.length == 1 ? '' : 's'} · $analyzedCount analyzed',
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                    ),
+                  ),
+                ),
+              ),
+            if (ungradedCards.isEmpty)
+              SliverFillRemaining(hasScrollBody: false, child: _buildEmpty())
+            else if (display.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text('No cards match your filters.',
+                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                sliver: SliverList.builder(
+                  itemCount: display.length,
+                  itemBuilder: (_, i) {
+                    final c = display[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _CardRow(
+                        card: c,
+                        state: _cardStates[c.id] ?? const _CardState(),
+                        gradingFee: _gradingFee,
+                        onAnalyze: () => _analyze(c.id),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
         );
       },
     ),

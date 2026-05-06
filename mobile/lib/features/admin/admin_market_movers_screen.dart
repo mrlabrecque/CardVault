@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/market_movers_service.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 
 class AdminMarketMoversScreen extends ConsumerStatefulWidget {
   const AdminMarketMoversScreen({super.key});
@@ -65,10 +66,13 @@ class _AdminMarketMoversScreenState
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         centerTitle: false,
-        title: Text('Market Movers Admin', style: AppFonts.appBarTitle),
+        title: Text('Market Movers Admin', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         actions: appBarShellTrailingActions(context),
       ),
       body: ListView(

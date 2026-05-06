@@ -8,6 +8,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 
 const _burgundy = Color(0xFF800020);
 
@@ -39,32 +40,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(userCardsProvider);
+    final colors = Theme.of(context).colorScheme;
+    final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
+        useBlurBackground: true,
         title: Align(
           alignment: Alignment.centerLeft,
           child: Text(
             'Dashboard',
-            style: AppFonts.appBarTitle,
+            style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
           ),
         ),
         actions: appBarShellTrailingActions(context),
       ),
       body: cardsAsync.when(
-        loading: () => _buildSkeleton(),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        loading: () => _buildSkeleton(navOffset),
+        error: (e, _) => Padding(
+          padding: EdgeInsets.only(top: navOffset),
+          child: Center(child: Text('Error: $e')),
+        ),
         data: (cards) {
-          if (cards.isEmpty) return _buildEmpty();
-          return _buildContent(cards);
+          if (cards.isEmpty) return _buildEmpty(navOffset);
+          return _buildContent(cards, navOffset);
         },
       ),
     );
   }
 
-  Widget _buildSkeleton() {
+  Widget _buildSkeleton(double navOffset) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+      padding: EdgeInsets.fromLTRB(12, navOffset + 12, 12, 100),
       children: [
         Row(children: List.generate(3, (_) => Expanded(
           child: Padding(
@@ -90,23 +99,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildEmpty() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('🃏', style: TextStyle(fontSize: 48)),
-          SizedBox(height: 12),
-          Text('No cards yet', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black87)),
-          SizedBox(height: 4),
-          Text('Add your first card using the + button below.',
-              style: TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
-        ],
+  Widget _buildEmpty(double navOffset) {
+    return Padding(
+      padding: EdgeInsets.only(top: navOffset),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('🃏', style: TextStyle(fontSize: 48)),
+            SizedBox(height: 12),
+            Text('No cards yet', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black87)),
+            SizedBox(height: 4),
+            Text('Add your first card using the + button below.',
+                style: TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildContent(List<UserCard> cards) {
+  Widget _buildContent(List<UserCard> cards, double navOffset) {
     final totalValue = cards.fold(0.0, (s, c) => s + (c.currentValue ?? 0));
     final totalCost  = cards.fold(0.0, (s, c) => s + (c.pricePaid ?? 0));
     final pl = totalValue - totalCost;
@@ -151,7 +163,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(userCardsProvider),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+        padding: EdgeInsets.fromLTRB(12, navOffset + 12, 12, 100),
         children: [
           // ── Stat tiles ──────────────────────────────────────────────────
           Row(children: [

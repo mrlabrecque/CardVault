@@ -8,6 +8,7 @@ import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 
 final _years = List.generate(
   2026 - 1980 + 1,
@@ -193,9 +194,11 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         centerTitle: false,
-        title: Text('Catalog Admin', style: AppFonts.appBarTitle),
+        title: Text('Catalog Admin', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         actions: appBarShellTrailingActions(context),
       ),
       body: switch (_step) {

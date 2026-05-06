@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 
 // CardSight detection result model
 class CardSightDetection {
@@ -315,11 +316,14 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Widget _buildSportPicker() {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         title: Align(
           alignment: Alignment.centerLeft,
-          child: Text('Scan Card', style: AppFonts.appBarTitle),
+          child: Text('Scan Card', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         ),
         actions: appBarShellTrailingActions(context),
       ),
@@ -427,12 +431,15 @@ class _ScanScreenState extends State<ScanScreen> {
     final detection = _detection!;
     final card = detection.card;
     final color = _getConfidenceColor(detection.confidence);
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         title: Align(
           alignment: Alignment.centerLeft,
-          child: Text('Scan Results', style: AppFonts.appBarTitle),
+          child: Text('Scan Results', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         ),
         actions: appBarShellTrailingActions(context),
       ),
@@ -559,8 +566,8 @@ class _ScanScreenState extends State<ScanScreen> {
                 ),
               ],
             ),
-          ),
         ),
+      ),
       );
   }
 

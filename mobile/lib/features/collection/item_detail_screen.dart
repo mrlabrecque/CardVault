@@ -8,6 +8,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/adaptive_list_card.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
@@ -342,23 +343,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     final bottomPad = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         centerTitle: false,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          icon: Icon(Icons.arrow_back_ios_new, size: 18, color: colors.onSurface),
           onPressed: () => _close(context),
           tooltip: 'Back',
           style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
         ),
         title: Text(
           card.player,
-          style: AppFonts.appBarTitle,
+          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_outline),
+            icon: Icon(Icons.delete_outline, color: colors.onSurface),
             tooltip: 'Delete',
             style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
             onPressed: () => _delete(card),

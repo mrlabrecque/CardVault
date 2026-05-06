@@ -6,6 +6,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 
 final _pendingParallelsProvider = FutureProvider<List<PendingParallel>>((ref) {
   return ref.watch(cardsServiceProvider).getPendingParallels();
@@ -79,10 +80,13 @@ class _PendingParallelsScreenState extends ConsumerState<PendingParallelsScreen>
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(_pendingParallelsProvider);
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         centerTitle: false,
-        title: Text('Pending Parallels', style: AppFonts.appBarTitle),
+        title: Text('Pending Parallels', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         actions: appBarShellTrailingActions(context),
       ),
       body: Column(

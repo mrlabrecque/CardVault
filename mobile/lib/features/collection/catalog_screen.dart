@@ -17,6 +17,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import '../scan/scan_screen.dart';
@@ -847,7 +848,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
+        useBlurBackground: true,
         leading: (_catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse) ||
                  (_mode == _CatalogMode.search && _searchSelectedCard == null)
             ? null
@@ -857,9 +861,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: colors.onSurface.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+                    border: Border.all(color: colors.onSurface.withValues(alpha: 0.2)),
                   ),
                   child: ClipOval(
                     child: Material(
@@ -867,8 +871,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                       child: InkWell(
                         customBorder: const CircleBorder(),
                         onTap: _handleStepBack,
-                        child: const Center(
-                          child: Icon(Icons.chevron_left, color: Colors.white, size: 26),
+                        child: Center(
+                          child: Icon(Icons.chevron_left, color: colors.onSurface, size: 26),
                         ),
                       ),
                     ),
@@ -878,7 +882,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         centerTitle: false,
         title: Text(
           _appBarTitle(),
-          style: AppFonts.appBarTitle,
+          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
         ),
         actions: appBarShellTrailingActions(
           context,
@@ -887,21 +891,28 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       ),
       body: Column(
         children: [
-          // Mode tabs (Browse/Search)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: AdaptiveSegmentedControl(
-              labels: const ['Browse', 'Search'],
-              selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
-              onValueChanged: (index) {
-                setState(() {
-                  _mode = index == 0 ? _CatalogMode.browse : _CatalogMode.search;
-                });
-              },
-              color: colors.primary,
+          AdaptiveBlurView(
+            blurStyle: BlurStyle.systemUltraThinMaterial,
+            child: Container(
+              color: colors.surface.withValues(alpha: 0.14),
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + kToolbarHeight,
+                left: 12,
+                right: 12,
+                bottom: 8,
+              ),
+              child: AdaptiveSegmentedControl(
+                labels: const ['Browse', 'Search'],
+                selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
+                onValueChanged: (index) {
+                  setState(() {
+                    _mode = index == 0 ? _CatalogMode.browse : _CatalogMode.search;
+                  });
+                },
+                color: colors.primary,
+              ),
             ),
           ),
-          // Content
           Expanded(
             child: _restoringState
                 ? const Center(child: CardFanLoader())
@@ -934,73 +945,75 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
     return Column(
       children: [
-        // Filter row
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
-          ),
-          child: AdaptiveDropdown<String>(
-            value: _catalogFilterYear,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            ),
-            items: [
-              const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
-              ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
-            ],
-            onChanged: (v) {
-              setState(() {
-                _catalogFilterYear = v ?? '';
-                _browseSearchCtrl.clear();
-              });
-              _loadBrowseReleases(reset: true);
-            },
-          ),
-        ),
-        // Search bar
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
-          ),
-          child: AdaptiveTextField(
-            controller: _browseSearchCtrl,
-            onChanged: (_) => setState(() {}),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            placeholder: 'Search releases…',
-            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-            suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                ? GestureDetector(
-                    onTap: () => setState(() => _browseSearchCtrl.clear()),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.close, size: 16),
+        AdaptiveBlurView(
+          blurStyle: BlurStyle.systemUltraThinMaterial,
+          child: Container(
+            color: colors.surface.withValues(alpha: 0.14),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                  child: AdaptiveDropdown<String>(
+                    value: _catalogFilterYear,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                     ),
-                  )
-                : null,
-            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
-              context,
-              radius: 10,
-            ),
-            decoration: InputDecoration(
-              labelText: 'Search releases',
-              hintText: 'Search releases…',
-              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-              suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                  ? GestureDetector(
-                      onTap: () => setState(() => _browseSearchCtrl.clear()),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(Icons.close, size: 16),
-                      ),
-                    )
-                  : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              isDense: true,
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
+                      ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
+                    ],
+                    onChanged: (v) {
+                      setState(() {
+                        _catalogFilterYear = v ?? '';
+                        _browseSearchCtrl.clear();
+                      });
+                      _loadBrowseReleases(reset: true);
+                    },
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: AdaptiveTextField(
+                    controller: _browseSearchCtrl,
+                    onChanged: (_) => setState(() {}),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    placeholder: 'Search releases…',
+                    prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                    suffixIcon: _browseSearchCtrl.text.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () => setState(() => _browseSearchCtrl.clear()),
+                            child: const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(Icons.close, size: 16),
+                            ),
+                          )
+                        : null,
+                    cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
+                      context,
+                      radius: 10,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Search releases',
+                      hintText: 'Search releases…',
+                      hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+                      prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                      suffixIcon: _browseSearchCtrl.text.isNotEmpty
+                          ? GestureDetector(
+                              onTap: () => setState(() => _browseSearchCtrl.clear()),
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.close, size: 16),
+                              ),
+                            )
+                          : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1066,67 +1079,52 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       ('Hockey', 'Hockey', '🏒', Color(0xFF2563EB)),
     ];
 
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+    return GridView.count(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      crossAxisCount: 2,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.2,
+      children: sports.map((sport) {
+        final (name, value, emoji, tintColor) = sport;
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _catalogFilterSport = value;
+              _catalogFilterYear = '';
+              _browseSearchCtrl.clear();
+            });
+            _loadBrowseReleases(reset: true);
+            setState(() => _catalogStep = _CatalogStep.browsing);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: tintColor.withValues(alpha: 0.15),
+              border: Border.all(
+                color: tintColor.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 2-column grid of sports
-                GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.2,
-                  children: sports.map((sport) {
-                    final (name, value, emoji, tintColor) = sport;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _catalogFilterSport = value;
-                          _catalogFilterYear = '';
-                          _browseSearchCtrl.clear();
-                        });
-                        _loadBrowseReleases(reset: true);
-                        setState(() => _catalogStep = _CatalogStep.browsing);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: tintColor.withValues(alpha: 0.15),
-                          border: Border.all(
-                            color: tintColor.withValues(alpha: 0.3),
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(emoji, style: const TextStyle(fontSize: 48)),
-                            const SizedBox(height: 12),
-                            Text(
-                              name,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: colors.onSurface,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                Text(emoji, style: const TextStyle(fontSize: 48)),
+                const SizedBox(height: 12),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: colors.onSurface,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
           ),
-        ),
-      ],
+        );
+      }).toList(),
     );
   }
 
@@ -1140,35 +1138,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
     return Column(
       children: [
-        // Search bar
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.12))),
-          ),
-          child: AdaptiveTextField(
-            controller: _setSearchCtrl,
-            onChanged: (_) => setState(() {}),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            placeholder: 'Search sets…',
-            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-            suffixIcon: _setSearchCtrl.text.isNotEmpty
-                ? GestureDetector(
-                    onTap: () => setState(() => _setSearchCtrl.clear()),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.close, size: 16),
-                    ),
-                  )
-                : null,
-            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
-              context,
-              radius: 10,
-            ),
-            decoration: InputDecoration(
-              labelText: 'Search sets',
-              hintText: 'Search sets…',
-              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+        AdaptiveBlurView(
+          blurStyle: BlurStyle.systemUltraThinMaterial,
+          child: Container(
+            color: colors.surface.withValues(alpha: 0.14),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: AdaptiveTextField(
+              controller: _setSearchCtrl,
+              onChanged: (_) => setState(() {}),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              placeholder: 'Search sets…',
               prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
               suffixIcon: _setSearchCtrl.text.isNotEmpty
                   ? GestureDetector(
@@ -1179,8 +1158,27 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                       ),
                     )
                   : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              isDense: true,
+              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
+                context,
+                radius: 10,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Search sets',
+                hintText: 'Search sets…',
+                hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+                prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                suffixIcon: _setSearchCtrl.text.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () => setState(() => _setSearchCtrl.clear()),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(Icons.close, size: 16),
+                        ),
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
             ),
           ),
         ),

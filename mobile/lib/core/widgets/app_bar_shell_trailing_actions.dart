@@ -1,6 +1,8 @@
-import 'package:flutter/widgets.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'app_bar_action_capsule.dart';
 import 'app_bar_avatar.dart';
 import 'app_overflow_menu.dart';
 
@@ -15,8 +17,23 @@ List<Widget> appBarShellTrailingActions(
   if (omitShellTrailing || context.canPop()) {
     return const [];
   }
+  final resolvedTint = tint ?? Theme.of(context).colorScheme.onSurface;
   return [
-    AppOverflowMenu(tint: tint),
-    AppBarAvatar(iconOnly: true, tint: tint),
+    AppBarActionCapsule(
+      children: [
+        AppOverflowMenu(
+          tint: resolvedTint,
+          buttonStyle: PopupButtonStyle.plain,
+          padding: const EdgeInsets.only(left: 4, right: 0),
+        ),
+        AppBarAvatar(
+          iconOnly: true,
+          tint: resolvedTint,
+          buttonStyle: PopupButtonStyle.plain,
+          padding: const EdgeInsets.only(left: 2, right: 6),
+        ),
+      ],
+    ),
+    const SizedBox(width: 8),
   ];
 }

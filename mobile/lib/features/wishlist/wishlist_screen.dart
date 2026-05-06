@@ -11,9 +11,11 @@ import '../../core/models/wishlist_item.dart';
 import '../../core/widgets/card_count_label.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
-import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/app_bar_action_capsule.dart';
+import '../../core/widgets/glass_nav_bar.dart';
+import '../../core/widgets/fixed_sliver_header_delegate.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
@@ -199,17 +201,57 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(wishlistProvider);
+    final colors = Theme.of(context).colorScheme;
+    final hasActiveFilter = _activeFilters.isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: buildGlassNavBar(
+        context,
         title: Align(
           alignment: Alignment.centerLeft,
           child: Text(
             'Wishlist',
-            style: AppFonts.appBarTitle,
+            style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
           ),
         ),
-        actions: appBarShellTrailingActions(context),
+        actions: [
+          AppBarActionCapsule(
+            children: [
+              AdaptivePopupMenuButton.icon<String>(
+                icon: hasActiveFilter
+                    ? 'line.3.horizontal.decrease.circle.fill'
+                    : 'line.3.horizontal.decrease.circle',
+                tint: hasActiveFilter ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: [
+                  AdaptivePopupMenuItem(
+                    label: _activeFilters.contains('DEAL FOUND') ? '✓ Deal Found' : 'Deal Found',
+                    icon: _activeFilters.contains('DEAL FOUND') ? 'checkmark.circle.fill' : 'circle',
+                    value: 'DEAL FOUND',
+                  ),
+                  if (_activeFilters.isNotEmpty)
+                    const AdaptivePopupMenuItem(
+                      label: 'Clear Filters',
+                      icon: 'xmark.circle',
+                      value: '__clear__',
+                    ),
+                ],
+                onSelected: (_, entry) {
+                  if (entry.value == '__clear__') {
+                    setState(_activeFilters.clear);
+                    return;
+                  }
+                  if (entry.value == 'DEAL FOUND') {
+                    _toggleFilter('DEAL FOUND');
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
+          ...appBarShellTrailingActions(context),
+        ],
       ),
       body: async.when(
         loading: () => const Center(child: CardFanLoader()),
@@ -258,33 +300,60 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
 
   Widget _buildList(List<WishlistItem> items) {
     final filtered = _filterItems(items);
+    final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
+    final colors = Theme.of(context).colorScheme;
 
-    return StickySubHeaderLayout(
-      header: const SizedBox.shrink(),
-      subHeader: FilterSortActionBar<String>(
-        searchText: _searchQuery,
-        onSearchChanged: (v) => setState(() => _searchQuery = v),
-        onSearchClear: () {
-          _searchCtrl.clear();
-          setState(() => _searchQuery = '');
-        },
-        searchHint: 'Search player, set, card #…',
-        filters: const ['DEAL FOUND'],
-        activeFilters: _activeFilters,
-        onFilterToggle: _toggleFilter,
-        actionButton: const SizedBox.shrink(),
-      ),
-      label: CardCountLabel(total: items.length, shown: filtered.length),
-      body: filtered.isEmpty
-          ? Center(
+    return CustomScrollView(
+      slivers: [
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: FixedSliverHeaderDelegate(
+            height: navOffset + 62,
+            child: AdaptiveBlurView(
+              blurStyle: BlurStyle.systemUltraThinMaterial,
+              child: Container(
+                color: colors.surface.withValues(alpha: 0.14),
+                child: Padding(
+                  padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
+                  child: FilterSortActionBar<String>(
+                    searchText: _searchQuery,
+                    onSearchChanged: (v) => setState(() => _searchQuery = v),
+                    onSearchClear: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                    searchHint: 'Search player, set, card #…',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: CardCountLabel(total: items.length, shown: filtered.length),
+          ),
+        ),
+        if (filtered.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
               child: Text(
                 _searchQuery.isNotEmpty ? 'No cards match your search.' : 'No wishlist items yet.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5), fontFamily: AppFonts.fontFamily),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                  fontFamily: AppFonts.fontFamily,
+                ),
               ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
+            sliver: SliverList.builder(
               itemCount: filtered.length,
               itemBuilder: (_, i) {
                 final item = filtered[i];
@@ -310,6 +379,8 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                 );
               },
             ),
+          ),
+      ],
     );
   }
 
