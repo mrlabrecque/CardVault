@@ -3,7 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class AppOverflowMenu extends StatelessWidget {
-  const AppOverflowMenu({super.key});
+  const AppOverflowMenu({
+    super.key,
+    this.tint,
+    this.buttonStyle = PopupButtonStyle.plain,
+    this.padding = const EdgeInsets.only(right: 4),
+  });
+
+  final Color? tint;
+  final PopupButtonStyle buttonStyle;
+  final EdgeInsets padding;
 
   static const _quickActions = <AdaptivePopupMenuEntry>[
     AdaptivePopupMenuItem<String>(
@@ -36,11 +45,11 @@ class AppOverflowMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 4),
+      padding: padding,
       child: AdaptivePopupMenuButton.icon<String>(
         icon: 'ellipsis.circle',
-        tint: Colors.white,
-        buttonStyle: PopupButtonStyle.plain,
+        tint: tint ?? Colors.white,
+        buttonStyle: buttonStyle,
         items: _quickActions,
         onSelected: (_, entry) {
           final route = entry.value;

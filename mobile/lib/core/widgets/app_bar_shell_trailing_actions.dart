@@ -10,12 +10,13 @@ import 'app_overflow_menu.dart';
 List<Widget> appBarShellTrailingActions(
   BuildContext context, {
   bool omitShellTrailing = false,
+  Color? tint,
 }) {
   if (omitShellTrailing || context.canPop()) {
     return const [];
   }
-  return const [
-    AppOverflowMenu(),
-    AppBarAvatar(iconOnly: true),
+  return [
+    AppOverflowMenu(tint: tint),
+    AppBarAvatar(iconOnly: true, tint: tint),
   ];
 }

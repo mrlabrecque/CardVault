@@ -2,11 +2,10 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
-import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/list_item_card.dart';
@@ -24,6 +23,8 @@ class CollectionScreen extends ConsumerStatefulWidget {
 }
 
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
+  Color _chromeTint(ColorScheme colors) => colors.surface.withValues(alpha: 0.14);
+
   final _searchCtrl = TextEditingController();
   final _setSearchCtrl = TextEditingController();
   String _query = '';
@@ -60,10 +61,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     });
     return result;
   }
-
-  void _toggleFilter(String f) => setState(() {
-    _activeFilters.contains(f) ? _activeFilters.remove(f) : _activeFilters.add(f);
-  });
 
   Future<void> _deleteCard(String cardId) async {
     final confirm = await showAdaptiveDialog<bool>(
@@ -103,33 +100,312 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     _                       => 'pct-desc',
   };
 
+  Widget _buildTopControls({
+    required ColorScheme colors,
+    required bool showSets,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+      child: Column(
+        children: [
+          AdaptiveSegmentedControl(
+            labels: const ['Cards', 'Sets'],
+            selectedIndex: showSets ? 1 : 0,
+            onValueChanged: (index) => setState(() => _showSets = index == 1),
+            color: colors.primary,
+          ),
+          const SizedBox(height: 6),
+          FilterSortActionBar<void>(
+            searchText: showSets ? _setQuery : _query,
+            onSearchChanged: (v) => setState(() {
+              if (showSets) {
+                _setQuery = v;
+              } else {
+                _query = v;
+              }
+            }),
+            onSearchClear: () {
+              if (showSets) {
+                _setSearchCtrl.clear();
+                setState(() => _setQuery = '');
+              } else {
+                _searchCtrl.clear();
+                setState(() => _query = '');
+              }
+            },
+            searchHint: showSets ? 'Search sets…' : 'Search player, set, sport…',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPinnedChromeHeader({
+    required ColorScheme colors,
+    required bool showSets,
+    required double navOffset,
+  }) {
+    return AdaptiveBlurView(
+      blurStyle: BlurStyle.systemUltraThinMaterial,
+      child: Container(
+        color: _chromeTint(colors),
+        child: Padding(
+          padding: EdgeInsets.only(top: navOffset),
+          child: _buildTopControls(colors: colors, showSets: showSets),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionCapsule({
+    required ColorScheme colors,
+    required List<Widget> children,
+  }) {
+    const radius = 24.0;
+    return AdaptiveBlurView(
+      blurStyle: BlurStyle.systemUltraThinMaterial,
+      borderRadius: BorderRadius.circular(radius),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.surface.withValues(alpha: 0.20),
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: colors.outline.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 3),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.18),
+              blurRadius: 2,
+              offset: const Offset(0, -1),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.20),
+                      Colors.white.withValues(alpha: 0.04),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Row(mainAxisSize: MainAxisSize.min, children: children),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final cardsAsync = ref.watch(userCardsProvider);
+    final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
+    final sportsList = (cardsAsync.asData?.value ?? const <UserCard>[])
+        .map((c) => c.sport.toUpperCase())
+        .toSet()
+        .toList()
+      ..sort();
+    final hasActiveFilters = _showSets ? _setViewSports.isNotEmpty : _activeFilters.isNotEmpty;
+    final hasActiveSort = _showSets
+        ? _setSort != SetSortOption.pctDesc
+        : _sort != SortOption.dateDesc;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        forceMaterialTransparency: true,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        shape: const RoundedRectangleBorder(side: BorderSide.none),
+        foregroundColor: colors.onSurface,
+        flexibleSpace: const SizedBox.shrink(),
         centerTitle: false,
         title: Text(
           'Collection',
-          style: AppFonts.appBarTitle,
+          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
         ),
-        actions: appBarShellTrailingActions(context),
+        actions: [
+          _buildActionCapsule(
+            colors: colors,
+            children: [
+              AdaptivePopupMenuButton.icon<String>(
+                icon: hasActiveFilters
+                    ? 'line.3.horizontal.decrease.circle.fill'
+                    : 'line.3.horizontal.decrease.circle',
+                tint: hasActiveFilters ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: _showSets
+                    ? [
+                        for (final sport in sportsList)
+                          AdaptivePopupMenuItem<String>(
+                            label: _setViewSports.contains(sport) ? '✓ $sport' : sport,
+                            icon: _setViewSports.contains(sport) ? 'checkmark.circle.fill' : 'circle',
+                            value: 'set:$sport',
+                          ),
+                        if (_setViewSports.isNotEmpty)
+                          const AdaptivePopupMenuItem<String>(
+                            label: 'Clear Filters',
+                            icon: 'xmark.circle',
+                            value: '__clear_set_filters__',
+                          ),
+                      ]
+                    : [
+                        for (final filter in const ['RC', 'AUTO', 'PATCH'])
+                          AdaptivePopupMenuItem<String>(
+                            label: _activeFilters.contains(filter) ? '✓ $filter' : filter,
+                            icon: _activeFilters.contains(filter) ? 'checkmark.circle.fill' : 'circle',
+                            value: 'card:$filter',
+                          ),
+                        if (_activeFilters.isNotEmpty)
+                          const AdaptivePopupMenuItem<String>(
+                            label: 'Clear Filters',
+                            icon: 'xmark.circle',
+                            value: '__clear_card_filters__',
+                          ),
+                      ],
+                onSelected: (_, entry) {
+                  final value = entry.value;
+                  if (value == null) return;
+                  switch (value) {
+                    case '__clear_set_filters__':
+                      setState(_setViewSports.clear);
+                      break;
+                    case '__clear_card_filters__':
+                      setState(_activeFilters.clear);
+                      break;
+                    default:
+                      if (value.startsWith('set:')) {
+                        final sport = value.substring(4);
+                        setState(() {
+                          _setViewSports.contains(sport)
+                              ? _setViewSports.remove(sport)
+                              : _setViewSports.add(sport);
+                        });
+                      } else if (value.startsWith('card:')) {
+                        final filter = value.substring(5);
+                        setState(() {
+                          _activeFilters.contains(filter)
+                              ? _activeFilters.remove(filter)
+                              : _activeFilters.add(filter);
+                        });
+                      }
+                  }
+                },
+              ),
+              AdaptivePopupMenuButton.icon<String>(
+                icon: hasActiveSort
+                    ? 'arrow.up.arrow.down.circle.fill'
+                    : 'arrow.up.arrow.down.circle',
+                tint: hasActiveSort ? colors.primary : colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                items: _showSets
+                    ? [
+                        AdaptivePopupMenuItem<String>(
+                          label: _setSort == SetSortOption.pctDesc ? '✓ Most Complete' : 'Most Complete',
+                          icon: 'percent',
+                          value: 'set:pct',
+                        ),
+                        AdaptivePopupMenuItem<String>(
+                          label: _setSort == SetSortOption.valueDesc ? '✓ Value ↓' : 'Value ↓',
+                          icon: 'chart.line.uptrend.xyaxis',
+                          value: 'set:value',
+                        ),
+                        AdaptivePopupMenuItem<String>(
+                          label: _setSort == SetSortOption.name ? '✓ Name A-Z' : 'Name A-Z',
+                          icon: 'textformat.abc',
+                          value: 'set:name',
+                        ),
+                      ]
+                    : [
+                        AdaptivePopupMenuItem<String>(
+                          label: _sort == SortOption.dateDesc ? '✓ Date Added' : 'Date Added',
+                          icon: 'calendar',
+                          value: 'card:date',
+                        ),
+                        AdaptivePopupMenuItem<String>(
+                          label: _sort == SortOption.playerAz ? '✓ Player A-Z' : 'Player A-Z',
+                          icon: 'textformat.abc',
+                          value: 'card:player',
+                        ),
+                        AdaptivePopupMenuItem<String>(
+                          label: _sort == SortOption.valueDesc ? '✓ Value ↓' : 'Value ↓',
+                          icon: 'chart.line.uptrend.xyaxis',
+                          value: 'card:value',
+                        ),
+                        AdaptivePopupMenuItem<String>(
+                          label: _sort == SortOption.plPct ? '✓ P/L %' : 'P/L %',
+                          icon: 'percent',
+                          value: 'card:pl',
+                        ),
+                        AdaptivePopupMenuItem<String>(
+                          label: _sort == SortOption.movingUp ? '✓ Moving Up' : 'Moving Up',
+                          icon: 'arrow.up',
+                          value: 'card:moving',
+                        ),
+                      ],
+                onSelected: (_, entry) {
+                  switch (entry.value) {
+                    case 'set:pct':
+                      setState(() => _setSort = SetSortOption.pctDesc);
+                      break;
+                    case 'set:value':
+                      setState(() => _setSort = SetSortOption.valueDesc);
+                      break;
+                    case 'set:name':
+                      setState(() => _setSort = SetSortOption.name);
+                      break;
+                    case 'card:date':
+                      setState(() => _sort = SortOption.dateDesc);
+                      break;
+                    case 'card:player':
+                      setState(() => _sort = SortOption.playerAz);
+                      break;
+                    case 'card:value':
+                      setState(() => _sort = SortOption.valueDesc);
+                      break;
+                    case 'card:pl':
+                      setState(() => _sort = SortOption.plPct);
+                      break;
+                    case 'card:moving':
+                      setState(() => _sort = SortOption.movingUp);
+                      break;
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
+          _buildActionCapsule(
+            colors: colors,
+            children: [
+              AppBarAvatar(
+                iconOnly: true,
+                tint: colors.onSurface,
+                buttonStyle: PopupButtonStyle.plain,
+                padding: const EdgeInsets.only(left: 2, right: 6),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
-          // ── Tab toggle ───────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: AdaptiveSegmentedControl(
-              labels: const ['Cards', 'Sets'],
-              selectedIndex: _showSets ? 1 : 0,
-              onValueChanged: (index) => setState(() => _showSets = index == 1),
-              color: colors.primary,
-            ),
-          ),
-
           // ── Content ───────────────────────────────────────
           Expanded(
             child: cardsAsync.when(
@@ -138,54 +414,53 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
               data: (allCards) {
                 final stacks = CardStack.fromCards(allCards);
                 if (_showSets) {
-                  return _buildSetsView(allCards, colors);
+                  return _buildSetsView(allCards, colors, navOffset);
                 }
                 final filtered = _filter(stacks);
-                return StickySubHeaderLayout(
-                  useScaffold: false,
-                  header: const SizedBox.shrink(),
-                  subHeader: FilterSortActionBar<SortOption>(
-                    searchText: _query,
-                    onSearchChanged: (v) => setState(() => _query = v),
-                    onSearchClear: () {
-                      _searchCtrl.clear();
-                      setState(() => _query = '');
-                    },
-                    searchHint: 'Search player, set, sport…',
-                    filters: const ['RC', 'AUTO', 'PATCH'],
-                    activeFilters: _activeFilters,
-                    onFilterToggle: _toggleFilter,
-                    sortOptions: [
-                      SortMenuOption(value: SortOption.dateDesc, label: 'Date Added', selected: _sort == SortOption.dateDesc, sfSymbol: 'calendar'),
-                      SortMenuOption(value: SortOption.playerAz, label: 'Player A–Z', selected: _sort == SortOption.playerAz, sfSymbol: 'textformat.abc'),
-                      SortMenuOption(value: SortOption.valueDesc, label: 'Value ↓', selected: _sort == SortOption.valueDesc, sfSymbol: 'chart.line.uptrend.xyaxis'),
-                      SortMenuOption(value: SortOption.plPct, label: 'P/L %', selected: _sort == SortOption.plPct, sfSymbol: 'percent'),
-                      SortMenuOption(value: SortOption.movingUp, label: 'Moving Up', selected: _sort == SortOption.movingUp, sfSymbol: 'arrow.up'),
-                    ],
-                    onSortSelected: (s) => setState(() => _sort = s),
-                    actionButton: null,
-                  ),
-                  label: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${allCards.length} ${allCards.length == 1 ? 'card' : 'cards'}'
-                      '${filtered.length != stacks.length ? ' · ${filtered.length} shown' : ''}',
-                      style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
-                    ),
-                  ),
-                  body: RefreshIndicator(
-                    onRefresh: () async => ref.invalidate(userCardsProvider),
-                    child: filtered.isEmpty
-                        ? Center(
+                return RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(userCardsProvider),
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _FixedHeaderDelegate(
+                          height: navOffset + 102,
+                          child: _buildPinnedChromeHeader(
+                            colors: colors,
+                            showSets: false,
+                            navOffset: navOffset,
+                          ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${allCards.length} ${allCards.length == 1 ? 'card' : 'cards'}'
+                              '${filtered.length != stacks.length ? ' · ${filtered.length} shown' : ''}',
+                              style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (filtered.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
                             child: Text(
                               _query.isNotEmpty || _activeFilters.isNotEmpty
                                   ? 'No cards match your filters.'
                                   : 'No cards yet. Tap Add Card to get started!',
                               style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
                             ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 100),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.only(bottom: 100),
+                          sliver: SliverList.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) => ListItemCard(
                               index: i,
@@ -195,6 +470,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                               isRefreshing: _refreshingStacks.contains(_stackKey(filtered[i])),
                             ),
                           ),
+                        ),
+                    ],
                   ),
                 );
               },
@@ -205,7 +482,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     );
   }
 
-  Widget _buildSetsView(List<UserCard> cards, ColorScheme colors) {
+  Widget _buildSetsView(List<UserCard> cards, ColorScheme colors, double navOffset) {
     final allRows = SetRow.fromCards(cards, sortBy: _setSortKey);
 
     // Get unique sports for filtering
@@ -213,8 +490,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     for (final card in cards) {
       sports.add(card.sport);
     }
-    final sportsList = sports.map((s) => s.toUpperCase()).toList()..sort();
-
     // Filter rows by sport and search query
     var filtered = _setViewSports.isEmpty
         ? allRows
@@ -225,72 +500,111 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     }
 
     if (allRows.isEmpty) {
-      return Scaffold(
-        body: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('📦', style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 12),
-            const Text('No sets yet', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text('Add cards from an imported release to track set completion.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
-          ]),
-        ),
+      return CustomScrollView(
+        slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _FixedHeaderDelegate(
+                height: navOffset + 102,
+                child: _buildPinnedChromeHeader(
+                  colors: colors,
+                  showSets: true,
+                  navOffset: navOffset,
+                ),
+              ),
+            ),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('📦', style: TextStyle(fontSize: 40)),
+                  const SizedBox(height: 12),
+                  const Text('No sets yet', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('Add cards from an imported release to track set completion.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: colors.onSurface.withValues(alpha: 0.5))),
+                ]),
+              ),
+            ),
+        ],
       );
     }
 
-    return StickySubHeaderLayout(
-      useScaffold: false,
-      header: const SizedBox.shrink(),
-      subHeader: FilterSortActionBar<SetSortOption>(
-        searchText: _setQuery,
-        onSearchChanged: (v) => setState(() => _setQuery = v),
-        onSearchClear: () {
-          _setSearchCtrl.clear();
-          setState(() => _setQuery = '');
-        },
-        searchHint: 'Search sets…',
-        filters: sportsList,
-        activeFilters: _setViewSports,
-        onFilterToggle: (sport) => setState(() {
-          _setViewSports.contains(sport)
-              ? _setViewSports.remove(sport)
-              : _setViewSports.add(sport);
-        }),
-        sortOptions: [
-          SortMenuOption(value: SetSortOption.pctDesc, label: 'Most Complete', selected: _setSort == SetSortOption.pctDesc, sfSymbol: 'percent'),
-          SortMenuOption(value: SetSortOption.valueDesc, label: 'Value ↓', selected: _setSort == SetSortOption.valueDesc, sfSymbol: 'chart.line.uptrend.xyaxis'),
-          SortMenuOption(value: SetSortOption.name, label: 'Name A–Z', selected: _setSort == SetSortOption.name, sfSymbol: 'textformat.abc'),
-        ],
-        onSortSelected: (s) => setState(() => _setSort = s),
-      ),
-      label: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          '${filtered.length} ${filtered.length == 1 ? 'set' : 'sets'}'
-          '${filtered.length != allRows.length ? ' · ${allRows.length} total' : ''}',
-          style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(userCardsProvider),
-        child: filtered.isEmpty
-            ? Center(
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(userCardsProvider),
+      child: CustomScrollView(
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _FixedHeaderDelegate(
+              height: navOffset + 102,
+              child: _buildPinnedChromeHeader(
+                colors: colors,
+                showSets: true,
+                navOffset: navOffset,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${filtered.length} ${filtered.length == 1 ? 'set' : 'sets'}'
+                  '${filtered.length != allRows.length ? ' · ${allRows.length} total' : ''}',
+                  style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+                ),
+              ),
+            ),
+          ),
+          if (filtered.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
                 child: Text(
                   _setViewSports.isNotEmpty
                       ? 'No sets match your sport filter.'
                       : 'No sets in your collection.',
                   style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
                 ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.only(bottom: 100),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.only(bottom: 100),
+              sliver: SliverList.builder(
                 itemCount: filtered.length,
                 itemBuilder: (_, i) => SetRowTile(row: filtered[i]),
               ),
+            ),
+        ],
       ),
     );
   }
 
+}
+
+class _FixedHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _FixedHeaderDelegate({
+    required this.height,
+    required this.child,
+  });
+
+  final double height;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
+
+  @override
+  bool shouldRebuild(covariant _FixedHeaderDelegate oldDelegate) =>
+      oldDelegate.height != height || oldDelegate.child != child;
 }

@@ -11,6 +11,10 @@ metadata:
 
 Framework for designing native iOS app interfaces that feel intuitive, consistent, and aligned with Apple's design philosophy. Based on Apple's Human Interface Guidelines, the definitive resource for building apps that integrate seamlessly with iPhone, iPad, and the broader Apple ecosystem.
 
+## Companion Skill
+
+For iOS 26-specific visual/interaction deltas (Liquid Glass, inset tab bar/search island, updated icon workflow), pair this with `ios-26-liquid-glass`.
+
 ## Core Principle
 
 Apple's iOS design philosophy rests on three foundational pillars: clarity, deference, and depth. Every element must be legible and purposeful (clarity). The interface should never overshadow the content it presents (deference). And layering, transitions, and realistic motion must provide hierarchy and spatial relationships (depth).

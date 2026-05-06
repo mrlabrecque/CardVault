@@ -9,9 +9,18 @@ import '../utils/adaptive_ui.dart';
 import 'modal_sheet_scaffold.dart';
 
 class AppBarAvatar extends ConsumerWidget {
-  const AppBarAvatar({super.key, this.iconOnly = false});
+  const AppBarAvatar({
+    super.key,
+    this.iconOnly = false,
+    this.tint,
+    this.buttonStyle = PopupButtonStyle.plain,
+    this.padding = const EdgeInsets.only(right: 12),
+  });
 
   final bool iconOnly;
+  final Color? tint;
+  final PopupButtonStyle buttonStyle;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,11 +68,11 @@ class AppBarAvatar extends ConsumerWidget {
       ];
 
       return Padding(
-        padding: const EdgeInsets.only(right: 12),
+        padding: padding,
         child: AdaptivePopupMenuButton.icon<String>(
           icon: 'person.circle',
-          tint: Colors.white,
-          buttonStyle: PopupButtonStyle.plain,
+          tint: tint ?? Colors.white,
+          buttonStyle: buttonStyle,
           items: menuItems,
           onSelected: (_, entry) async {
             final value = entry.value;

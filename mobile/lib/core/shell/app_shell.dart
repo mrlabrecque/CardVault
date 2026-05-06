@@ -12,9 +12,9 @@ class AppShell extends ConsumerWidget {
   static const _paths = [
     '/dashboard',
     '/catalog',
-    '/scan',
     '/collection',
     '/wishlist',
+    '/tools',
   ];
 
   int _selectedIndex(String location) {
@@ -67,11 +67,6 @@ class IOSAppShell extends StatelessWidget {
       label: 'Catalog',
     ),
     AdaptiveNavigationDestination(
-      icon: 'camera.fill',
-      selectedIcon: 'camera.fill',
-      label: 'Scan',
-    ),
-    AdaptiveNavigationDestination(
       icon: 'square.stack.3d.up.fill',
       selectedIcon: 'square.stack.3d.up.fill',
       label: 'Collection',
@@ -81,20 +76,54 @@ class IOSAppShell extends StatelessWidget {
       selectedIcon: 'bookmark.fill',
       label: 'Wishlist',
     ),
+    AdaptiveNavigationDestination(
+      icon: 'ellipsis.circle.fill',
+      selectedIcon: 'ellipsis.circle.fill',
+      label: 'More',
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return AdaptiveScaffold(
-      minimizeBehavior: TabBarMinimizeBehavior.never,
-      body: child,
-      bottomNavigationBar: AdaptiveBottomNavigationBar(
-        items: _iosItems,
-        selectedIndex: selectedIndex,
-        onTap: onTabSelected,
-        useNativeBottomBar: true,
-        selectedItemColor: AppTheme.primary,
-      ),
+    return Stack(
+      children: [
+        AdaptiveScaffold(
+          minimizeBehavior: TabBarMinimizeBehavior.never,
+          body: child,
+          bottomNavigationBar: AdaptiveBottomNavigationBar(
+            items: _iosItems,
+            selectedIndex: selectedIndex,
+            onTap: onTabSelected,
+            useNativeBottomBar: true,
+            selectedItemColor: AppTheme.primary,
+          ),
+        ),
+        Positioned(
+          right: 20,
+          bottom: 90,
+          child: AdaptiveBlurView(
+            blurStyle: BlurStyle.systemUltraThinMaterial,
+            borderRadius: BorderRadius.circular(28),
+            child: Material(
+              color: AppTheme.primary.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(28),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(28),
+                onTap: () => context.go('/scan'),
+                child: const SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: Icon(
+                    Icons.qr_code_scanner_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -123,11 +152,6 @@ class AndroidAppShell extends StatelessWidget {
       label: 'Catalog',
     ),
     NavigationDestination(
-      icon: Icon(Icons.qr_code_scanner_outlined),
-      selectedIcon: Icon(Icons.qr_code_scanner),
-      label: 'Scan',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.credit_card_outlined),
       selectedIcon: Icon(Icons.credit_card),
       label: 'Collection',
@@ -137,12 +161,24 @@ class AndroidAppShell extends StatelessWidget {
       selectedIcon: Icon(Icons.bookmark),
       label: 'Wishlist',
     ),
+    NavigationDestination(
+      icon: Icon(Icons.more_horiz),
+      selectedIcon: Icon(Icons.more_horiz),
+      label: 'More',
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: child,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.go('/scan'),
+        backgroundColor: AppTheme.primary,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.qr_code_scanner_rounded),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: onTabSelected,
