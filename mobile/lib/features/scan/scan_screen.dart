@@ -8,8 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/card_fan_loader.dart';
 
 // CardSight detection result model
@@ -322,10 +321,7 @@ class _ScanScreenState extends State<ScanScreen> {
           alignment: Alignment.centerLeft,
           child: Text('Scan Card', style: AppFonts.appBarTitle),
         ),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: Column(
         children: [
@@ -438,10 +434,7 @@ class _ScanScreenState extends State<ScanScreen> {
           alignment: Alignment.centerLeft,
           child: Text('Scan Results', style: AppFonts.appBarTitle),
         ),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: SingleChildScrollView(
         child: Padding(

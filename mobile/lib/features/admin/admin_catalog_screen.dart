@@ -5,9 +5,8 @@ import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
-import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_breadcrumb.dart';
-import '../../core/widgets/app_overflow_menu.dart';
 import '../../core/widgets/card_fan_loader.dart';
 
 final _years = List.generate(
@@ -197,10 +196,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
       appBar: AppBar(
         centerTitle: false,
         title: Text('Catalog Admin', style: AppFonts.appBarTitle),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: switch (_step) {
         _AdminStep.releases => _buildReleasesView(colors),

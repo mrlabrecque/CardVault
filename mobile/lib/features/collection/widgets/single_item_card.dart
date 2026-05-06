@@ -5,10 +5,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
+import 'package:go_router/go_router.dart';
 import '../../../core/models/user_card.dart';
-import '../../../core/utils/adaptive_ui.dart';
 import '../../../core/widgets/card_info_section.dart';
-import '../item_detail_screen.dart';
 
 class SingleItemCard extends StatelessWidget {
   const SingleItemCard({
@@ -36,13 +35,7 @@ class SingleItemCard extends StatelessWidget {
       };
 
   void _openDetail(BuildContext context) {
-    showAdaptiveSheet(
-      context: context,
-      builder: (_) => SizedBox(
-        height: MediaQuery.of(context).size.height,
-        child: ItemDetailScreen(card: card),
-      ),
-    );
+    context.go('/collection/card', extra: card);
   }
 
   @override

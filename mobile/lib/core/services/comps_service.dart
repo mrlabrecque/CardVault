@@ -46,6 +46,44 @@ class CompsService {
     return (data as List).map((r) => Comp.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  Future<List<ActiveListing>> getActiveListings(String masterCardId, String parallelName) async {
+    try {
+      final res = await _supabase.functions.invoke(
+        'card-active-listings',
+        body: {'masterCardId': masterCardId, 'parallelName': parallelName},
+      );
+      if (res.status != 200) {
+        final err = (res.data is Map ? (res.data as Map)['error'] : null) ?? 'Request failed';
+        throw Exception('Active listings failed: $err');
+      }
+      final raw = res.data;
+      if (raw == null) return [];
+      if (raw is! Map) {
+        throw Exception('Active listings: bad response shape');
+      }
+      final data = Map<String, dynamic>.from(raw);
+      final itemsRaw = data['items'];
+      if (itemsRaw is! List) return [];
+      final out = <ActiveListing>[];
+      for (final r in itemsRaw) {
+        if (r is! Map) continue;
+        try {
+          out.add(ActiveListing.fromJson(Map<String, dynamic>.from(r)));
+        } catch (_) {
+          continue;
+        }
+      }
+      return out;
+    } on FunctionException catch (e) {
+      if (e.status == 404) {
+        throw Exception(
+          'Active listings are not deployed. Run: supabase functions deploy card-active-listings',
+        );
+      }
+      throw Exception('Active listings failed (${e.status}): $e');
+    }
+  }
+
   Future<void> refreshMasterCardComps(String masterCardId, String parallelName) async {
     final res = await _supabase.functions.invoke(
       'refresh-comps',

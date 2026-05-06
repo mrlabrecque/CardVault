@@ -14,8 +14,7 @@ import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../wishlist/wishlist_screen.dart';
@@ -730,6 +729,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── AppBar helpers ─────────────────────────────────────────────
 
+  bool get _omitCatalogShellTrailing {
+    final atBrowseRoot =
+        _catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse;
+    final atSearchRoot = _mode == _CatalogMode.search && _searchSelectedCard == null;
+    return !(atBrowseRoot || atSearchRoot);
+  }
+
   String _appBarTitle() {
     if (_mode == _CatalogMode.search) {
       if (_searchSelectedCard != null && (_searchParallels.isEmpty || _searchParallelSelected)) {
@@ -874,10 +880,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           _appBarTitle(),
           style: AppFonts.appBarTitle,
         ),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(
+          context,
+          omitShellTrailing: _omitCatalogShellTrailing,
+        ),
       ),
       body: Column(
         children: [

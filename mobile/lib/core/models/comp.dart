@@ -72,3 +72,41 @@ class LookupHistory {
     return results.fold(0.0, (s, c) => s + c.price) / results.length;
   }
 }
+
+/// Live eBay listing row from `card-active-listings` Edge Function.
+class ActiveListing {
+  final String title;
+  final double price;
+  final String listingType;
+  final String? url;
+  final String? imageUrl;
+  final String? ebayItemId;
+
+  const ActiveListing({
+    required this.title,
+    required this.price,
+    required this.listingType,
+    this.url,
+    this.imageUrl,
+    this.ebayItemId,
+  });
+
+  factory ActiveListing.fromJson(Map<String, dynamic> json) {
+    return ActiveListing(
+      title: json['title']?.toString() ?? '',
+      price: _parseActivePrice(json['price']),
+      listingType: (json['listing_type']?.toString() ?? 'FIXED_PRICE').toUpperCase(),
+      url: json['url']?.toString(),
+      imageUrl: json['image_url']?.toString(),
+      ebayItemId: json['ebay_item_id']?.toString(),
+    );
+  }
+
+  static double _parseActivePrice(dynamic raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw) ?? 0;
+    return 0;
+  }
+
+  bool get isAuction => listingType == 'AUCTION';
+}

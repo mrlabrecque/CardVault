@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/market_movers_service.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 
 class AdminMarketMoversScreen extends ConsumerStatefulWidget {
   const AdminMarketMoversScreen({super.key});
@@ -70,10 +69,7 @@ class _AdminMarketMoversScreenState
       appBar: AppBar(
         centerTitle: false,
         title: Text('Market Movers Admin', style: AppFonts.appBarTitle),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
@@ -11,8 +11,7 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
@@ -165,10 +164,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
           'Grading',
           style: AppFonts.appBarTitle,
         ),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),

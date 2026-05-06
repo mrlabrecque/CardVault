@@ -1,11 +1,11 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
-import '../../core/theme/fonts.dart';
-import '../../core/utils/adaptive_ui.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/theme/fonts.dart';
+import '../../core/utils/adaptive_ui.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/models/wishlist_item.dart';
 import '../../core/widgets/card_count_label.dart';
@@ -209,10 +209,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             style: AppFonts.appBarTitle,
           ),
         ),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: async.when(
         loading: () => const Center(child: CardFanLoader()),

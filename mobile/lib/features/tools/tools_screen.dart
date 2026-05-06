@@ -4,8 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_list_card.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
@@ -21,10 +20,7 @@ class ToolsScreen extends StatelessWidget {
             style: AppFonts.appBarTitle,
           ),
         ),
-        actions: [
-          const AppOverflowMenu(),
-          const AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),

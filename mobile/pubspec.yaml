@@ -52,6 +52,7 @@ dependencies:
   crypto: ^3.0.6
   adaptive_platform_ui: ^0.1.106
   image: ^4.5.4
+  liquid_glass_widgets: ^0.10.6
 
 dev_dependencies:
   flutter_test:

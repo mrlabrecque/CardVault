@@ -91,7 +91,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   }
 
   double? _getGradeAverage(String grade) {
-    final comps = _allComps.where((c) => (c.grade ?? 'Raw') == grade).toList();
+    final comps = _allComps
+        .where((c) => (c.grade ?? 'Raw') == grade && _isWithinDateRange(c.soldAt))
+        .toList();
     if (comps.isEmpty) return null;
     final total = comps.fold<double>(0, (s, c) => s + c.price);
     return total / comps.length;
@@ -173,43 +175,27 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: colors.outline.withValues(alpha: 0.3), width: 1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    _DateRangeButton(
-                      label: '7d',
-                      isSelected: _selectedDays == 7,
-                      onTap: () => setState(() => _selectedDays = 7),
-                      isFirst: true,
-                    ),
-                    Container(
-                      width: 1,
-                      height: 32,
-                      color: colors.outline.withValues(alpha: 0.2),
-                    ),
-                    _DateRangeButton(
-                      label: '30d',
-                      isSelected: _selectedDays == 30,
-                      onTap: () => setState(() => _selectedDays = 30),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 32,
-                      color: colors.outline.withValues(alpha: 0.2),
-                    ),
-                    _DateRangeButton(
-                      label: 'All',
-                      isSelected: _selectedDays == 0,
-                      onTap: () => setState(() => _selectedDays = 0),
-                      isLast: true,
-                    ),
-                  ],
+              const Spacer(),
+              SizedBox(
+                width: 182,
+                child: AdaptiveSegmentedControl(
+                  labels: const ['7d', '30d', 'All'],
+                  selectedIndex: switch (_selectedDays) {
+                    7 => 0,
+                    30 => 1,
+                    _ => 2,
+                  },
+                  onValueChanged: (index) {
+                    setState(() {
+                      _selectedDays = switch (index) {
+                        0 => 7,
+                        1 => 30,
+                        _ => 0,
+                      };
+                    });
+                  },
+                  color: colors.primary,
                 ),
               ),
             ],
@@ -345,87 +331,46 @@ class _GradePill extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF800020) : Colors.white,
-            border: Border.all(
-              color: isSelected ? const Color(0xFF800020) : colors.outline.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: DefaultTextStyle(
-            style: const TextStyle(color: Colors.black87),
-            child: Column(
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : colors.onSurface,
-                  ),
+      child: AdaptiveListCard(
+        margin: EdgeInsets.zero,
+        cornerRadius: 10,
+        highlightBorderColor: isSelected ? colors.primary : null,
+        child: Material(
+          color: isSelected
+              ? Color.alphaBlend(
+                  colors.primary.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10),
+                  colors.surface,
+                )
+              : Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: isSelected ? colors.primary : colors.onSurface,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: isSelected
+                                ? colors.primary.withValues(alpha: 0.85)
+                                : colors.onSurface.withValues(alpha: 0.6),
+                          ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isSelected ? Colors.white70 : colors.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Date range button ──────────────────────────────────────────────────────
-
-class _DateRangeButton extends StatelessWidget {
-  const _DateRangeButton({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    this.isFirst = false,
-    this.isLast = false,
-  });
-
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final bool isFirst;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF800020) : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(isFirst ? 7 : 0),
-            bottomLeft: Radius.circular(isFirst ? 7 : 0),
-            topRight: Radius.circular(isLast ? 7 : 0),
-            bottomRight: Radius.circular(isLast ? 7 : 0),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? Colors.white : colors.onSurface,
           ),
         ),
       ),

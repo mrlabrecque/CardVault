@@ -1,9 +1,8 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
-import '../../core/theme/fonts.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/theme/fonts.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
@@ -116,10 +115,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           'Collection',
           style: AppFonts.appBarTitle,
         ),
-        actions: const [
-          AppOverflowMenu(),
-          AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: Column(
         children: [

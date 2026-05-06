@@ -7,8 +7,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/adaptive_list_card.dart';
-import '../../core/widgets/app_bar_avatar.dart';
-import '../../core/widgets/app_overflow_menu.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 
 const _burgundy = Color(0xFF800020);
 
@@ -50,10 +49,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             style: AppFonts.appBarTitle,
           ),
         ),
-        actions: [
-          const AppOverflowMenu(),
-          const AppBarAvatar(iconOnly: true),
-        ],
+        actions: appBarShellTrailingActions(context),
       ),
       body: cardsAsync.when(
         loading: () => _buildSkeleton(),
@@ -360,45 +356,62 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: GestureDetector(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
+        child: AdaptiveListCard(
+          margin: EdgeInsets.zero,
+          cornerRadius: 16,
+          highlightBorderColor: selected ? colors.primary : null,
+          child: Material(
+            color: selected
+                ? Color.alphaBlend(
+                    colors.primary.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.10),
+                    colors.surface,
+                  )
+                : Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))],
-              border: Border.all(
-                color: selected ? _burgundy : const Color(0xFFF3F4F6),
-                width: selected ? 1.5 : 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
-                  child: Icon(icon, color: Colors.white, size: 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
+                        child: Icon(icon, color: Colors.white, size: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(value,
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+                              color: valueColor ?? colors.onSurface, height: 1),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (subValue != null) ...[
+                        const SizedBox(height: 2),
+                        Text(subValue!,
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                                color: subValueColor ?? colors.onSurface.withValues(alpha: 0.55))),
+                      ],
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: selected
+                              ? colors.primary.withValues(alpha: 0.9)
+                              : colors.onSurface.withValues(alpha: 0.45),
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(value,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-                        color: valueColor ?? Colors.black87, height: 1),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (subValue != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subValue!,
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
-                          color: subValueColor ?? Colors.grey.shade500)),
-                ],
-                const SizedBox(height: 2),
-                Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade400, height: 1)),
-              ],
+              ),
             ),
           ),
         ),
