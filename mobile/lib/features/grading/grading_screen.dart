@@ -9,6 +9,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/app_overflow_menu.dart';
@@ -240,15 +241,11 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   }
 
   Widget _buildFeeCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      child: Row(
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
         children: [
           Expanded(
             child: Column(
@@ -295,6 +292,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -332,27 +330,21 @@ class _CardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tier = _tier(card, state, gradingFee);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      clipBehavior: Clip.antiAlias,
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(0),
-        child: IntrinsicHeight( 
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
-            Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(12, 8, 6, 12), child: _buildInfo(tier))),
-            Padding(padding: const EdgeInsets.all(12), child: _buildRightSide(tier)),
-          ],
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
+              Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(12, 8, 6, 12), child: _buildInfo(tier))),
+              Padding(padding: const EdgeInsets.all(12), child: _buildRightSide(tier)),
+            ],
+          ),
         ),
       ),
-    )
     );
   }
 

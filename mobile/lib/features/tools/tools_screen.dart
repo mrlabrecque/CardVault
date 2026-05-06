@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/app_overflow_menu.dart';
 
@@ -107,26 +108,16 @@ class _ToolCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = comingSoon || onTap == null;
+    final colors = Theme.of(context).colorScheme;
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
       child: AdaptiveListTile(
         enabled: !disabled,
         hideBottomDivider: true,
         onTap: disabled ? null : onTap,
         padding: const EdgeInsets.all(16),
-        backgroundColor: Colors.white,
+        backgroundColor: colors.surface,
         leading: Container(
           width: 44,
           height: 44,
@@ -149,7 +140,7 @@ class _ToolCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: disabled ? const Color(0xFF9CA3AF) : Colors.black87,
+                color: disabled ? colors.onSurface.withValues(alpha: 0.38) : colors.onSurface,
               ),
             ),
             if (comingSoon) ...[
@@ -157,15 +148,15 @@ class _ToolCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
+                  color: colors.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text(
+                child: Text(
                   'Soon',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF9CA3AF),
+                    color: colors.onSurface.withValues(alpha: 0.45),
                   ),
                 ),
               ),
@@ -174,11 +165,11 @@ class _ToolCard extends StatelessWidget {
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+          style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.55)),
         ),
         trailing: disabled
             ? null
-            : const Icon(Icons.chevron_right, color: Color(0xFFD1D5DB), size: 20),
+            : Icon(Icons.chevron_right, color: colors.outline, size: 20),
       ),
     );
   }

@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
-import '../../../core/utils/adaptive_ui.dart';
+import 'package:card_vault/core/theme/fonts.dart';
+import 'package:card_vault/core/utils/platform_utils.dart';
+import 'package:card_vault/core/widgets/adaptive_list_card.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import '../../../core/models/user_card.dart';
+import '../../../core/utils/adaptive_ui.dart';
 import '../../../core/widgets/card_info_section.dart';
-import '../../../core/theme/fonts.dart';
 import '../item_detail_screen.dart';
 
 class SingleItemCard extends StatelessWidget {
@@ -24,13 +27,13 @@ class SingleItemCard extends StatelessWidget {
   final int index;
 
   String get _sportEmoji => switch (card.sport.toLowerCase()) {
-    'basketball' => '🏀',
-    'baseball'   => '⚾',
-    'football'   => '🏈',
-    'hockey'     => '🏒',
-    'soccer'     => '⚽',
-    _            => '🏀',
-  };
+        'basketball' => '🏀',
+        'baseball' => '⚾',
+        'football' => '🏈',
+        'hockey' => '🏒',
+        'soccer' => '⚽',
+        _ => '🏀',
+      };
 
   void _openDetail(BuildContext context) {
     showAdaptiveSheet(
@@ -47,52 +50,52 @@ class SingleItemCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final staggerDelay = Duration(milliseconds: index.clamp(0, 8) * 60);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openDetail(context),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildImage(),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
-                  child: CardInfoSection(
-                    player: card.player,
-                    cardNumber: card.cardNumber,
-                    year: card.year,
-                    set: card.set,
-                    parallel: card.parallel,
-                    serialMax: card.serialMax,
-                    sport: card.sport,
-                    rookie: card.rookie,
-                    autograph: card.autograph,
-                    memorabilia: card.memorabilia,
-                    ssp: card.ssp,
-                    isGraded: card.isGraded,
-                    gradeLabel: card.isGraded ? '${card.grader ?? 'PSA'} ${card.gradeValue ?? card.grade ?? ''}' : null,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 8, 12, 12),
-                child: _buildValue(colors),
-              ),
-            ],
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildImage(),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+            child: CardInfoSection(
+              player: card.player,
+              cardNumber: card.cardNumber,
+              year: card.year,
+              set: card.set,
+              parallel: card.parallel,
+              serialMax: card.serialMax,
+              sport: card.sport,
+              rookie: card.rookie,
+              autograph: card.autograph,
+              memorabilia: card.memorabilia,
+              ssp: card.ssp,
+              isGraded: card.isGraded,
+              gradeLabel: card.isGraded ? '${card.grader ?? 'PSA'} ${card.gradeValue ?? card.grade ?? ''}' : null,
+            ),
           ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 8, 12, 12),
+          child: _buildValue(colors),
+        ),
+      ],
+    );
+
+    final tappable = isIOS
+        ? CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => _openDetail(context),
+            child: row,
+          )
+        : InkWell(
+            onTap: () => _openDetail(context),
+            borderRadius: BorderRadius.circular(12),
+            child: row,
+          );
+
+    return AdaptiveListCard(
+      child: tappable,
     )
         .animate(delay: staggerDelay)
         .fadeIn(duration: const Duration(milliseconds: 200))
@@ -116,18 +119,18 @@ class SingleItemCard extends StatelessWidget {
   }
 
   Widget _imagePlaceholder() => Container(
-    width: 60,
-    height: 85,
-    decoration: BoxDecoration(
-      color: Colors.grey.withValues(alpha: 0.15),
-      borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6)),
-    ),
-    child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 40))),
-  );
+        width: 60,
+        height: 85,
+        decoration: BoxDecoration(
+          color: Colors.grey.withValues(alpha: 0.15),
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6)),
+        ),
+        child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 40))),
+      );
 
   Widget _buildValue(ColorScheme colors) {
     return DefaultTextStyle(
-      style: TextStyle(color: Colors.black87, fontFamily: AppFonts.fontFamily),
+      style: TextStyle(color: colors.onSurface, fontFamily: AppFonts.fontFamily),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
@@ -146,9 +149,14 @@ class SingleItemCard extends StatelessWidget {
           ],
           if (onDelete != null) ...[
             const SizedBox(height: 4),
-            GestureDetector(
-              onTap: () => onDelete?.call(card.id),
-              child: Icon(Icons.delete_outline, size: 18, color: colors.error),
+            IconButton(
+              onPressed: () => onDelete?.call(card.id),
+              icon: Icon(Icons.delete_outline, size: 20, color: colors.error),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(44, 44),
+                padding: const EdgeInsets.all(10),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         ],

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/comp.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 
 class CompsScreen extends ConsumerStatefulWidget {
@@ -324,26 +325,26 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFF3F4F6)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label.toUpperCase(),
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF9CA3AF), letterSpacing: 0.5),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              '\$${value.toStringAsFixed(0)}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.black87),
-            ),
-          ],
+      child: AdaptiveListCard(
+        margin: EdgeInsets.zero,
+        cornerRadius: 12,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Column(
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: colors.onSurface.withValues(alpha: 0.45), letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '\$${value.toStringAsFixed(0)}',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: colors.onSurface),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -356,6 +357,7 @@ class _CompCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final daysAgo = comp.soldAt != null ? DateTime.now().difference(comp.soldAt!).inDays : null;
     final dateLabel = daysAgo == null
         ? ''
@@ -365,65 +367,60 @@ class _CompCard extends StatelessWidget {
                 ? 'Yesterday'
                 : '${daysAgo}d ago';
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  comp.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87, height: 1.35),
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    comp.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.onSurface, height: 1.35),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '\$${comp.price.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black87),
+                const SizedBox(width: 10),
+                Text(
+                  '\$${comp.price.toStringAsFixed(2)}',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: colors.onSurface),
+                ),
+              ],
+            ),
+            if (dateLabel.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(dateLabel, style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.45))),
+            ],
+            if (comp.url != null) ...[
+              const SizedBox(height: 10),
+              Divider(color: colors.outlineVariant, height: 1),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 24,
+                child: AdaptiveButton.child(
+                  onPressed: () => launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication),
+                  style: AdaptiveButtonStyle.plain,
+                  size: AdaptiveButtonSize.small,
+                  color: const Color(0xFF800020),
+                  padding: EdgeInsets.zero,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.open_in_new, size: 12, color: Color(0xFF800020)),
+                      SizedBox(width: 4),
+                      Text('View on eBay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF800020))),
+                    ],
+                  ),
+                ),
               ),
             ],
-          ),
-          if (dateLabel.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(dateLabel, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
           ],
-          if (comp.url != null) ...[
-            const SizedBox(height: 10),
-            const Divider(color: Color(0xFFF9FAFB), height: 1),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 24,
-              child: AdaptiveButton.child(
-                onPressed: () => launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication),
-                style: AdaptiveButtonStyle.plain,
-                size: AdaptiveButtonSize.small,
-                color: const Color(0xFF800020),
-                padding: EdgeInsets.zero,
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.open_in_new, size: 12, color: Color(0xFF800020)),
-                    SizedBox(width: 4),
-                    Text('View on eBay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF800020))),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -436,36 +433,34 @@ class _HistoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFF3F4F6)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.history, size: 16, color: Color(0xFFD1D5DB)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                entry.query,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+      child: AdaptiveListCard(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.history, size: 16, color: colors.outline),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  entry.query,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: colors.onSurface),
+                ),
               ),
-            ),
-            if (entry.avgPrice != null) ...[
-              Text(
-                '\$${entry.avgPrice!.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF6B7280)),
-              ),
-              const SizedBox(width: 6),
+              if (entry.avgPrice != null) ...[
+                Text(
+                  '\$${entry.avgPrice!.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.onSurface.withValues(alpha: 0.65)),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Icon(Icons.north_east, size: 12, color: colors.outline),
             ],
-            const Icon(Icons.north_east, size: 12, color: Color(0xFFD1D5DB)),
-          ],
+          ),
         ),
       ),
     );

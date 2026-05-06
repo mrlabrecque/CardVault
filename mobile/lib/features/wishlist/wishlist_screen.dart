@@ -12,6 +12,7 @@ import '../../core/widgets/card_count_label.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
@@ -370,18 +371,9 @@ class _WishlistCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final triggered = item.isTriggered;
 
-    final card = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: triggered ? colors.surface : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: triggered ? colors.primary : const Color(0xFFE5E7EB),
-          width: 1,
-        ),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      clipBehavior: Clip.antiAlias,
+    final card = AdaptiveListCard(
+      color: triggered ? colors.surface : null,
+      highlightBorderColor: triggered ? colors.primary : null,
       child: Column(
         children: [
           // Deal Found banner
@@ -391,7 +383,7 @@ class _WishlistCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: colors.primary,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               ),
               child: Row(
                 children: [
@@ -405,7 +397,7 @@ class _WishlistCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1),
+            Divider(height: 1, color: colors.outlineVariant),
           ],
           Padding(
             padding: const EdgeInsets.all(0),
@@ -481,7 +473,7 @@ class _WishlistCard extends StatelessWidget {
                 // Active listings section
                 if (triggered && item.matches.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  Divider(height: 1, color: colors.outlineVariant),
                   const SizedBox(height: 10),
                   GestureDetector(
                     onTap: onToggleMatches,
@@ -509,7 +501,7 @@ class _WishlistCard extends StatelessWidget {
                               onDismiss: () => onDismissMatch(item.matches[i].id),
                             ),
                             if (i < item.matches.length - 1)
-                              const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                              Divider(height: 1, color: colors.outlineVariant),
                           ],
                         ],
                       ),
@@ -530,7 +522,7 @@ class _WishlistCard extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: colors.error,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 16),

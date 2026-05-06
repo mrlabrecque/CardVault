@@ -39,6 +39,8 @@ class AppOverflowMenu extends StatelessWidget {
       padding: const EdgeInsets.only(right: 4),
       child: AdaptivePopupMenuButton.icon<String>(
         icon: 'ellipsis.circle',
+        tint: Colors.white,
+        buttonStyle: PopupButtonStyle.plain,
         items: _quickActions,
         onSelected: (_, entry) {
           final route = entry.value;

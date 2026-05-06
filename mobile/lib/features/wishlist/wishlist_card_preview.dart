@@ -1,3 +1,4 @@
+import 'package:card_vault/core/widgets/adaptive_list_card.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/widgets/attr_tag.dart';
@@ -17,18 +18,14 @@ class WishlistCardPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
           Text.rich(
             TextSpan(children: [
               TextSpan(
@@ -66,7 +63,8 @@ class WishlistCardPreview extends StatelessWidget {
               if (card?.serialMax != null) AttrTag('/${card!.serialMax}', color: const Color(0xFF6366F1)),
             ],
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -9,6 +9,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/sticky_sub_header_layout.dart';
+import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/app_overflow_menu.dart';
@@ -231,21 +232,18 @@ class _BrowseCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onToggle,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: inLot ? const Color(0xFFF0FDF4) : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: inLot ? const Color(0xFF86EFAC) : const Color(0xFFF3F4F6)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-        ),
-        clipBehavior: Clip.antiAlias,
+      child: AdaptiveListCard(
+        margin: EdgeInsets.zero,
+        color: inLot ? const Color(0xFFF0FDF4) : null,
+        highlightBorderColor: inLot ? const Color(0xFF86EFAC) : null,
+        highlightBorderWidth: 1,
         child: Padding(
           padding: const EdgeInsets.all(0),
-          child:IntrinsicHeight(
-          child: Row(
+          child: IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
@@ -276,7 +274,7 @@ class _BrowseCardRow extends StatelessWidget {
                 children: [
                   Text(
                     '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: colors.onSurface),
                   ),
                   const SizedBox(height: 6),
                   AnimatedContainer(
@@ -408,30 +406,27 @@ class _BasketView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        const Divider(color: Color(0xFFF3F4F6), height: 1),
+        Divider(color: Theme.of(context).colorScheme.outlineVariant, height: 1),
         const SizedBox(height: 16),
         // Summary header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
-          ),
-          child: Row(
+        AdaptiveListCard(
+          margin: EdgeInsets.zero,
+          cornerRadius: 16,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '${lot.items.length} ${lot.items.length == 1 ? 'card' : 'cards'}',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45)),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'Market total: \$${lot.totalValue.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                   ),
                 ],
               ),
@@ -445,6 +440,7 @@ class _BasketView extends StatelessWidget {
                 ),
               ),
             ],
+          ),
           ),
         ),
         const SizedBox(height: 12),
@@ -465,14 +461,9 @@ class _BasketCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      clipBehavior: Clip.antiAlias,
+    final colors = Theme.of(context).colorScheme;
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(0),
         child: IntrinsicHeight(
@@ -508,7 +499,7 @@ class _BasketCardRow extends StatelessWidget {
               children: [
                 Text(
                   '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: colors.onSurface),
                 ),
                 const SizedBox(height: 6),
                 SizedBox(
@@ -527,7 +518,7 @@ class _BasketCardRow extends StatelessWidget {
           ],
         ),
       ),
-      ),
+    ),
     );
   }
 }

@@ -62,6 +62,8 @@ class AppBarAvatar extends ConsumerWidget {
         padding: const EdgeInsets.only(right: 12),
         child: AdaptivePopupMenuButton.icon<String>(
           icon: 'person.circle',
+          tint: Colors.white,
+          buttonStyle: PopupButtonStyle.plain,
           items: menuItems,
           onSelected: (_, entry) async {
             final value = entry.value;

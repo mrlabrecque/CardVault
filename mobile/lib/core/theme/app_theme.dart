@@ -20,6 +20,31 @@ class AppTheme {
   static const textMain      = Color(0xFF1F2937);
   static const textMuted     = grayDark;
 
+  /// Solid-color bars (e.g. burgundy app bar): transparent fill + circular ink on press.
+  static ButtonStyle _iconButtonOnSolidBarStyle() {
+    return ButtonStyle(
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return Colors.white.withValues(alpha: 0.38);
+        }
+        return Colors.white;
+      }),
+      backgroundColor: WidgetStateProperty.all(Colors.transparent),
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) {
+          return Colors.white.withValues(alpha: 0.20);
+        }
+        if (states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.focused)) {
+          return Colors.white.withValues(alpha: 0.12);
+        }
+        return null;
+      }),
+      shape: WidgetStateProperty.all(const CircleBorder()),
+      padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
+    );
+  }
+
   static BoxDecoration cupertinoTextFieldDecoration(
     BuildContext context, {
     double radius = 12,
@@ -59,6 +84,9 @@ class AppTheme {
         foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        actionsIconTheme: IconThemeData(color: Colors.white, size: 24),
         systemOverlayStyle: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.light,
@@ -74,14 +102,7 @@ class AppTheme {
         shape: Border(bottom: BorderSide(color: primaryDark)),
       ),
 
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor: Colors.white.withValues(alpha: 0.18),
-          shape: const CircleBorder(),
-          padding: const EdgeInsets.all(8),
-        ),
-      ),
+      iconButtonTheme: IconButtonThemeData(style: _iconButtonOnSolidBarStyle()),
 
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: primary,
@@ -191,10 +212,15 @@ class AppTheme {
         foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        actionsIconTheme: const IconThemeData(color: Colors.white, size: 24),
         systemOverlayStyle: SystemUiOverlayStyle.light,
         titleTextStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
         shape: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
       ),
+
+      iconButtonTheme: IconButtonThemeData(style: _iconButtonOnSolidBarStyle()),
 
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: primaryDark,

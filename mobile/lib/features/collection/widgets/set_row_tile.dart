@@ -1,5 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:card_vault/core/utils/platform_utils.dart';
+import 'package:card_vault/core/widgets/adaptive_list_card.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../core/models/user_card.dart';
 
 class SetRowTile extends StatefulWidget {
@@ -31,108 +34,112 @@ class _SetRowTileState extends State<SetRowTile> {
     final row = widget.row;
     final hasMultipleParallels = row.parallels.length > 1;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      clipBehavior: Clip.antiAlias,
+    final body = Padding(
+      padding: const EdgeInsets.all(12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: hasMultipleParallels ? () => setState(() => _expanded = !_expanded) : null,
-            borderRadius: BorderRadius.circular(14),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      // Image / emoji
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 60,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: row.imageUrl != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: CachedNetworkImage(
+                          imageUrl: row.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, _, _) => Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 20))),
+                        ),
+                      )
+                    : Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 20))),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (row.releaseName != null)
+                      Text(
+                        [if (row.year != null) '${row.year}', row.releaseName!].join(' '),
+                        style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.55)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    Text(
+                      row.setName,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurface,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (hasMultipleParallels)
                       Container(
-                        width: 44,
-                        height: 60,
-                        margin: const EdgeInsets.only(right: 12),
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
+                          color: colors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: row.imageUrl != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: CachedNetworkImage(
-                                  imageUrl: row.imageUrl!,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, _, _) => Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 20))),
-                                ),
-                              )
-                            : Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 20))),
+                        child: Text('×${row.parallels.length} parallels', style: TextStyle(fontSize: 10, color: colors.primary, fontWeight: FontWeight.w600)),
                       ),
-                      // Info
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (row.releaseName != null)
-                              Text(
-                                [if (row.year != null) '${row.year}', row.releaseName!].join(' '),
-                                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.55)),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            Text(
-                              row.setName,
-                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (hasMultipleParallels)
-                              Container(
-                                margin: const EdgeInsets.only(top: 2),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: colors.primary.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text('×${row.parallels.length} parallels', style: TextStyle(fontSize: 10, color: colors.primary, fontWeight: FontWeight.w600)),
-                              ),
-                          ],
-                        ),
-                      ),
-                      // Value + chevron
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('\$${row.totalValue.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                          Text('${row.ownedCount}/${row.cardCount}', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
-                          if (hasMultipleParallels)
-                            Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Progress bar
-                  _ProgressBar(pct: row.pct, color: _progressColor(row.pct)),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${row.pct.toStringAsFixed(1)}% complete', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
-                      Text('${row.ownedCount} of ${row.cardCount} cards', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
-                    ],
-                  ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('\$${row.totalValue.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: colors.onSurface)),
+                  Text('${row.ownedCount}/${row.cardCount}', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
+                  if (hasMultipleParallels)
+                    Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
                 ],
               ),
-            ),
+            ],
           ),
-          // Expanded parallels
+          const SizedBox(height: 10),
+          _ProgressBar(pct: row.pct, color: _progressColor(row.pct)),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${row.pct.toStringAsFixed(1)}% complete', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
+              Text('${row.ownedCount} of ${row.cardCount} cards', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final header = hasMultipleParallels
+        ? (isIOS
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: body,
+              )
+            : InkWell(
+                onTap: () => setState(() => _expanded = !_expanded),
+                borderRadius: BorderRadius.circular(12),
+                child: body,
+              ))
+        : body;
+
+    return AdaptiveListCard(
+      child: Column(
+        children: [
+          header,
           if (_expanded && hasMultipleParallels) ...[
-            const Divider(height: 1),
+            Divider(height: 1, color: colors.outlineVariant),
             ...row.parallels.map((p) => _ParallelRow(parallel: p, progressColor: _progressColor(p.pct))),
           ],
         ],

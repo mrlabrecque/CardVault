@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
+import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/widgets/app_overflow_menu.dart';
 
@@ -412,15 +413,13 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))],
-        border: Border.all(color: const Color(0xFFF3F4F6)),
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      cornerRadius: 16,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: child,
       ),
-      child: child,
     );
   }
 }

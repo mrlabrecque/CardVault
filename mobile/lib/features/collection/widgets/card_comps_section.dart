@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
+import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/services/comps_service.dart';
 
 class CardCompsSection extends ConsumerStatefulWidget {
@@ -248,17 +249,15 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         if (_getChartData().length >= 2) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFF3F4F6)),
-              ),
+            child: AdaptiveListCard(
+              margin: EdgeInsets.zero,
+              child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 16, 20, 0),
               child: SizedBox(
                 height: 120,
                 child: _PriceChart(data: _getChartData()),
               ),
+            ),
             ),
           ),
         ],
@@ -315,12 +314,8 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _filteredComps.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFF3F4F6)),
-              ),
+            itemBuilder: (_, i) => AdaptiveListCard(
+              margin: EdgeInsets.zero,
               child: _CompRow(comp: _filteredComps[i]),
             ),
           ),
@@ -585,7 +580,7 @@ class _CompRow extends StatelessWidget {
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: DefaultTextStyle(
-          style: const TextStyle(color: Colors.black87),
+          style: TextStyle(color: colors.onSurface),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
