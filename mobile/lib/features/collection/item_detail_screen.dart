@@ -11,11 +11,16 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/inline_notice_container.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/widgets/serial_tag.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/market_analysis_section.dart';
+
+// Bottom scroll padding when this route is shown inside [AppShell] so the last
+// section clears the floating tab bar (matches collection / wishlist lists).
+const double _kShellTabBarScrollInset = 100;
 
 // ── HIG-oriented helpers (semantic color + scalable type) ───────────────────
 
@@ -28,8 +33,8 @@ Color _detailProfitColor(BuildContext context) {
 TextStyle? _detailMetaLabelStyle(BuildContext context) {
   final t = Theme.of(context).textTheme;
   final c = Theme.of(context).colorScheme;
-  return t.labelSmall?.copyWith(
-    color: c.onSurface.withValues(alpha: 0.45),
+  return t.labelMedium?.copyWith(
+    color: c.onSurface.withValues(alpha: 0.60),
     letterSpacing: 0.5,
     fontWeight: FontWeight.w500,
   );
@@ -406,7 +411,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         foregroundColor: iconTint,
         shape: const RoundedRectangleBorder(side: BorderSide.none),
         iconTheme: IconThemeData(color: iconTint),
-        leadingWidth: 60,
+        leadingWidth: 64,
         leading: Padding(
           padding: const EdgeInsets.only(left: 12),
           child: Center(
@@ -414,7 +419,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               icon: Icons.arrow_back_ios_new,
               onPressed: () => _close(context),
               tooltip: 'Back',
-              iconSize: 16,
+              iconSize: 17,
               onDarkSurface: !onLight,
             ),
           ),
@@ -426,7 +431,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               child: AdaptivePopupMenuButton.icon<String>(
                 icon: 'ellipsis',
                 tint: iconTint,
-                size: 38,
+                size: 44,
                 buttonStyle: PopupButtonStyle.glass,
                 items: const [
                   AdaptivePopupMenuItem<String>(
@@ -462,7 +467,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         children: [
           _FullBleedHero(key: _heroKey, card: card, topInset: topInset),
           Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 16 + bottomPad),
+            padding: EdgeInsets.fromLTRB(16, 24, 16, _kShellTabBarScrollInset + bottomPad),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -476,10 +481,13 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                         header: true,
                         child: Text(
                           'Value',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
+                              ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
@@ -498,7 +506,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 _ValueRefreshNotice(
                   refreshedAt: card.valueRefreshedAt,
                   relativeRefreshed: _relativeRefreshed,
@@ -526,10 +534,13 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                         header: true,
                         child: Text(
                           'Your copy',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
+                              ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       _CopyTile(label: 'Parallel', value: card.parallel),
                       const SizedBox(height: 8),
                       _CopyTile(label: 'Price paid', value: '\$${(card.pricePaid ?? 0).toStringAsFixed(2)}'),
@@ -566,7 +577,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     child: Text(
                       'No catalog link — market data unavailable.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colors.onSurface.withValues(alpha: 0.55),
+                            color: colors.onSurface.withValues(alpha: 0.60),
                           ),
                     ),
                   ),
@@ -599,6 +610,7 @@ class _FullBleedHero extends StatelessWidget {
     final imageUrl = card.imageUrl;
     final cardNumber = card.cardNumber;
     final parallelName = card.parallel != 'Base' ? card.parallel : null;
+    final textTheme = Theme.of(context).textTheme;
 
     final metaParts = <String>[
       if (card.year != null) card.year.toString(),
@@ -614,9 +626,9 @@ class _FullBleedHero extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [Color(0xFF800020), Color(0xFF3D0010)],
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
       ),
-      padding: EdgeInsets.fromLTRB(20, topInset + kToolbarHeight + 4, 20, 28),
+      padding: EdgeInsets.fromLTRB(20, topInset + kToolbarHeight + 8, 20, 24),
       child: Column(
         children: [
           Container(
@@ -624,9 +636,9 @@ class _FullBleedHero extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
+                  color: Colors.black.withValues(alpha: 0.20),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
@@ -652,14 +664,13 @@ class _FullBleedHero extends StatelessWidget {
                     ),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           Text.rich(
             TextSpan(children: [
               TextSpan(
                 text: card.player,
-                style: const TextStyle(
+                style: textTheme.headlineSmall?.copyWith(
                   color: Colors.white,
-                  fontSize: 22,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.2,
                 ),
@@ -667,9 +678,8 @@ class _FullBleedHero extends StatelessWidget {
               if (cardNumber != null)
                 TextSpan(
                   text: '  #$cardNumber',
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 16,
+                  style: textTheme.titleMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.70),
                     fontWeight: FontWeight.w400,
                   ),
                 ),
@@ -679,10 +689,12 @@ class _FullBleedHero extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           if (metaParts.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               metaParts.join(' · '),
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: textTheme.bodySmall?.copyWith(
+                color: Colors.white.withValues(alpha: 0.75),
+              ),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -692,15 +704,14 @@ class _FullBleedHero extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               parallelName,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 13,
+              style: textTheme.labelMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.70),
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 4,
             runSpacing: 4,
@@ -785,29 +796,14 @@ class _ValueRefreshNotice extends StatelessWidget {
     final theme = Theme.of(context);
     return Semantics(
       label: text,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: colors.surfaceContainerHighest.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.schedule, size: 18, color: colors.onSurface.withValues(alpha: 0.45)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  height: 1.35,
-                  color: colors.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-            ),
-          ],
+      child: InlineNoticeContainer(
+        icon: Icon(Icons.schedule, size: 20, color: colors.onSurface.withValues(alpha: 0.60)),
+        child: Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            height: 1.35,
+            color: colors.onSurface.withValues(alpha: 0.75),
+          ),
         ),
       ),
     );
@@ -870,38 +866,26 @@ class _DailyRefreshBadge extends StatelessWidget {
     final colors = theme.colorScheme;
     return Semantics(
       label: 'Auto-refreshed daily. Top 50 by value, updated every 24 hours automatically.',
-      child: AdaptiveListCard(
-        margin: EdgeInsets.zero,
-        cornerRadius: 12,
+      child: InlineNoticeContainer(
         highlightBorderColor: colors.primary.withValues(alpha: 0.35),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Icon(Icons.bolt, size: 20, color: colors.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Auto-refreshed daily',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary,
-                      ),
-                    ),
-                    Text(
-                      'Top 50 by value — updated every 24 hours automatically',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ],
-                ),
+        icon: Icon(Icons.bolt, size: 20, color: colors.primary),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Auto-refreshed daily',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: colors.primary,
               ),
-            ],
-          ),
+            ),
+            Text(
+              'Top 50 by value — updated every 24 hours automatically',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurface.withValues(alpha: 0.60),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -952,7 +936,7 @@ class _PriceCheckToggle extends StatelessWidget {
                     Text(
                       'Auto-refresh value every 7 days',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.5),
+                        color: colors.onSurface.withValues(alpha: 0.60),
                       ),
                     ),
                   ],
@@ -1027,7 +1011,7 @@ class _GlassCircleIconButton extends StatelessWidget {
   final double iconSize;
   final bool onDarkSurface;
 
-  static const double _size = 38;
+  static const double _size = 44;
 
   @override
   Widget build(BuildContext context) {

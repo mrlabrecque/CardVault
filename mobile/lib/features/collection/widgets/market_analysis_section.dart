@@ -31,11 +31,17 @@ class _MarketAnalysisSectionState extends State<MarketAnalysisSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Market Analysis',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        Semantics(
+          header: true,
+          child: Text(
+            'Market Analysis',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         AdaptiveSegmentedControl(
           labels: const ['Sold Comps', 'For Sale'],
           selectedIndex: _segment,

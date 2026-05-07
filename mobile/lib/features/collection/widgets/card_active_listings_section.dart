@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
+import '../../../core/widgets/card_fan_loader.dart';
 
 /// Active eBay listings for a master card + parallel (from Edge Function).
 class CardActiveListingsSection extends ConsumerStatefulWidget {
@@ -75,16 +76,16 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: CardFanLoader()),
       );
     }
 
     if (_error != null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Text(
           _error!,
-          style: TextStyle(fontSize: 13, color: colors.error),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.error),
         ),
       );
     }
@@ -92,37 +93,40 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
     final items = _items ?? [];
     if (items.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           color: const Color(0xFFFEF3C7),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFDBB726)),
         ),
-        child: DefaultTextStyle(
-          style: const TextStyle(color: Colors.black87),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.storefront_outlined, size: 18, color: Color(0xFFF59E0B)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'No active listings',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'No matching Buy It Now or auction listings found right now.',
-                      style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
-                    ),
-                  ],
-                ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.storefront_outlined, size: 20, color: Color(0xFFF59E0B)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No active listings',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFB45309),
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No matching Buy It Now or auction listings found right now.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurface.withValues(alpha: 0.60),
+                          height: 1.35,
+                        ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -136,7 +140,9 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
             alignment: Alignment.centerLeft,
             child: Text(
               '${items.length} listing${items.length == 1 ? '' : 's'}',
-              style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurface.withValues(alpha: 0.60),
+                  ),
             ),
           ),
         ),
@@ -165,81 +171,115 @@ class _ActiveListingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final thumb = listing.imageUrl;
+    final hasUrl = listing.url != null && listing.url!.isNotEmpty;
 
-    return InkWell(
-      onTap: listing.url != null && listing.url!.isNotEmpty
-          ? () => launchUrl(Uri.parse(listing.url!), mode: LaunchMode.externalApplication)
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (thumb != null && thumb.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: thumb,
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, error) => const SizedBox(width: 48, height: 48),
-                ),
-              )
-            else
-              Container(
+    void openListing() {
+      if (!hasUrl) return;
+      launchUrl(Uri.parse(listing.url!), mode: LaunchMode.externalApplication);
+    }
+
+    Widget innerRow() {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (thumb != null && thumb.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: thumb,
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.image_not_supported_outlined, size: 22, color: colors.outline),
+                fit: BoxFit.cover,
+                errorWidget: (context, url, error) => const SizedBox(width: 48, height: 48),
               ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    listing.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        '\$${listing.price.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: listing.isAuction
-                              ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                              : colors.outline.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          listing.isAuction ? 'Auction' : 'Buy It Now',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: listing.isAuction ? const Color(0xFF2563EB) : colors.onSurface.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+            )
+          else
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Icon(Icons.image_not_supported_outlined, size: 22, color: colors.outline),
             ),
-            if (listing.url != null && listing.url!.isNotEmpty)
-              Icon(Icons.open_in_new, size: 14, color: colors.onSurface.withValues(alpha: 0.45)),
-          ],
-        ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  listing.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      '\$${listing.price.toStringAsFixed(2)}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: listing.isAuction
+                            ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                            : colors.outline.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        listing.isAuction ? 'Auction' : 'Buy It Now',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: listing.isAuction
+                                  ? const Color(0xFF2563EB)
+                                  : colors.onSurface.withValues(alpha: 0.72),
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: hasUrl
+                ? InkWell(
+                    onTap: openListing,
+                    borderRadius: BorderRadius.circular(8),
+                    child: innerRow(),
+                  )
+                : innerRow(),
+          ),
+          if (hasUrl)
+            IconButton(
+              onPressed: openListing,
+              icon: Icon(Icons.open_in_new, size: 18, color: colors.onSurface.withValues(alpha: 0.60)),
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                minimumSize: const Size(44, 44),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              tooltip: 'Open listing',
+            ),
+        ],
       ),
     );
   }

@@ -13,7 +13,7 @@ class AttrTag extends StatelessWidget {
         color: color ?? Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color != null ? Colors.white : Theme.of(context).colorScheme.onPrimaryContainer)),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color != null ? Colors.white : Theme.of(context).colorScheme.onPrimaryContainer)),
     );
   }
 }

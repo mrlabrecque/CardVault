@@ -2,8 +2,11 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
+import '../../../core/widgets/card_fan_loader.dart';
+import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
 
 class CardCompsSection extends ConsumerStatefulWidget {
@@ -126,54 +129,56 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
     if (_loading) {
       return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Center(child: CardFanLoader()),
       );
     }
 
     if (_allComps.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           color: const Color(0xFFFEF3C7),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFDBB726)),
         ),
-        child: DefaultTextStyle(
-          style: const TextStyle(color: Colors.black87),
-          child: Row(
-            children: [
-              const Icon(Icons.search_off, size: 16, color: Color(0xFFF59E0B)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                  const Text(
+        child: Row(
+          children: [
+            const Icon(Icons.search_off, size: 20, color: Color(0xFFF59E0B)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
                     'No comps found',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFB45309),
+                        ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 8),
                   Text(
                     'No recent eBay sales data available for this card.',
-                    style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurface.withValues(alpha: 0.60),
+                          height: 1.35,
+                        ),
                   ),
                 ],
-                ),
               ),
-            ],
             ),
+          ],
         ),
       );
     }
 
-    return DefaultTextStyle(
-      style: const TextStyle(color: Colors.black87),
-      child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Date range filter
         Padding(
-          padding: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
               const Spacer(),
@@ -204,7 +209,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         // Grade pills
         Padding(
-          padding: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
               _GradePill(
@@ -234,63 +239,53 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         // Chart (if enough data)
         if (_getChartData().length >= 2) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
             child: AdaptiveListCard(
               margin: EdgeInsets.zero,
               child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 16, 20, 0),
-              child: SizedBox(
-                height: 120,
-                child: _PriceChart(data: _getChartData()),
+                padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+                child: SizedBox(
+                  height: 120,
+                  child: _PriceChart(data: _getChartData()),
+                ),
               ),
-            ),
             ),
           ),
         ],
 
         // Filtered comps list
         Padding(
-          padding: const EdgeInsets.only(top: 6, bottom: 6),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
               '${_filteredComps.length} ${_filteredComps.length == 1 ? 'listing' : 'listings'}',
-              style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurface.withValues(alpha: 0.60),
+                  ),
             ),
           ),
         ),
         if (_filteredComps.isEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFECEFF5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFC7D2E8)),
-            ),
-            child: DefaultTextStyle(
-              style: const TextStyle(color: Colors.black87),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline, size: 16, color: Color(0xFF6366F1)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                      Text(
-                        'No recent sales',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.onSurface),
+          InlineNoticeContainer(
+            icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.60)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No recent sales',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurface,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'No recent eBay sales found at $_selectedGrade grade.',
-                        style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.45)),
-                      ),
-                    ],
-                    ),
-                  ),
-                ],
                 ),
+                Text(
+                  'No recent eBay sales found at $_selectedGrade grade.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurface.withValues(alpha: 0.60),
+                      ),
+                ),
+              ],
             ),
           )
         else
@@ -306,7 +301,6 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           ),
       ],
-      ),
     );
   }
 }
@@ -358,13 +352,13 @@ class _GradePill extends StatelessWidget {
                             color: isSelected ? colors.primary : colors.onSurface,
                           ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: isSelected
-                                ? colors.primary.withValues(alpha: 0.85)
-                                : colors.onSurface.withValues(alpha: 0.6),
+                                ? colors.primary.withValues(alpha: 0.88)
+                                : colors.onSurface.withValues(alpha: 0.62),
                           ),
                     ),
                   ],
@@ -390,6 +384,15 @@ class _PriceChart extends StatelessWidget {
     if (data.isEmpty) {
       return const SizedBox.shrink();
     }
+
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final base = theme.textTheme.labelSmall ?? const TextStyle(fontSize: 12);
+    final axisLabelStyle = base.copyWith(
+      color: colors.onSurface.withValues(alpha: 0.55),
+      fontWeight: FontWeight.w500,
+      fontSize: 11,
+    );
 
     final sortedDates = data.keys.toList()..sort();
     final minPrice = data.values.reduce((a, b) => a < b ? a : b);
@@ -424,7 +427,7 @@ class _PriceChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                return Text('\$${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500));
+                return Text('\$${value.toStringAsFixed(0)}', style: axisLabelStyle);
               },
               reservedSize: 40,
             ),
@@ -440,7 +443,10 @@ class _PriceChart extends StatelessWidget {
                 final day = date.day.toString().padLeft(2, '0');
                 return Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text('$month/$day', style: const TextStyle(fontSize: 9, color: Color(0xFF9CA3AF))),
+                  child: Text(
+                    '$month/$day',
+                    style: axisLabelStyle,
+                  ),
                 );
               },
               reservedSize: 30,
@@ -464,7 +470,11 @@ class _PriceChart extends StatelessWidget {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
                   '\$${spot.y.toStringAsFixed(2)}',
-                  const TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w600, fontSize: 12),
+                  TextStyle(
+                    color: colors.onSurface,
+                    fontWeight: FontWeight.w600,
+                    fontSize: theme.textTheme.bodySmall?.fontSize ?? 12,
+                  ),
                 );
               }).toList();
             },
@@ -521,83 +531,118 @@ class _CompRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final hasUrl = comp.url != null && comp.url!.isNotEmpty;
+
+    void openUrl() {
+      if (!hasUrl) return;
+      launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication);
+    }
 
     return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: DefaultTextStyle(
-          style: TextStyle(color: colors.onSurface),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left: title + date
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                  Text(
-                    comp.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    comp.soldAt != null ? _formatDate(comp.soldAt!) : '—',
-                    style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Right: price + badge + link icon
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '\$${comp.price.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  comp.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (comp.saleType == SaleType.auction)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('Auction', style: TextStyle(fontSize: 10, color: Color(0xFF3B82F6))),
-                      )
-                    else if (comp.saleType == SaleType.bestOffer)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF97316).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('Best Offer', style: TextStyle(fontSize: 10, color: Color(0xFFF97316))),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: colors.outline.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('Buy It Now', style: TextStyle(fontSize: 10)),
-                      ),
-                    const SizedBox(width: 6),
-                    if (comp.url != null)
-                      Icon(Icons.open_in_new, size: 12, color: colors.onSurface.withValues(alpha: 0.5)),
-                  ],
+                const SizedBox(height: 8),
+                Text(
+                  comp.soldAt != null ? _formatDate(comp.soldAt!) : '—',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurface.withValues(alpha: 0.60),
+                  ),
                 ),
               ],
             ),
-          ],
           ),
-        ),
-      );
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '\$${comp.price.toStringAsFixed(2)}',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (comp.saleType == SaleType.auction)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Auction',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF3B82F6),
+                        ),
+                      ),
+                    )
+                  else if (comp.saleType == SaleType.bestOffer)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF97316).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Best Offer',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFF97316),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colors.outline.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Buy It Now',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: colors.onSurface.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ),
+                  if (hasUrl) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: openUrl,
+                      icon: Icon(Icons.open_in_new, size: 18, color: colors.onSurface.withValues(alpha: 0.60)),
+                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(44, 44),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      tooltip: 'Open listing',
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
