@@ -1,5 +1,6 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
+
+import 'flutter_backdrop_blur.dart';
 
 PreferredSizeWidget buildGlassNavBar(
   BuildContext context, {
@@ -29,8 +30,8 @@ PreferredSizeWidget buildGlassNavBar(
     bottom: bottom,
     flexibleSpace: useBlurBackground
         ? ClipRect(
-            child: AdaptiveBlurView(
-              blurStyle: BlurStyle.systemUltraThinMaterial,
+            child: FlutterBackdropBlur(
+              sigma: 10,
               child: Container(
                 color: colors.surface.withValues(alpha: 0.14),
               ),

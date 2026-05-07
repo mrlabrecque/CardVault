@@ -14,16 +14,24 @@ import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
+import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
-import '../../core/widgets/sticky_sub_header_layout.dart';
 import '../../core/widgets/glass_nav_bar.dart';
+import '../../core/widgets/sticky_chrome_scaffold.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import '../scan/scan_screen.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 import 'widgets/filter_sort_action_bar.dart';
+
+/// First-frame hints for [StickyChromeScaffold.stickyHeightEstimate] until layout measures.
+const double _kStickyEstSegment = 52;
+const double _kStickyEstBrowsePlus = 118;
+const double _kStickyEstSetSearch = 72;
+const double _kStickyEstCardSearch = 72;
+const double _kStickyEstGlobalSearch = 64;
 
 // Persisted navigation state (browse only)
 class _CatalogNavState {
@@ -842,42 +850,263 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
+  // ── Sticky chrome (segment row ± filters) ────────────────────
+
+  Widget _catalogSegmentRow(ColorScheme colors) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: AdaptiveSegmentedControl(
+        labels: const ['Browse', 'Search'],
+        selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
+        onValueChanged: (index) {
+          setState(() {
+            _mode = index == 0 ? _CatalogMode.browse : _CatalogMode.search;
+          });
+        },
+        color: colors.primary,
+      ),
+    );
+  }
+
+  Widget _browseReleaseFiltersColumn(ColorScheme colors) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: AdaptiveDropdown<String>(
+            value: _catalogFilterYear,
+            decoration: InputDecoration(
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            ),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
+              ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
+            ],
+            onChanged: (v) {
+              setState(() {
+                _catalogFilterYear = v ?? '';
+                _browseSearchCtrl.clear();
+              });
+              _loadBrowseReleases(reset: true);
+            },
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: AdaptiveTextField(
+            controller: _browseSearchCtrl,
+            onChanged: (_) => setState(() {}),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Search releases…',
+            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+            suffixIcon: _browseSearchCtrl.text.isNotEmpty
+                ? GestureDetector(
+                    onTap: () => setState(() => _browseSearchCtrl.clear()),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(Icons.close, size: 16),
+                    ),
+                  )
+                : null,
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
+            decoration: InputDecoration(
+              labelText: 'Search releases',
+              hintText: 'Search releases…',
+              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+              suffixIcon: _browseSearchCtrl.text.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () => setState(() => _browseSearchCtrl.clear()),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.close, size: 16),
+                      ),
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Single blurred strip under the app bar for this screen (segments only, or segments + bars).
+  ({Widget child, double heightEstimate}) _catalogStickyChrome(ColorScheme colors) {
+    final segment = _catalogSegmentRow(colors);
+    const segmentEst = _kStickyEstSegment;
+
+    if (_restoringState) {
+      return (child: segment, heightEstimate: segmentEst);
+    }
+
+    if (_mode == _CatalogMode.search) {
+      if (_searchSelectedCard != null && _searchParallelsLoading) {
+        return (child: segment, heightEstimate: segmentEst);
+      }
+      if (_searchSelectedCard != null && _searchParallels.isNotEmpty && !_searchParallelSelected) {
+        return (child: segment, heightEstimate: segmentEst);
+      }
+      if (_searchSelectedCard != null) {
+        return (child: segment, heightEstimate: segmentEst);
+      }
+      return (
+        heightEstimate: segmentEst + _kStickyEstGlobalSearch,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            segment,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: FilterSortActionBar<void>(
+                searchText: _globalSearchCtrl.text,
+                onSearchChanged: _onSearchChanged,
+                onSearchClear: () => setState(() {
+                  _globalSearchCtrl.clear();
+                  _globalSearchResults = [];
+                }),
+                searchHint: 'Search releases, sets, or cards…',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    switch (_catalogStep) {
+      case _CatalogStep.browsing:
+        return (
+          heightEstimate: segmentEst + _kStickyEstBrowsePlus,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              segment,
+              _browseReleaseFiltersColumn(colors),
+            ],
+          ),
+        );
+      case _CatalogStep.sets:
+        return (
+          heightEstimate: segmentEst + _kStickyEstSetSearch,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              segment,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: AdaptiveTextField(
+                  controller: _setSearchCtrl,
+                  onChanged: (_) => setState(() {}),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  placeholder: 'Search sets…',
+                  prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                  suffixIcon: _setSearchCtrl.text.isNotEmpty
+                      ? GestureDetector(
+                          onTap: () => setState(() => _setSearchCtrl.clear()),
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(Icons.close, size: 16),
+                          ),
+                        )
+                      : null,
+                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
+                  decoration: InputDecoration(
+                    labelText: 'Search sets',
+                    hintText: 'Search sets…',
+                    hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+                    prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+                    suffixIcon: _setSearchCtrl.text.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () => setState(() => _setSearchCtrl.clear()),
+                            child: const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(Icons.close, size: 16),
+                            ),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      case _CatalogStep.card:
+        return (
+          heightEstimate: segmentEst + _kStickyEstCardSearch,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              segment,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: AdaptiveTextField(
+                  controller: _cardCtrl,
+                  onChanged: _searchCards,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  placeholder: 'Search player name…',
+                  prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+                  suffixIcon: _loadingCards
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : null,
+                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
+                  decoration: InputDecoration(
+                    labelText: 'Search players',
+                    hintText: 'Search player name…',
+                    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                    prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+                    suffixIcon: _loadingCards
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      case _CatalogStep.sportPicker:
+      case _CatalogStep.parallel:
+      case _CatalogStep.detail:
+      case _CatalogStep.addCopy:
+        return (child: segment, heightEstimate: segmentEst);
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Scaffold(
-      extendBodyBehindAppBar: true,
+    final sticky = _catalogStickyChrome(colors);
+    return StickyChromeScaffold(
+      stickyHeightEstimate: sticky.heightEstimate,
+      stickyChrome: sticky.child,
       appBar: buildGlassNavBar(
         context,
         useBlurBackground: true,
         leading: (_catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse) ||
                  (_mode == _CatalogMode.search && _searchSelectedCard == null)
             ? null
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                child: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: colors.onSurface.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colors.onSurface.withValues(alpha: 0.2)),
-                  ),
-                  child: ClipOval(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: _handleStepBack,
-                        child: Center(
-                          child: Icon(Icons.chevron_left, color: colors.onSurface, size: 26),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+            : AppBarGlassCircleButton(
+                onPressed: _handleStepBack,
+                icon: Icons.chevron_left,
               ),
         centerTitle: false,
         title: Text(
@@ -889,188 +1118,94 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           omitShellTrailing: _omitCatalogShellTrailing,
         ),
       ),
-      body: Column(
-        children: [
-          AdaptiveBlurView(
-            blurStyle: BlurStyle.systemUltraThinMaterial,
-            child: Container(
-              color: colors.surface.withValues(alpha: 0.14),
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + kToolbarHeight,
-                left: 12,
-                right: 12,
-                bottom: 8,
-              ),
-              child: AdaptiveSegmentedControl(
-                labels: const ['Browse', 'Search'],
-                selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
-                onValueChanged: (index) {
-                  setState(() {
-                    _mode = index == 0 ? _CatalogMode.browse : _CatalogMode.search;
-                  });
-                },
-                color: colors.primary,
-              ),
-            ),
-          ),
-          Expanded(
-            child: _restoringState
-                ? const Center(child: CardFanLoader())
-                : _mode == _CatalogMode.browse
-                    ? switch (_catalogStep) {
-                        _CatalogStep.sportPicker => _buildSportPickerView(colors),
-                        _CatalogStep.browsing  => _buildBrowseView(colors),
-                        _CatalogStep.sets      => _buildSetsView(colors),
-                        _CatalogStep.card      => _buildCardSearchView(colors),
-                        _CatalogStep.parallel  => _buildParallelView(colors),
-                        _CatalogStep.detail    => _buildCardDetailView(colors),
-                        _CatalogStep.addCopy   => _buildYourCopyFormView(colors),
-                      }
-                    : _buildSearchMode(colors),
-          ),
-        ],
-      ),
+      bodyBuilder: (context, contentTopInset) {
+        if (_restoringState) {
+          return Padding(
+            padding: EdgeInsets.only(top: contentTopInset),
+            child: const Center(child: CardFanLoader()),
+          );
+        }
+        if (_mode == _CatalogMode.browse) {
+          return switch (_catalogStep) {
+            _CatalogStep.sportPicker => _buildSportPickerView(colors, contentTopInset),
+            _CatalogStep.browsing  => _buildBrowseView(colors, contentTopInset),
+            _CatalogStep.sets      => _buildSetsView(colors, contentTopInset),
+            _CatalogStep.card      => _buildCardSearchView(colors, contentTopInset),
+            _CatalogStep.parallel  => _buildParallelView(colors, contentTopInset),
+            _CatalogStep.detail    => _buildCardDetailView(colors, contentTopInset),
+            _CatalogStep.addCopy   => _buildYourCopyFormView(colors, contentTopInset),
+          };
+        }
+        return _buildSearchMode(colors, contentTopInset);
+      },
     );
   }
 
   // ── Browse view (release list) ────────────────────────────────
 
-  Widget _buildBrowseView(ColorScheme colors) {
+  Widget _buildBrowseView(ColorScheme colors, double contentTopInset) {
     final searchQuery = _browseSearchCtrl.text.toLowerCase();
     final filtered = _browseResults.where((r) {
       final name = r.displayName.toLowerCase();
       final sport = (r.sport ?? '').toLowerCase();
       return name.contains(searchQuery) || sport.contains(searchQuery);
     }).toList();
+    final listPadTop = contentTopInset;
 
-    return Column(
-      children: [
-        AdaptiveBlurView(
-          blurStyle: BlurStyle.systemUltraThinMaterial,
-          child: Container(
-            color: colors.surface.withValues(alpha: 0.14),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                  child: AdaptiveDropdown<String>(
-                    value: _catalogFilterYear,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
-                      ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _catalogFilterYear = v ?? '';
-                        _browseSearchCtrl.clear();
-                      });
-                      _loadBrowseReleases(reset: true);
-                    },
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: AdaptiveTextField(
-                    controller: _browseSearchCtrl,
-                    onChanged: (_) => setState(() {}),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    placeholder: 'Search releases…',
-                    prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                    suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () => setState(() => _browseSearchCtrl.clear()),
-                            child: const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(Icons.close, size: 16),
-                            ),
-                          )
-                        : null,
-                    cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
-                      context,
-                      radius: 10,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Search releases',
-                      hintText: 'Search releases…',
-                      hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-                      prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                      suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () => setState(() => _browseSearchCtrl.clear()),
-                              child: const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Icon(Icons.close, size: 16),
-                              ),
-                            )
-                          : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    if (_browseLoading && _browseResults.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(top: listPadTop),
+        child: const Center(child: CardFanLoader()),
+      );
+    }
+    if (filtered.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(top: listPadTop),
+        child: Center(
+          child: Text(
+            _browseResults.isEmpty
+                ? 'No releases found.\nTry a different year or sport.'
+                : 'No results match your search.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
           ),
         ),
-        // Release list
-        Expanded(
-          child: _browseLoading && _browseResults.isEmpty
-              ? const Center(child: CardFanLoader())
-              : filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        _browseResults.isEmpty
-                            ? 'No releases found.\nTry a different year or sport.'
-                            : 'No results match your search.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: filtered.length + (_browseHasMore && filtered.length == _browseResults.length ? 1 : 0),
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        if (i == filtered.length) {
-                          return _browseLoading
-                              ? const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(child: CircularProgressIndicator()),
-                                )
-                              : AdaptiveListTile(
-                                  hideBottomDivider: true,
-                                  title: Text('Load more',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: colors.primary, fontSize: 14)),
-                                  onTap: _loadBrowseReleases,
-                                );
-                        }
-                        final r = filtered[i];
-                        return AdaptiveListTile(
-                          hideBottomDivider: true,
-                          title: Text(r.displayName,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                          subtitle: r.sport != null
-                              ? Text(r.sport!, style: const TextStyle(fontSize: 12))
-                              : null,
-                          trailing: const Icon(Icons.chevron_right, size: 18),
-                          onTap: () => _selectBrowseRelease(r),
-                        );
-                      },
-                    ),
-        ),
-      ],
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.only(top: listPadTop),
+      itemCount: filtered.length + (_browseHasMore && filtered.length == _browseResults.length ? 1 : 0),
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        if (i == filtered.length) {
+          return _browseLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : AdaptiveListTile(
+                  hideBottomDivider: true,
+                  title: Text('Load more',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: colors.primary, fontSize: 14)),
+                  onTap: _loadBrowseReleases,
+                );
+        }
+        final r = filtered[i];
+        return AdaptiveListTile(
+          hideBottomDivider: true,
+          title: Text(r.displayName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          subtitle: r.sport != null ? Text(r.sport!, style: const TextStyle(fontSize: 12)) : null,
+          trailing: const Icon(Icons.chevron_right, size: 18),
+          onTap: () => _selectBrowseRelease(r),
+        );
+      },
     );
   }
 
   // ── Sport picker view ─────────────────────────────────────────
 
-  Widget _buildSportPickerView(ColorScheme colors) {
+  Widget _buildSportPickerView(ColorScheme colors, double contentTopInset) {
     final sports = [
       ('Baseball', 'Baseball', '⚾', Color(0xFFB45309)),
       ('Basketball', 'Basketball', '🏀', Color(0xFFF97316)),
@@ -1080,7 +1215,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     ];
 
     return GridView.count(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      padding: EdgeInsets.fromLTRB(16, contentTopInset, 16, 24),
       crossAxisCount: 2,
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
@@ -1130,142 +1265,61 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Sets view ─────────────────────────────────────────────────
 
-  Widget _buildSetsView(ColorScheme colors) {
+  Widget _buildSetsView(ColorScheme colors, double contentTopInset) {
     final searchQuery = _setSearchCtrl.text.toLowerCase();
     final filtered = _browseSets.where((s) {
       return s.name.toLowerCase().contains(searchQuery);
     }).toList();
 
-    return Column(
-      children: [
-        AdaptiveBlurView(
-          blurStyle: BlurStyle.systemUltraThinMaterial,
-          child: Container(
-            color: colors.surface.withValues(alpha: 0.14),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: AdaptiveTextField(
-              controller: _setSearchCtrl,
-              onChanged: (_) => setState(() {}),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              placeholder: 'Search sets…',
-              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-              suffixIcon: _setSearchCtrl.text.isNotEmpty
-                  ? GestureDetector(
-                      onTap: () => setState(() => _setSearchCtrl.clear()),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(Icons.close, size: 16),
-                      ),
-                    )
-                  : null,
-              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
-                context,
-                radius: 10,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Search sets',
-                hintText: 'Search sets…',
-                hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-                prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                suffixIcon: _setSearchCtrl.text.isNotEmpty
-                    ? GestureDetector(
-                        onTap: () => setState(() => _setSearchCtrl.clear()),
-                        child: const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Icon(Icons.close, size: 16),
-                        ),
-                      )
-                    : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
+    final listPadTop = contentTopInset;
+    if (_browseSetsLoading || _lazyImporting) {
+      return Padding(
+        padding: EdgeInsets.only(top: listPadTop),
+        child: const Center(child: CardFanLoader()),
+      );
+    }
+    if (filtered.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(top: listPadTop),
+        child: Center(
+          child: Text(
+            _browseSets.isEmpty ? 'No sets found.' : 'No results match your search.',
+            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
           ),
         ),
-        Expanded(
-          child: _browseSetsLoading || _lazyImporting
-              ? const Center(child: CardFanLoader())
-              : filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        _browseSets.isEmpty ? 'No sets found.' : 'No results match your search.',
-                        style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final s = filtered[i];
-                        return AdaptiveListTile(
-                          hideBottomDivider: true,
-                          title: Text(s.name,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                          subtitle: s.cardCount != null
-                              ? Text('${s.cardCount} cards', style: const TextStyle(fontSize: 12))
-                              : null,
-                          trailing: const Icon(Icons.chevron_right, size: 18),
-                          onTap: () => _selectBrowseSet(s),
-                        );
-                      },
-                    ),
-        ),
-      ],
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.only(top: listPadTop),
+      itemCount: filtered.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final s = filtered[i];
+        return AdaptiveListTile(
+          hideBottomDivider: true,
+          title: Text(s.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          subtitle: s.cardCount != null ? Text('${s.cardCount} cards', style: const TextStyle(fontSize: 12)) : null,
+          trailing: const Icon(Icons.chevron_right, size: 18),
+          onTap: () => _selectBrowseSet(s),
+        );
+      },
     );
   }
 
   // ── Card search view ─────────────────────────────────────────────────────
 
-  Widget _buildCardSearchView(ColorScheme colors) {
-    return Column(
-      children: [
-        // Search field
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: AdaptiveTextField(
-            controller: _cardCtrl,
-            onChanged: _searchCards,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            placeholder: 'Search player name…',
-            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-            suffixIcon: _loadingCards
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                : null,
-            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
-            decoration: InputDecoration(
-              labelText: 'Search players',
-              hintText: 'Search player name…',
-              hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-              prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-              suffixIcon: _loadingCards
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                    )
-                  : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
-            ),
-          ),
-        ),
-        // Content area fills remaining space
-        Expanded(child: _buildCardResultsArea(colors)),
-      ],
-    );
+  Widget _buildCardSearchView(ColorScheme colors, double contentTopInset) {
+    return _buildCardResultsArea(colors, topInset: contentTopInset);
   }
 
   // ── Parallel step ─────────────────────────────────────────────
 
-  Widget _buildParallelView(ColorScheme colors) {
+  Widget _buildParallelView(ColorScheme colors, double contentTopInset) {
     return Column(
       children: [
         Expanded(
           child: ListView.separated(
-            padding: EdgeInsets.zero,
+            padding: EdgeInsets.only(top: contentTopInset),
             itemCount: _parallels.length + 1,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (_, i) {
@@ -1290,12 +1344,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Card detail view (read-only, showing Add to Collection/Wishlist buttons) ──
 
-  Widget _buildCardDetailView(ColorScheme colors) {
+  Widget _buildCardDetailView(ColorScheme colors, double contentTopInset) {
     return Column(
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, contentTopInset + 16, 16, 24),
             children: [
               CardDetailView(
                 masterCard: _selectedCard,
@@ -1441,12 +1495,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Your Copy form view ───────────────────────────────────────────────────
 
-  Widget _buildYourCopyFormView(ColorScheme colors) {
+  Widget _buildYourCopyFormView(ColorScheme colors, double contentTopInset) {
     return Column(
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, contentTopInset + 12, 16, 24),
             children: [
               // Selected card chip or new card indicator
               if (_selectedCard != null) ...[
@@ -1550,36 +1604,36 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Card results area ─────────────────────────────────────────
 
-  Widget _buildCardResultsArea(ColorScheme colors) {
+  Widget _buildCardResultsArea(ColorScheme colors, {double topInset = 0}) {
     if (_loadingCards) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_cardResults.isEmpty) {
-      return Center(
-        child: Text('No cards found.',
-            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
+      return Padding(
+        padding: EdgeInsets.only(top: topInset),
+        child: const Center(child: CircularProgressIndicator()),
       );
     }
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            padding: EdgeInsets.zero,
-            itemCount: _cardResults.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final c = _cardResults[i];
-              final attrs = _cardAttributePills(c);
-              return AdaptiveListTile(
-                hideBottomDivider: true,
-                onTap: () => _selectCard(c),
-                title: _buildNameWithAttributes(c.displayName, attrs),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-              );
-            },
-          ),
+    if (_cardResults.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(top: topInset),
+        child: Center(
+          child: Text('No cards found.',
+              style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
         ),
-      ],
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.only(top: topInset),
+      itemCount: _cardResults.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final c = _cardResults[i];
+        final attrs = _cardAttributePills(c);
+        return AdaptiveListTile(
+          hideBottomDivider: true,
+          onTap: () => _selectCard(c),
+          title: _buildNameWithAttributes(c.displayName, attrs),
+          trailing: const Icon(Icons.chevron_right, size: 18),
+        );
+      },
     );
   }
 
@@ -1712,10 +1766,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-Widget _buildSearchMode(ColorScheme colors) {
+Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
     // Show loader while parallels are loading
     if (_searchSelectedCard != null && _searchParallelsLoading) {
-      return const Center(child: CardFanLoader());
+      return Padding(
+        padding: EdgeInsets.only(top: contentTopInset),
+        child: const Center(child: CardFanLoader()),
+      );
     }
 
     // Show parallel selection if card selected but parallels exist and none chosen yet
@@ -1724,7 +1781,7 @@ Widget _buildSearchMode(ColorScheme colors) {
         children: [
           Expanded(
             child: ListView.separated(
-              padding: EdgeInsets.zero,
+              padding: EdgeInsets.only(top: contentTopInset),
               itemCount: _searchParallels.length + 1,
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (_, i) {
@@ -1753,7 +1810,7 @@ Widget _buildSearchMode(ColorScheme colors) {
         children: [
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              padding: EdgeInsets.fromLTRB(16, contentTopInset + 16, 16, 24),
               children: [
                 CardDetailView(
                   masterCard: _searchSelectedCard,
@@ -1868,159 +1925,154 @@ Widget _buildSearchMode(ColorScheme colors) {
       );
     }
 
-    // Show search results list
-    return StickySubHeaderLayout(
-      useScaffold: false,
-      header: const SizedBox.shrink(),
-      subHeader: FilterSortActionBar<void>(
-        searchText: _globalSearchCtrl.text,
-        onSearchChanged: _onSearchChanged,
-        onSearchClear: () => setState(() {
-          _globalSearchCtrl.clear();
-          _globalSearchResults = [];
-        }),
-        searchHint: 'Search releases, sets, or cards…',
-      ),
-      label: const SizedBox.shrink(),
-      body: _globalSearchLoading
-          ? const Center(child: CardFanLoader())
-          : _globalSearchResults.isEmpty
-              ? Center(
-                  child: Text(
-                    _globalSearchCtrl.text.isEmpty
-                        ? 'Search releases, sets, or cards…'
-                        : 'No results found.',
-                    style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+    // Show search results list (search field lives in [_catalogStickyChrome])
+    final listPadTop = contentTopInset;
+    if (_globalSearchLoading) {
+      return Padding(
+        padding: EdgeInsets.only(top: listPadTop),
+        child: const Center(child: CardFanLoader()),
+      );
+    }
+    if (_globalSearchResults.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(top: listPadTop),
+        child: Center(
+          child: Text(
+            _globalSearchCtrl.text.isEmpty
+                ? 'Search releases, sets, or cards…'
+                : 'No results found.',
+            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.only(top: listPadTop),
+      itemCount: _globalSearchResults.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final result = _globalSearchResults[i];
+        if (result.$1 == 'release') {
+          final release = result.$2 as ReleaseRecord;
+          return AdaptiveListTile(
+            hideBottomDivider: true,
+            title: Text(
+              release.displayName,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            subtitle: release.sport != null ? Text(release.sport!) : null,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                )
-              : ListView.separated(
-                  padding: EdgeInsets.zero,
-                  itemCount: _globalSearchResults.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final result = _globalSearchResults[i];
-                    if (result.$1 == 'release') {
-                      final release = result.$2 as ReleaseRecord;
-                      return AdaptiveListTile(
-                        hideBottomDivider: true,
-                        title: Text(
-                          release.displayName,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: release.sport != null ? Text(release.sport!) : null,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3B82F6),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text('Release', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.chevron_right, size: 18),
-                          ],
-                        ),
-                        onTap: () {
-                          setState(() {
-                            _searchSelectedRelease = release;
-                            _searchSelectedSet = null;
-                            _searchSelectedCard = null;
-                          });
-                        },
-                      );
-                    } else if (result.$1 == 'set') {
-                      final set = result.$2 as SetRecord;
-                      final release = result.$3 as ReleaseRecord;
-                      return AdaptiveListTile(
-                        hideBottomDivider: true,
-                        title: Text(
-                          set.name,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(release.displayName, style: const TextStyle(fontSize: 12)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF8B5CF6),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text('Set', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.chevron_right, size: 18),
-                          ],
-                        ),
-                        onTap: () {
-                          setState(() {
-                            _searchSelectedRelease = release;
-                            _searchSelectedSet = set;
-                            _searchSelectedCard = null;
-                          });
-                        },
-                      );
-                    } else if (result.$1 == 'card') {
-                      final card = result.$2 as MasterCard;
-                      final set = result.$3 as SetRecord;
-                      final release = result.$4 as ReleaseRecord;
-                      final attrs = _cardAttributePills(card);
-                      return AdaptiveListTile(
-                        hideBottomDivider: true,
-                        title: _buildNameWithAttributes(card.displayName, attrs),
-                        subtitle: Text('${release.displayName} • ${set.name}', style: const TextStyle(fontSize: 12)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text('Card', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.chevron_right, size: 18),
-                          ],
-                        ),
-                        onTap: () async {
-                          setState(() {
-                            _searchSelectedRelease = release;
-                            _searchSelectedSet = set;
-                            _searchSelectedCard = card;
-                            _searchSelectedParallel = null;
-                            _searchParallelName = 'Base';
-                            _searchParallelSelected = false;
-                            _searchParallelsLoading = true;
-                          });
-                          unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
-                    
-                          // Load parallels for the set
-                          try {
-                            final parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
-                            if (mounted) {
-                              setState(() {
-                                _searchParallels = parallels;
-                                _searchParallelsLoading = false;
-                              });
-                                                    }
-                          } catch (_) {
-                            // Parallels load failed, continue without them
-                            if (mounted) {
-                              setState(() => _searchParallelsLoading = false);
-                            }
-                          }
-                        },
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
+                  child: const Text('Release', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
                 ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, size: 18),
+              ],
+            ),
+            onTap: () {
+              setState(() {
+                _searchSelectedRelease = release;
+                _searchSelectedSet = null;
+                _searchSelectedCard = null;
+              });
+            },
+          );
+        }
+        if (result.$1 == 'set') {
+          final set = result.$2 as SetRecord;
+          final release = result.$3 as ReleaseRecord;
+          return AdaptiveListTile(
+            hideBottomDivider: true,
+            title: Text(
+              set.name,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(release.displayName, style: const TextStyle(fontSize: 12)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text('Set', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, size: 18),
+              ],
+            ),
+            onTap: () {
+              setState(() {
+                _searchSelectedRelease = release;
+                _searchSelectedSet = set;
+                _searchSelectedCard = null;
+              });
+            },
+          );
+        }
+        if (result.$1 == 'card') {
+          final card = result.$2 as MasterCard;
+          final set = result.$3 as SetRecord;
+          final release = result.$4 as ReleaseRecord;
+          final attrs = _cardAttributePills(card);
+          return AdaptiveListTile(
+            hideBottomDivider: true,
+            title: _buildNameWithAttributes(card.displayName, attrs),
+            subtitle: Text('${release.displayName} • ${set.name}', style: const TextStyle(fontSize: 12)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text('Card', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, size: 18),
+              ],
+            ),
+            onTap: () async {
+              setState(() {
+                _searchSelectedRelease = release;
+                _searchSelectedSet = set;
+                _searchSelectedCard = card;
+                _searchSelectedParallel = null;
+                _searchParallelName = 'Base';
+                _searchParallelSelected = false;
+                _searchParallelsLoading = true;
+              });
+              unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
+
+              try {
+                final parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
+                if (mounted) {
+                  setState(() {
+                    _searchParallels = parallels;
+                    _searchParallelsLoading = false;
+                  });
+                }
+              } catch (_) {
+                if (mounted) {
+                  setState(() => _searchParallelsLoading = false);
+                }
+              }
+            },
+          );
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 
