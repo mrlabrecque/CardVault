@@ -23,6 +23,7 @@ import '../../core/widgets/sticky_chrome_scaffold.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import '../scan/scan_screen.dart';
+import 'master_card_detail_screen.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 import 'widgets/filter_sort_action_bar.dart';
@@ -361,11 +362,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         _selectedCard = master;
         _cardCtrl.text = master.displayName;
         _isNewCard = false;
-        _catalogStep = _CatalogStep.detail;
+        _catalogStep = resolved.parallels.isEmpty
+            ? _CatalogStep.card
+            : _CatalogStep.parallel;
         _restoringState = false;
       });
       unawaited(_saveNavigationState());
       unawaited(ref.read(compsServiceProvider).fetchCardImage(master.id));
+      _openMasterCardDetail(
+        card: master,
+        parallelName: parallelLabel,
+        release: relSet.release,
+        set: relSet.set,
+      );
     } catch (_) {
       if (mounted) {
         AdaptiveSnackBar.show(
@@ -546,6 +555,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   }
 
   void _selectCard(MasterCard card) {
+    final hasParallels = _parallels.isNotEmpty;
     setState(() {
       _selectedCard = card;
       _cardCtrl.text = card.displayName;
@@ -553,10 +563,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       _isNewCard = false;
       _selectedParallel = null;
       _parallelName = 'Base';
-      _catalogStep = _parallels.isEmpty ? _CatalogStep.detail : _CatalogStep.parallel;
+      // Always land at the parallel step (or stay at `card` if there are
+      // no parallels). The detail UI is now a pushed route — we open it
+      // below for the no-parallels case once state is settled.
+      _catalogStep = hasParallels ? _CatalogStep.parallel : _CatalogStep.card;
     });
     unawaited(_saveNavigationState());
     unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
+    if (!hasParallels && !_restoringState) {
+      _openMasterCardDetail(
+        card: card,
+        parallelName: 'Base',
+        release: _selectedRelease,
+        set: _selectedSet,
+      );
+    }
   }
 
   void _selectParallel(SetParallel? p) {
@@ -564,6 +585,37 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       _selectedParallel = p;
       _parallelName = p?.name ?? 'Base';
     });
+  }
+
+  /// Push the read-only master-card detail route. Both browse and search flows
+  /// land here once the user has chosen a card + parallel — the route is the
+  /// catalog-side counterpart of [ItemDetailScreen] without the value/copy
+  /// sections.
+  ///
+  /// The catalog's selected-card/parallel state must already reflect [card]
+  /// and [parallelName] so the existing [_showAddCopySheet] / [_addToWishlist]
+  /// handlers (which read from [_mode]-scoped state) work when the buttons
+  /// fire from the pushed screen.
+  Future<void> _openMasterCardDetail({
+    required MasterCard card,
+    required String parallelName,
+    ReleaseRecord? release,
+    SetRecord? set,
+  }) {
+    return Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MasterCardDetailScreen(
+          masterCard: card,
+          parallelName: parallelName,
+          releaseName: release?.displayName,
+          setName: set?.name,
+          year: release?.year,
+          sport: release?.sport,
+          onAddToCollection: _showAddCopySheet,
+          onAddToWishlist: _addToWishlist,
+        ),
+      ),
+    );
   }
 
   // ── Save ─────────────────────────────────────────────────────
@@ -1344,8 +1396,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                   setState(() {
                     _selectedParallel = p;
                     _parallelName = p?.name ?? 'Base';
-                    _catalogStep = _CatalogStep.detail;
                   });
+                  if (_selectedCard != null) {
+                    _openMasterCardDetail(
+                      card: _selectedCard!,
+                      parallelName: p?.name ?? 'Base',
+                      release: _selectedRelease,
+                      set: _selectedSet,
+                    );
+                  }
                 },
               );
             },
@@ -1806,8 +1865,15 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
                     setState(() {
                       _searchSelectedParallel = p;
                       _searchParallelName = p?.name ?? 'Base';
-                      _searchParallelSelected = true;
                     });
+                    if (_searchSelectedCard != null) {
+                      _openMasterCardDetail(
+                        card: _searchSelectedCard!,
+                        parallelName: p?.name ?? 'Base',
+                        release: _searchSelectedRelease,
+                        set: _searchSelectedSet,
+                      );
+                    }
                   },
                 );
               },
@@ -1817,126 +1883,10 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
       );
     }
 
-    // Show card detail if a card is selected
-    if (_searchSelectedCard != null) {
-      return Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(16, contentTopInset + 16, 16, 24),
-              children: [
-                CardDetailView(
-                  masterCard: _searchSelectedCard,
-                  setName: _searchSelectedSet?.name,
-                  releaseName: _searchSelectedRelease?.displayName,
-                  parallelName: _searchParallelName,
-                  year: _searchSelectedRelease?.year != null ? int.tryParse(_searchSelectedRelease!.year.toString()) : null,
-                  sport: _searchSelectedRelease?.sport,
-                  sections: const [CardDetailSection.hero],
-                ),
-                const SizedBox(height: 16),
-                // Action buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: Consumer(
-                        builder: (context, ref, child) {
-                          final userCardsAsync = ref.watch(userCardsProvider);
-                          final copyCount = userCardsAsync.whenData((allCards) {
-                            if (_searchSelectedCard == null) return 0;
-                            return allCards.where((card) {
-                              final cardMatch = card.masterCardId == _searchSelectedCard!.id;
-                              final cardNumberMatch = (card.cardNumber?.trim() ?? '') ==
-                                  (_searchSelectedCard!.cardNumber?.trim() ?? '');
-                              final parallelMatch = card.parallel.trim() == _searchParallelName.trim();
-                              return cardMatch && cardNumberMatch && parallelMatch;
-                            }).length;
-                          }).value ?? 0;
-
-                          return copyCount > 0
-                              ? AdaptiveButton.child(
-                                  onPressed: null,
-                                  style: AdaptiveButtonStyle.filled,
-                                  enabled: false,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.check_circle, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text('In Collection ($copyCount)'),
-                                    ],
-                                  ),
-                                )
-                              : AdaptiveButton.child(
-                                  onPressed: _showAddCopySheet,
-                                  style: AdaptiveButtonStyle.filled,
-                                  child: const Text('Add to Collection'),
-                                );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Consumer(
-                        builder: (context, ref, child) {
-                          final wishlistAsync = ref.watch(wishlistProvider);
-                          final isInWishlist = wishlistAsync.whenData((wishlist) {
-                            if (_searchSelectedCard == null) return false;
-                            return wishlist.any((item) {
-                              final playerMatch = (item.player?.trim().toLowerCase() ?? '') ==
-                                  (_searchSelectedCard!.player.trim().toLowerCase());
-                              final cardNumberMatch = (item.cardNumber?.trim() ?? '') ==
-                                  (_searchSelectedCard!.cardNumber?.trim() ?? '');
-                              final parallelMatch = (item.parallel?.trim() ?? 'Base') == _searchParallelName;
-                              return playerMatch && cardNumberMatch && parallelMatch;
-                            });
-                          }).value ?? false;
-
-                          return isInWishlist
-                              ? AdaptiveButton.child(
-                                  onPressed: null,
-                                  style: AdaptiveButtonStyle.filled,
-                                  enabled: false,
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.favorite, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('In Wishlist'),
-                                    ],
-                                  ),
-                                )
-                              : AdaptiveButton.child(
-                                  onPressed: _addToWishlist,
-                                  style: AdaptiveButtonStyle.bordered,
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.favorite_border, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('Add to Wishlist'),
-                                    ],
-                                  ),
-                                );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Comps section
-                if (_searchSelectedCard != null)
-                  CardCompsSection(
-                    masterCardId: _searchSelectedCard!.id,
-                    parallelName: _searchParallelName,
-                    initialGrade: 'Raw',
-                  ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
+    // Once a search-selected card has no parallels (or has been confirmed via
+    // the parallel picker), the catalog falls through and the master card
+    // detail screen is opened as a pushed route — see [_openMasterCardDetail]
+    // calls in the search-result tap and parallel-tile tap handlers above.
 
     // Show search results list (search field lives in [_catalogStickyChrome])
     final listPadTop = contentTopInset;
@@ -2068,18 +2018,38 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
               });
               unawaited(ref.read(compsServiceProvider).fetchCardImage(card.id));
 
+              List<SetParallel> parallels = const [];
               try {
-                final parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
-                if (mounted) {
-                  setState(() {
-                    _searchParallels = parallels;
-                    _searchParallelsLoading = false;
-                  });
-                }
+                parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
               } catch (_) {
-                if (mounted) {
-                  setState(() => _searchParallelsLoading = false);
-                }
+                // Treat fetch errors as "no parallels available" so the user
+                // can still open the master card detail.
+              }
+              if (!mounted) return;
+              setState(() {
+                _searchParallels = parallels;
+                _searchParallelsLoading = false;
+              });
+              // No parallels for this set → skip the picker and open the
+              // detail screen directly with the Base parallel. After the
+              // user pops back, clear the search selection so the AppBar
+              // title and content fall back to the global results list.
+              if (parallels.isEmpty) {
+                await _openMasterCardDetail(
+                  card: card,
+                  parallelName: 'Base',
+                  release: release,
+                  set: set,
+                );
+                if (!mounted) return;
+                setState(() {
+                  _searchSelectedCard = null;
+                  _searchSelectedSet = null;
+                  _searchSelectedRelease = null;
+                  _searchParallels = const [];
+                  _searchSelectedParallel = null;
+                  _searchParallelName = 'Base';
+                });
               }
             },
           );

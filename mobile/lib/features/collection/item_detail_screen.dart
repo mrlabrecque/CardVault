@@ -1,7 +1,4 @@
-import 'dart:ui' as ui;
-
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,12 +7,11 @@ import '../../core/models/user_card.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/adaptive_list_card.dart';
-import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/inline_notice_container.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
-import '../../core/widgets/serial_tag.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/utils/adaptive_ui.dart';
+import 'widgets/full_bleed_card_hero.dart';
 import 'widgets/market_analysis_section.dart';
 
 // Bottom scroll padding when this route is shown inside [AppShell] so the last
@@ -415,7 +411,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         leading: Padding(
           padding: const EdgeInsets.only(left: 12),
           child: Center(
-            child: _GlassCircleIconButton(
+            child: GlassCircleIconButton(
               icon: Icons.arrow_back_ios_new,
               onPressed: () => _close(context),
               tooltip: 'Back',
@@ -465,7 +461,29 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         physics: const BouncingScrollPhysics(),
         padding: EdgeInsets.zero,
         children: [
-          _FullBleedHero(key: _heroKey, card: card, topInset: topInset),
+          FullBleedHero(
+            key: _heroKey,
+            topInset: topInset,
+            details: HeroDetails(
+              player: card.player,
+              sport: card.sport,
+              cardNumber: card.cardNumber,
+              imageUrl: card.imageUrl,
+              parallel: card.parallel,
+              year: card.year,
+              releaseName: card.set,
+              setName: card.checklist,
+              serialNumber: card.serialNumber,
+              serialMax: card.serialMax,
+              rookie: card.rookie,
+              autograph: card.autograph,
+              memorabilia: card.memorabilia,
+              ssp: card.ssp,
+              isGraded: card.isGraded,
+              grader: card.grader,
+              grade: card.grade,
+            ),
+          ),
           Padding(
             padding: EdgeInsets.fromLTRB(16, 24, 16, _kShellTabBarScrollInset + bottomPad),
             child: Column(
@@ -583,147 +601,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FullBleedHero extends StatelessWidget {
-  const _FullBleedHero({super.key, required this.card, required this.topInset});
-
-  final UserCard card;
-  final double topInset;
-
-  String get _sportEmoji => switch (card.sport.toLowerCase()) {
-    'basketball' => '🏀',
-    'baseball'   => '⚾',
-    'football'   => '🏈',
-    'hockey'     => '🏒',
-    'soccer'     => '⚽',
-    _            => '🏀',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = card.imageUrl;
-    final cardNumber = card.cardNumber;
-    final parallelName = card.parallel != 'Base' ? card.parallel : null;
-    final textTheme = Theme.of(context).textTheme;
-
-    final metaParts = <String>[
-      if (card.year != null) card.year.toString(),
-      if (card.set != null) card.set!,
-      if (card.checklist != null && card.checklist != card.set) card.checklist!,
-    ];
-
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF800020), Color(0xFF3D0010)],
-        ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.fromLTRB(20, topInset + kToolbarHeight + 8, 20, 24),
-      child: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.20),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: imageUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      width: 180,
-                      height: 252,
-                      fit: BoxFit.cover,
-                    )
-                  : Container(
-                      width: 180,
-                      height: 252,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Text(_sportEmoji, style: const TextStyle(fontSize: 64)),
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text.rich(
-            TextSpan(children: [
-              TextSpan(
-                text: card.player,
-                style: textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              if (cardNumber != null)
-                TextSpan(
-                  text: '  #$cardNumber',
-                  style: textTheme.titleMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.70),
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-            ]),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (metaParts.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              metaParts.join(' · '),
-              style: textTheme.bodySmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.75),
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          if (parallelName != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              parallelName,
-              style: textTheme.labelMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            alignment: WrapAlignment.center,
-            children: [
-              if (card.rookie) AttrTag('RC', color: const Color(0xFF16A34A)),
-              if (card.autograph) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-              if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-              if (card.ssp) AttrTag('SSP', color: const Color(0xFFB45309)),
-              if (card.isGraded) AttrTag('${card.grader ?? 'PSA'} ${card.grade ?? ''}'.trim()),
-              SerialTag(serialNumber: card.serialNumber, serialMax: card.serialMax),
-            ],
           ),
         ],
       ),
@@ -984,203 +861,3 @@ class _CopyTile extends StatelessWidget {
   }
 }
 
-/// Circular liquid-glass nav chrome for the item-detail screen.
-///
-/// Has two visual treatments selected by [onDarkSurface]:
-///   * `true`  — wine-tinted smoked plate, white icon. For sitting on the
-///     burgundy hero (light/system blur stacks otherwise read as flat gray
-///     on a dark red background).
-///   * `false` — light frosted plate, dark icon. For when the hero has
-///     scrolled away and the AppBar floats over the page background.
-///
-/// We crossfade two distinct subtrees with [AnimatedSwitcher] (keyed on
-/// [onDarkSurface]) instead of animating decoration deltas. That keeps the
-/// blur, gradient, border, and icon color all in lockstep on every flip.
-class _GlassCircleIconButton extends StatelessWidget {
-  const _GlassCircleIconButton({
-    required this.icon,
-    required this.onPressed,
-    this.tooltip,
-    this.iconSize = 18,
-    this.onDarkSurface = true,
-  });
-
-  final IconData icon;
-  final VoidCallback onPressed;
-  final String? tooltip;
-  final double iconSize;
-  final bool onDarkSurface;
-
-  static const double _size = 44;
-
-  @override
-  Widget build(BuildContext context) {
-    final variant = KeyedSubtree(
-      key: ValueKey<bool>(onDarkSurface),
-      child: _GlassCircleVariant(
-        icon: icon,
-        iconSize: iconSize,
-        onDarkSurface: onDarkSurface,
-      ),
-    );
-
-    final button = SizedBox(
-      width: _size,
-      height: _size,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeOut,
-            child: variant,
-          ),
-          Material(
-            color: Colors.transparent,
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(_size / 2),
-              onTap: onPressed,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (tooltip != null) {
-      return Tooltip(message: tooltip!, child: button);
-    }
-    return button;
-  }
-}
-
-class _GlassCircleVariant extends StatelessWidget {
-  const _GlassCircleVariant({
-    required this.icon,
-    required this.iconSize,
-    required this.onDarkSurface,
-  });
-
-  final IconData icon;
-  final double iconSize;
-  final bool onDarkSurface;
-
-  @override
-  Widget build(BuildContext context) {
-    const size = _GlassCircleIconButton._size;
-    const r = size / 2;
-    final outerRadius = BorderRadius.circular(r);
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final colors = theme.colorScheme;
-
-    final List<Color> plateColors;
-    final Color borderColor;
-    final Color iconColor;
-    final List<Color> highlightColors;
-    final BoxShadow dropShadow;
-
-    if (onDarkSurface) {
-      plateColors = [
-        const Color(0xFF5C0A20).withValues(alpha: 0.58),
-        const Color(0xFF1A0508).withValues(alpha: 0.72),
-      ];
-      borderColor = Colors.white.withValues(alpha: 0.20);
-      iconColor = Colors.white;
-      highlightColors = [
-        Colors.white.withValues(alpha: 0.14),
-        Colors.white.withValues(alpha: 0.02),
-        Colors.transparent,
-      ];
-      dropShadow = BoxShadow(
-        color: Colors.black.withValues(alpha: 0.28),
-        blurRadius: 10,
-        offset: const Offset(0, 3),
-      );
-    } else {
-      plateColors = isDark
-          ? [
-              Colors.white.withValues(alpha: 0.10),
-              Colors.white.withValues(alpha: 0.06),
-            ]
-          : [
-              Colors.white.withValues(alpha: 0.55),
-              Colors.white.withValues(alpha: 0.40),
-            ];
-      borderColor = isDark
-          ? Colors.white.withValues(alpha: 0.18)
-          : Colors.black.withValues(alpha: 0.08);
-      iconColor = colors.onSurface;
-      highlightColors = isDark
-          ? [
-              Colors.white.withValues(alpha: 0.10),
-              Colors.white.withValues(alpha: 0.02),
-              Colors.transparent,
-            ]
-          : [
-              Colors.white.withValues(alpha: 0.32),
-              Colors.white.withValues(alpha: 0.10),
-              Colors.transparent,
-            ];
-      dropShadow = BoxShadow(
-        color: Colors.black.withValues(alpha: 0.10),
-        blurRadius: 12,
-        offset: const Offset(0, 3),
-      );
-    }
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: outerRadius,
-        boxShadow: [dropShadow],
-      ),
-      child: ClipRRect(
-        borderRadius: outerRadius,
-        child: Stack(
-          fit: StackFit.expand,
-          clipBehavior: Clip.hardEdge,
-          children: [
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: const ColoredBox(color: Colors.transparent),
-              ),
-            ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: outerRadius,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: plateColors,
-                  ),
-                  border: Border.all(color: borderColor),
-                ),
-              ),
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: outerRadius,
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: highlightColors,
-                      stops: const [0.0, 0.35, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Center(
-              child: Icon(icon, size: iconSize, color: iconColor),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
