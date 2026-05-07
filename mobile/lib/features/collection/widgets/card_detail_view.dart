@@ -3,6 +3,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/models/user_card.dart';
 import '../../../core/services/cards_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/attr_tag.dart';
 import '../../../core/widgets/serial_tag.dart';
 
@@ -207,7 +208,11 @@ class CardDetailView extends StatelessWidget {
               child: AdaptiveButton.child(
                 onPressed: onAddToCollection,
                 style: AdaptiveButtonStyle.filled,
-                child: const Text('Add to Collection'),
+                color: AppTheme.primary,
+                child: const Text(
+                  'Add to Collection',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           if (onAddToWishlist != null) ...[
@@ -216,7 +221,11 @@ class CardDetailView extends StatelessWidget {
               child: AdaptiveButton.child(
                 onPressed: onAddToWishlist,
                 style: AdaptiveButtonStyle.bordered,
-                child: const Text('Add to Wishlist'),
+                color: AppTheme.primary,
+                child: const Text(
+                  'Add to Wishlist',
+                  style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ],

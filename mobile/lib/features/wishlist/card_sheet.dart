@@ -316,13 +316,17 @@ class _CardSheetState extends State<CardSheet> {
               child: AdaptiveButton.child(
                 onPressed: _saving ? null : _save,
                 style: AdaptiveButtonStyle.filled,
+                color: AppTheme.primary,
                 child: _saving
                     ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Save'),
+                    : const Text(
+                        'Save',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
               ),
             ),
           ],

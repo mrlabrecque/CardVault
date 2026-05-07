@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/market_movers_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/glass_nav_bar.dart';
@@ -98,6 +99,7 @@ class _AdminMarketMoversScreenState
           AdaptiveButton.child(
             onPressed: _running ? null : _runRefresh,
             style: AdaptiveButtonStyle.filled,
+            color: AppTheme.primary,
             child: _running
                 ? const SizedBox(
                     height: 18,
@@ -107,7 +109,10 @@ class _AdminMarketMoversScreenState
                       color: Colors.white,
                     ),
                   )
-                : const Text('Run Market Movers Refresh Now'),
+                : const Text(
+                    'Run Market Movers Refresh Now',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
           ),
           if (_lastRunAt != null) ...[
             const SizedBox(height: 10),

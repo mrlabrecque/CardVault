@@ -244,9 +244,13 @@ class _PendingRow extends StatelessWidget {
                     child: AdaptiveButton.child(
                       onPressed: acting ? null : onPromote,
                       style: AdaptiveButtonStyle.filled,
+                      color: AppTheme.primary,
                       child: acting
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text('Promote'),
+                          : const Text(
+                              'Promote',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            ),
                     ),
                   ),
                 ]),

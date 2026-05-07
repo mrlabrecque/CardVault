@@ -333,6 +333,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                           onPressed: () => Navigator.of(sheetContext).pop(),
                           label: 'Cancel',
                           style: AdaptiveButtonStyle.bordered,
+                          color: AppTheme.primary,
                         ),
                       ),
                       const SizedBox(width: 12),

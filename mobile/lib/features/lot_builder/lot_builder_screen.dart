@@ -626,9 +626,10 @@ class _BasketView extends StatelessWidget {
               AdaptiveButton.child(
                 onPressed: notifier.clear,
                 style: AdaptiveButtonStyle.bordered,
+                color: AppTheme.primary,
                 child: const Text(
                   'Clear',
-                  style: TextStyle(fontSize: 12),
+                  style: TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600),
                 ),
               ),
             ],

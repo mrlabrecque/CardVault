@@ -3,13 +3,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/cards_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../wishlist/wishlist_screen.dart';
+import 'widgets/active_state_indicator.dart';
 import 'widgets/full_bleed_card_hero.dart';
 import 'widgets/market_analysis_section.dart';
 
 /// Bottom scroll padding so the last section clears the floating tab bar
 /// (matches `ItemDetailScreen`).
 const double _kShellTabBarScrollInset = 100;
+
+/// Args bundle passed via `GoRouter` `extra` when pushing
+/// [MasterCardDetailScreen]. Using a typed DTO keeps the route definition in
+/// `router.dart` decoupled from the screen's parameter list.
+class MasterCardDetailArgs {
+  const MasterCardDetailArgs({
+    required this.masterCard,
+    required this.parallelName,
+    this.releaseName,
+    this.setName,
+    this.year,
+    this.sport,
+    this.onAddToCollection,
+    this.onAddToWishlist,
+  });
+
+  final MasterCard masterCard;
+  final String parallelName;
+  final String? releaseName;
+  final String? setName;
+  final int? year;
+  final String? sport;
+  final VoidCallback? onAddToCollection;
+  final VoidCallback? onAddToWishlist;
+}
 
 /// Read-only detail for a `master_card_definitions` entry — the same shell
 /// as [ItemDetailScreen] minus the "Value" and "Your copy" sections, plus
@@ -192,51 +219,41 @@ class _MasterCardDetailScreenState
                   children: [
                     Expanded(
                       child: copyCount > 0
-                          ? AdaptiveButton.child(
-                              onPressed: null,
-                              style: AdaptiveButtonStyle.filled,
-                              enabled: false,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.check_circle, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text('In Collection ($copyCount)'),
-                                ],
-                              ),
+                          ? ActiveStateIndicator(
+                              icon: Icons.check_circle,
+                              label: 'In Collection ($copyCount)',
                             )
                           : AdaptiveButton.child(
                               onPressed: widget.onAddToCollection,
                               style: AdaptiveButtonStyle.filled,
-                              child: const Text('Add to Collection'),
+                              color: AppTheme.primary,
+                              child: const Text(
+                                'Add to Collection',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                              ),
                             ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: inWishlist
-                          ? AdaptiveButton.child(
-                              onPressed: null,
-                              style: AdaptiveButtonStyle.filled,
-                              enabled: false,
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.favorite, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('In Wishlist'),
-                                ],
-                              ),
+                          ? const ActiveStateIndicator(
+                              icon: Icons.favorite,
+                              label: 'In Wishlist',
                             )
                           : AdaptiveButton.child(
                               onPressed: widget.onAddToWishlist,
                               style: AdaptiveButtonStyle.bordered,
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.favorite_border, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('Add to Wishlist'),
-                                ],
+                              color: AppTheme.primary,
+                              child: DefaultTextStyle.merge(
+                                style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.favorite_border, size: 18, color: AppTheme.primary),
+                                    SizedBox(width: 8),
+                                    Text('Add to Wishlist'),
+                                  ],
+                                ),
                               ),
                             ),
                     ),
@@ -257,3 +274,4 @@ class _MasterCardDetailScreenState
     );
   }
 }
+

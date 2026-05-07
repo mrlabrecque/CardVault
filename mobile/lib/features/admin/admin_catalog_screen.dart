@@ -292,19 +292,23 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                 child: AdaptiveButton.child(
                   onPressed: (_importingReleases || _year.isEmpty || _segment.isEmpty) ? null : _importReleases,
                   style: AdaptiveButtonStyle.filled,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _importingReleases
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.download_outlined, size: 16),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(_year.isEmpty || _segment.isEmpty
-                            ? 'Select a year and sport to import'
-                            : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
-                      ),
-                    ],
+                  color: AppTheme.primary,
+                  child: DefaultTextStyle.merge(
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _importingReleases
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.download_outlined, size: 16, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(_year.isEmpty || _segment.isEmpty
+                              ? 'Select a year and sport to import'
+                              : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -385,13 +389,17 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                             AdaptiveButton.child(
                               onPressed: _importingSets ? null : _importSets,
                               style: AdaptiveButtonStyle.filled,
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.download_outlined, size: 16),
-                                  SizedBox(width: 8),
-                                  Text('Import Sets from CardSight'),
-                                ],
+                              color: AppTheme.primary,
+                              child: DefaultTextStyle.merge(
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.download_outlined, size: 16, color: Colors.white),
+                                    SizedBox(width: 8),
+                                    Text('Import Sets from CardSight'),
+                                  ],
+                                ),
                               ),
                             ),
                         ],
@@ -450,13 +458,17 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
               child: AdaptiveButton.child(
                 onPressed: _importingSets ? null : _importSets,
                 style: AdaptiveButtonStyle.bordered,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.refresh, size: 16),
-                    SizedBox(width: 8),
-                    Text('Re-import sets from CardSight'),
-                  ],
+                color: AppTheme.primary,
+                child: DefaultTextStyle.merge(
+                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.refresh, size: 16, color: AppTheme.primary),
+                      SizedBox(width: 8),
+                      Text('Re-import sets from CardSight'),
+                    ],
+                  ),
                 ),
               ),
             ),

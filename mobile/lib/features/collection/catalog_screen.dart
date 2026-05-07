@@ -24,6 +24,7 @@ import '../wishlist/wishlist_screen.dart';
 import '../wishlist/card_sheet.dart';
 import '../scan/scan_screen.dart';
 import 'master_card_detail_screen.dart';
+import 'widgets/active_state_indicator.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
 import 'widgets/filter_sort_action_bar.dart';
@@ -601,19 +602,26 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     required String parallelName,
     ReleaseRecord? release,
     SetRecord? set,
-  }) {
-    return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MasterCardDetailScreen(
-          masterCard: card,
-          parallelName: parallelName,
-          releaseName: release?.displayName,
-          setName: set?.name,
-          year: release?.year,
-          sport: release?.sport,
-          onAddToCollection: _showAddCopySheet,
-          onAddToWishlist: _addToWishlist,
-        ),
+  }) async {
+    // Goes through go_router (`context.push`) rather than an imperative
+    // `Navigator.push(MaterialPageRoute(...))`. The latter pushes onto the
+    // inner Navigator below the shell but stays opaque to go_router, so when
+    // the user taps a tab, `context.go(...)` updates the router's stack
+    // without popping the imperative route — leaving the master detail
+    // screen on top of the new tab. Routing through go_router keeps the
+    // pushed page on the same stack as everything else, so tab taps pop it
+    // cleanly.
+    await context.push<void>(
+      '/catalog/master',
+      extra: MasterCardDetailArgs(
+        masterCard: card,
+        parallelName: parallelName,
+        releaseName: release?.displayName,
+        setName: set?.name,
+        year: release?.year,
+        sport: release?.sport,
+        onAddToCollection: _showAddCopySheet,
+        onAddToWishlist: _addToWishlist,
       ),
     );
   }
@@ -1453,38 +1461,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                         }).value ?? 0;
 
                         return copyCount > 0
-                            ? AdaptiveButton.child(
-                                onPressed: null,
-                                style: AdaptiveButtonStyle.filled,
-                                size: AdaptiveButtonSize.medium,
-                                useNative: true,
-                                enabled: false,
-                                useSmoothRectangleBorder: true,
-                                minSize: const Size(double.infinity, 0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    TweenAnimationBuilder<double>(
-                                      tween: Tween(begin: 0.0, end: 1.0),
-                                      duration: const Duration(milliseconds: 800),
-                                      curve: Curves.elasticOut,
-                                      builder: (context, scale, child) {
-                                        return Transform.scale(
-                                          scale: scale,
-                                          child: child,
-                                        );
-                                      },
-                                      child: const Icon(Icons.check_circle, size: 18),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text('In Collection ($copyCount)'),
-                                  ],
-                                ),
+                            ? ActiveStateIndicator(
+                                icon: Icons.check_circle,
+                                label: 'In Collection ($copyCount)',
+                                animateIcon: true,
                               )
                             : AdaptiveButton.child(
                                 onPressed: _showAddCopySheet,
                                 style: AdaptiveButtonStyle.filled,
-                                child: const Text('Add to Collection'),
+                                color: AppTheme.primary,
+                                child: const Text(
+                                  'Add to Collection',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                ),
                               );
                       },
                     ),
@@ -1509,40 +1498,25 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                         }).value ?? false;
 
                         return isInWishlist
-                            ? AdaptiveButton.child(
-                                onPressed: null,
-                                style: AdaptiveButtonStyle.filled,
-                                enabled: false,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    TweenAnimationBuilder<double>(
-                                      tween: Tween(begin: 0.0, end: 1.0),
-                                      duration: const Duration(milliseconds: 800),
-                                      curve: Curves.elasticOut,
-                                      builder: (context, scale, child) {
-                                        return Transform.scale(
-                                          scale: scale,
-                                          child: child,
-                                        );
-                                      },
-                                      child: const Icon(Icons.favorite, size: 18),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text('In Wishlist'),
-                                  ],
-                                ),
+                            ? const ActiveStateIndicator(
+                                icon: Icons.favorite,
+                                label: 'In Wishlist',
+                                animateIcon: true,
                               )
                             : AdaptiveButton.child(
                                 onPressed: _addToWishlist,
                                 style: AdaptiveButtonStyle.bordered,
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.favorite_border, size: 18),
-                                    SizedBox(width: 8),
-                                    Text('Add to Wishlist'),
-                                  ],
+                                color: AppTheme.primary,
+                                child: DefaultTextStyle.merge(
+                                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.favorite_border, size: 18, color: AppTheme.primary),
+                                      SizedBox(width: 8),
+                                      Text('Add to Wishlist'),
+                                    ],
+                                  ),
                                 ),
                               );
                       },
@@ -1659,13 +1633,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               AdaptiveButton.child(
                 onPressed: _canSave ? _save : null,
                 style: AdaptiveButtonStyle.filled,
+                color: AppTheme.primary,
                 child: _saving
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Add to Collection'),
+                    : const Text(
+                        'Add to Collection',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
               ),
             ],
           ),

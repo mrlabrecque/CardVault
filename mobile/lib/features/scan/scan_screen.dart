@@ -420,7 +420,10 @@ class _ScanScreenState extends State<ScanScreen> {
               onPressed: _resetToSportPicker,
               style: AdaptiveButtonStyle.filled,
               color: const Color(0xFF800020),
-              child: const Text('Try Again'),
+              child: const Text(
+                'Try Again',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         ),
@@ -553,7 +556,10 @@ class _ScanScreenState extends State<ScanScreen> {
                   onPressed: _goToCardDetails,
                   style: AdaptiveButtonStyle.filled,
                   color: const Color(0xFF800020),
-                  child: const Text('View Card Details'),
+                  child: const Text(
+                    'View Card Details',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
                 ),
 
                 const SizedBox(height: 12),
@@ -562,7 +568,11 @@ class _ScanScreenState extends State<ScanScreen> {
                 AdaptiveButton.child(
                   onPressed: _resetToSportPicker,
                   style: AdaptiveButtonStyle.bordered,
-                  child: const Text('Try Again'),
+                  color: const Color(0xFF800020),
+                  child: const Text(
+                    'Try Again',
+                    style: TextStyle(color: Color(0xFF800020), fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),

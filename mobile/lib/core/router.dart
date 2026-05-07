@@ -6,6 +6,7 @@ import 'auth/auth_service.dart';
 import 'models/user_card.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/collection/item_detail_screen.dart';
+import '../features/collection/master_card_detail_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
@@ -69,6 +70,27 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) {
               final scanEntry = _catalogScanEntryFromExtra(state.extra);
               return _page(CatalogScreen(scanEntry: scanEntry));
+            },
+          ),
+          GoRoute(
+            path: '/catalog/master',
+            pageBuilder: (context, state) {
+              final args = state.extra;
+              if (args is! MasterCardDetailArgs) {
+                return _page(const CatalogScreen());
+              }
+              return _page(
+                MasterCardDetailScreen(
+                  masterCard: args.masterCard,
+                  parallelName: args.parallelName,
+                  releaseName: args.releaseName,
+                  setName: args.setName,
+                  year: args.year,
+                  sport: args.sport,
+                  onAddToCollection: args.onAddToCollection,
+                  onAddToWishlist: args.onAddToWishlist,
+                ),
+              );
             },
           ),
           GoRoute(path: '/bulk-add', pageBuilder: (context, state) => _page(const BulkAddScreen())),
