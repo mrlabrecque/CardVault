@@ -1,12 +1,15 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_avatar.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/frosted_chrome_layer.dart';
+import '../../core/widgets/sliver_frosted_header.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/list_item_card.dart';
 import 'widgets/set_row_tile.dart';
@@ -23,8 +26,6 @@ class CollectionScreen extends ConsumerStatefulWidget {
 }
 
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
-  Color _chromeTint(ColorScheme colors) => colors.surface.withValues(alpha: 0.14);
-
   final _searchCtrl = TextEditingController();
   final _setSearchCtrl = TextEditingController();
   String _query = '';
@@ -105,7 +106,12 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     required bool showSets,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+      padding: const EdgeInsets.fromLTRB(
+        ChromeMetrics.compactHorizontalInset,
+        ChromeMetrics.segmentOnlyTopInset,
+        ChromeMetrics.compactHorizontalInset,
+        ChromeMetrics.segmentOnlyBottomInset,
+      ),
       child: Column(
         children: [
           AdaptiveSegmentedControl(
@@ -114,7 +120,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             onValueChanged: (index) => setState(() => _showSets = index == 1),
             color: colors.primary,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: ChromeMetrics.segmentOnlyBottomInset),
           FilterSortActionBar<void>(
             searchText: showSets ? _setQuery : _query,
             onSearchChanged: (v) => setState(() {
@@ -145,14 +151,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     required bool showSets,
     required double navOffset,
   }) {
-    return AdaptiveBlurView(
-      blurStyle: BlurStyle.systemUltraThinMaterial,
-      child: Container(
-        color: _chromeTint(colors),
-        child: Padding(
-          padding: EdgeInsets.only(top: navOffset),
-          child: _buildTopControls(colors: colors, showSets: showSets),
-        ),
+    return FrostedChromeLayer(
+      child: Padding(
+        padding: EdgeInsets.only(top: navOffset),
+        child: _buildTopControls(colors: colors, showSets: showSets),
       ),
     );
   }
@@ -421,17 +423,15 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   onRefresh: () async => ref.invalidate(userCardsProvider),
                   child: CustomScrollView(
                     slivers: [
-                      SliverPersistentHeader(
-                        pinned: true,
-                        delegate: _FixedHeaderDelegate(
-                          height: navOffset + 102,
-                          child: _buildPinnedChromeHeader(
-                            colors: colors,
-                            showSets: false,
-                            navOffset: navOffset,
-                          ),
+                      SliverFrostedHeader(
+                        height: navOffset + 102,
+                        child: _buildPinnedChromeHeader(
+                          colors: colors,
+                          showSets: false,
+                          navOffset: navOffset,
                         ),
                       ),
+                      const SliverChromeGap(),
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -502,17 +502,15 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     if (allRows.isEmpty) {
       return CustomScrollView(
         slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _FixedHeaderDelegate(
-                height: navOffset + 102,
-                child: _buildPinnedChromeHeader(
-                  colors: colors,
-                  showSets: true,
-                  navOffset: navOffset,
-                ),
+            SliverFrostedHeader(
+              height: navOffset + 102,
+              child: _buildPinnedChromeHeader(
+                colors: colors,
+                showSets: true,
+                navOffset: navOffset,
               ),
             ),
+            const SliverChromeGap(),
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -535,17 +533,15 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       onRefresh: () async => ref.invalidate(userCardsProvider),
       child: CustomScrollView(
         slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _FixedHeaderDelegate(
-              height: navOffset + 102,
-              child: _buildPinnedChromeHeader(
-                colors: colors,
-                showSets: true,
-                navOffset: navOffset,
-              ),
+          SliverFrostedHeader(
+            height: navOffset + 102,
+            child: _buildPinnedChromeHeader(
+              colors: colors,
+              showSets: true,
+              navOffset: navOffset,
             ),
           ),
+          const SliverChromeGap(),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -586,25 +582,3 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
 
 }
 
-class _FixedHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _FixedHeaderDelegate({
-    required this.height,
-    required this.child,
-  });
-
-  final double height;
-  final Widget child;
-
-  @override
-  double get minExtent => height;
-
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
-
-  @override
-  bool shouldRebuild(covariant _FixedHeaderDelegate oldDelegate) =>
-      oldDelegate.height != height || oldDelegate.child != child;
-}

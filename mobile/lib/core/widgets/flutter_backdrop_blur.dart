@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 
 /// Frosts content behind this widget using Flutter's [BackdropFilter].
 ///
-/// Use for stacked chrome (segment strips, sticky headers) instead of
-/// [AdaptiveBlurView]: on iOS 26+, that widget switches to a native
-/// [UiKitView] blur that does **not** sample the Flutter scene, so it reads as
-/// a flat tint with no real blur.
+/// For app bars and pinned strips, prefer [FrostedChromeLayer] (or [StickyChromeScaffold]'s strip)
+/// instead of [AdaptiveBlurView]: on iOS 26+, that widget switches to a native [UiKitView] blur that
+/// does **not** sample the Flutter scene, so it reads as a flat tint with no real blur.
 class FlutterBackdropBlur extends StatelessWidget {
   const FlutterBackdropBlur({
     super.key,

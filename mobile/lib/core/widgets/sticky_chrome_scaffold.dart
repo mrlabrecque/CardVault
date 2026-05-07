@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'flutter_backdrop_blur.dart';
+import '../theme/chrome_metrics.dart';
+import 'frosted_chrome_layer.dart';
 
 /// [AppBar] + optional sticky strip + body. The strip’s **height is measured** from the
 /// child so there’s no empty frosted padding at the bottom when layout differs from estimates.
@@ -8,13 +9,14 @@ import 'flutter_backdrop_blur.dart';
 /// [bodyBuilder] receives [contentTopInset] = safe area + toolbar + measured sticky height.
 /// Until the first layout pass, [stickyHeightEstimate] is used so content roughly clears the strip.
 ///
-/// Tint and blur defaults match the collection tab pinned chrome (surface @ 0.14, ultra-thin sigma).
+/// Sticky strip uses [FrostedChromeLayer] (same blur/tint as sliver-pinned chrome elsewhere).
 class StickyChromeScaffold extends StatefulWidget {
   const StickyChromeScaffold({
     super.key,
     required this.appBar,
     this.stickyChrome,
     this.stickyHeightEstimate = 52,
+    this.contentTopGap = ChromeMetrics.contentTopGap,
     this.blurSigma = 10,
     required this.bodyBuilder,
   });
@@ -24,6 +26,8 @@ class StickyChromeScaffold extends StatefulWidget {
 
   /// Used only until the first successful measurement (typically one frame).
   final double stickyHeightEstimate;
+  /// Shared spacing between sticky chrome and first scroll content.
+  final double contentTopGap;
   final double blurSigma;
   final Widget Function(BuildContext context, double contentTopInset) bodyBuilder;
 
@@ -70,7 +74,7 @@ class _StickyChromeScaffoldState extends State<StickyChromeScaffold> {
   @override
   Widget build(BuildContext context) {
     final navExtent = StickyChromeScaffold.navToolbarExtent(context);
-    final contentTopInset = navExtent + _effectiveStickyHeight;
+    final contentTopInset = navExtent + _effectiveStickyHeight + widget.contentTopGap;
 
     if (widget.stickyChrome != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,17 +98,10 @@ class _StickyChromeScaffoldState extends State<StickyChromeScaffold> {
               top: navExtent,
               left: 0,
               right: 0,
-              child: ClipRect(
-                child: FlutterBackdropBlur(
-                  sigma: widget.blurSigma,
-                  child: Container(
-                    key: _stickyKey,
-                    width: double.infinity,
-                    alignment: Alignment.topCenter,
-                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.14),
-                    child: widget.stickyChrome,
-                  ),
-                ),
+              child: FrostedChromeLayer(
+                contentMeasurementKey: _stickyKey,
+                sigma: widget.blurSigma,
+                child: widget.stickyChrome!,
               ),
             ),
         ],

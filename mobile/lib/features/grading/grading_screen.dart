@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/grading_service.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
@@ -12,8 +13,9 @@ import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
-import '../../core/widgets/fixed_sliver_header_delegate.dart';
+import '../../core/widgets/sliver_frosted_header.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Per-card result state ────────────────────────────────────────────────────
@@ -216,36 +218,35 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
 
         return CustomScrollView(
           slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: FixedSliverHeaderDelegate(
-                height: navOffset + 134,
-                child: AdaptiveBlurView(
-                  blurStyle: BlurStyle.systemUltraThinMaterial,
-                  child: Container(
-                    color: colors.surface.withValues(alpha: 0.14),
-                    child: Padding(
-                      padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
-                      child: Column(
-                        children: [
-                          _buildFeeCard(),
-                          const SizedBox(height: 8),
-                          FilterSortActionBar<String>(
-                            searchText: _search,
-                            onSearchChanged: (v) => setState(() => _search = v),
-                            onSearchClear: () {
-                              _searchController.clear();
-                              setState(() => _search = '');
-                            },
-                            searchHint: 'Search player, set, sport…',
-                          ),
-                        ],
+            SliverFrostedHeader(
+              height: navOffset + 134 + ChromeMetrics.segmentOnlyTopInset,
+              child: FrostedChromeLayer(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    top: navOffset + ChromeMetrics.segmentOnlyTopInset,
+                    left: ChromeMetrics.horizontalInset,
+                    right: ChromeMetrics.horizontalInset,
+                    bottom: ChromeMetrics.multiRowBottomInset,
+                  ),
+                  child: Column(
+                    children: [
+                      _buildFeeCard(),
+                      const SizedBox(height: ChromeMetrics.segmentToSearchGap),
+                      FilterSortActionBar<String>(
+                        searchText: _search,
+                        onSearchChanged: (v) => setState(() => _search = v),
+                        onSearchClear: () {
+                          _searchController.clear();
+                          setState(() => _search = '');
+                        },
+                        searchHint: 'Search player, set, sport…',
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ),
+            const SliverChromeGap(),
             if (ungradedCards.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(

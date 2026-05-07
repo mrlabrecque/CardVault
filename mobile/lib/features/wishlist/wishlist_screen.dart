@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/fonts.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/auth/auth_service.dart';
@@ -14,8 +15,9 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
+import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
-import '../../core/widgets/fixed_sliver_header_delegate.dart';
+import '../../core/widgets/sliver_frosted_header.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
@@ -301,34 +303,27 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
   Widget _buildList(List<WishlistItem> items) {
     final filtered = _filterItems(items);
     final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
-    final colors = Theme.of(context).colorScheme;
 
     return CustomScrollView(
       slivers: [
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: FixedSliverHeaderDelegate(
-            height: navOffset + 62,
-            child: AdaptiveBlurView(
-              blurStyle: BlurStyle.systemUltraThinMaterial,
-              child: Container(
-                color: colors.surface.withValues(alpha: 0.14),
-                child: Padding(
-                  padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
-                  child: FilterSortActionBar<String>(
-                    searchText: _searchQuery,
-                    onSearchChanged: (v) => setState(() => _searchQuery = v),
-                    onSearchClear: () {
-                      _searchCtrl.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                    searchHint: 'Search player, set, card #…',
-                  ),
-                ),
+        SliverFrostedHeader(
+          height: navOffset + 58 + ChromeMetrics.searchOnlyExtraHeight,
+          child: FrostedChromeLayer(
+            child: Padding(
+              padding: ChromeMetrics.searchOnlyPadding(navOffset),
+              child: FilterSortActionBar<String>(
+                searchText: _searchQuery,
+                onSearchChanged: (v) => setState(() => _searchQuery = v),
+                onSearchClear: () {
+                  _searchCtrl.clear();
+                  setState(() => _searchQuery = '');
+                },
+                searchHint: 'Search player, set, card #…',
               ),
             ),
           ),
         ),
+        const SliverChromeGap(),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

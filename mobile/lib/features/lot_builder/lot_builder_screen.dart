@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/lot_service.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
@@ -12,8 +13,9 @@ import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
-import '../../core/widgets/fixed_sliver_header_delegate.dart';
+import '../../core/widgets/sliver_frosted_header.dart';
 import '../collection/widgets/filter_sort_action_bar.dart';
 
 enum _SortOption { dateDesc, playerAz, valueDesc }
@@ -167,14 +169,12 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
             Expanded(
               child: _BrowseView(
                 navOffset: navOffset,
-                basketCount: lot.items.length,
                 onToggleBrowseBasket: (v) => setState(() => _showBasket = v),
                 searchCtrl: _searchCtrl,
                 query: _query,
                 sort: _sort,
                 onSortChanged: (s) => setState(() => _sort = s),
                 filters: _filters,
-                lot: lot,
                 notifier: notifier,
                 onQueryChanged: (v) => setState(() => _query = v),
                 onFilterToggle: _toggleFilter,
@@ -200,22 +200,41 @@ class _BasketHeader extends StatelessWidget {
   final int basketCount;
   final ValueChanged<bool> onToggleBrowseBasket;
 
+  /// Segment + subtle frost bleed below it. Keep in sync with pinned header height.
+  static const double extentBelowNav = 46 + ChromeMetrics.segmentOnlyTopInset;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final basketLabel = basketCount > 0 ? 'Basket ($basketCount)' : 'Basket';
-    return AdaptiveBlurView(
-      blurStyle: BlurStyle.systemUltraThinMaterial,
-      child: Container(
-        color: colors.surface.withValues(alpha: 0.14),
-        padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
-        child: AdaptiveSegmentedControl(
-          labels: ['Browse', basketLabel],
-          selectedIndex: 1,
-          onValueChanged: (index) => onToggleBrowseBasket(index == 1),
-          color: colors.primary,
-        ),
-      ),
+    final topInset = navOffset + ChromeMetrics.segmentOnlyTopInset;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final h = constraints.maxHeight;
+        return FrostedChromeLayer(
+          height: h.isFinite ? h : null,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: topInset,
+              left: ChromeMetrics.horizontalInset,
+              right: ChromeMetrics.horizontalInset,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AdaptiveSegmentedControl(
+                  key: ValueKey<String>('basket_tab_$basketCount'),
+                  labels: ['Browse', basketLabel],
+                  selectedIndex: 1,
+                  onValueChanged: (index) => onToggleBrowseBasket(index == 1),
+                  color: colors.primary,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -239,17 +258,15 @@ class _BasketScrollView extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: FixedSliverHeaderDelegate(
-            height: navOffset + 44,
-            child: _BasketHeader(
-              navOffset: navOffset,
-              basketCount: basketCount,
-              onToggleBrowseBasket: onToggleBrowseBasket,
-            ),
+        SliverFrostedHeader(
+          height: navOffset + _BasketHeader.extentBelowNav,
+          child: _BasketHeader(
+            navOffset: navOffset,
+            basketCount: basketCount,
+            onToggleBrowseBasket: onToggleBrowseBasket,
           ),
         ),
+        const SliverChromeGap(),
         SliverToBoxAdapter(
           child: _BasketView(lot: lot, notifier: notifier),
         ),
@@ -261,14 +278,12 @@ class _BasketScrollView extends StatelessWidget {
 class _BrowseView extends ConsumerWidget {
   const _BrowseView({
     required this.navOffset,
-    required this.basketCount,
     required this.onToggleBrowseBasket,
     required this.searchCtrl,
     required this.query,
     required this.sort,
     required this.onSortChanged,
     required this.filters,
-    required this.lot,
     required this.notifier,
     required this.onQueryChanged,
     required this.onFilterToggle,
@@ -276,24 +291,26 @@ class _BrowseView extends ConsumerWidget {
   });
 
   final double navOffset;
-  final int basketCount;
   final ValueChanged<bool> onToggleBrowseBasket;
   final TextEditingController searchCtrl;
   final String query;
   final _SortOption sort;
   final ValueChanged<_SortOption> onSortChanged;
   final Set<String> filters;
-  final LotState lot;
   final LotNotifier notifier;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<String> onFilterToggle;
   final List<UserCard> Function(List<UserCard>) filteredCards;
 
+  /// Chrome below app bar: segments + gap + search row + bottom inset (tight fit; avoids dead blur padding).
+  static const double _browseChromeExtentBelowNav =
+      100 + ChromeMetrics.segmentOnlyTopInset;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final lot = ref.watch(lotProvider);
     final cardsAsync = ref.watch(userCardsProvider);
-    final colors = Theme.of(context).colorScheme;
-    final basketLabel = basketCount > 0 ? 'Basket ($basketCount)' : 'Basket';
+    final basketLabel = lot.items.isNotEmpty ? 'Basket (${lot.items.length})' : 'Basket';
 
     return cardsAsync.when(
       loading: () => const Center(child: CardFanLoader()),
@@ -302,25 +319,32 @@ class _BrowseView extends ConsumerWidget {
         final cards = filteredCards(allCards);
         return CustomScrollView(
           slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: FixedSliverHeaderDelegate(
-                height: navOffset + 114,
-                child: AdaptiveBlurView(
-                  blurStyle: BlurStyle.systemUltraThinMaterial,
-                  child: Container(
-                    color: colors.surface.withValues(alpha: 0.14),
+            SliverFrostedHeader(
+              height: navOffset + _browseChromeExtentBelowNav,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final h = constraints.maxHeight;
+                  return FrostedChromeLayer(
+                    height: h.isFinite ? h : null,
                     child: Padding(
-                      padding: EdgeInsets.only(top: navOffset, left: 16, right: 16, bottom: 8),
+                      padding: EdgeInsets.only(
+                        top: navOffset + ChromeMetrics.segmentOnlyTopInset,
+                        left: ChromeMetrics.horizontalInset,
+                        right: ChromeMetrics.horizontalInset,
+                        bottom: ChromeMetrics.multiRowBottomInset,
+                      ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           AdaptiveSegmentedControl(
+                            key: ValueKey<String>('browse_tab_${lot.items.length}'),
                             labels: ['Browse', basketLabel],
                             selectedIndex: 0,
                             onValueChanged: (index) => onToggleBrowseBasket(index == 1),
-                            color: colors.primary,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: ChromeMetrics.segmentToSearchGap),
                           FilterSortActionBar<_SortOption>(
                             searchText: query,
                             onSearchChanged: onQueryChanged,
@@ -333,10 +357,11 @@ class _BrowseView extends ConsumerWidget {
                         ],
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
+            const SliverChromeGap(),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -501,7 +526,6 @@ class _BasketView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text('Basket is empty', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF9CA3AF))),
-            const SizedBox(height: 4),
             const Text('Switch to Browse and tap cards to add them.', style: TextStyle(fontSize: 12, color: Color(0xFFD1D5DB))),
           ],
         ),
@@ -510,7 +534,7 @@ class _BasketView extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -527,7 +551,6 @@ class _BasketView extends StatelessWidget {
                 'ASKING PRICE',
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFFCA5A5), letterSpacing: 1.5),
               ),
-              const SizedBox(height: 4),
               Text(
                 '\$${lot.askingPrice.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: Colors.white),
@@ -551,7 +574,6 @@ class _BasketView extends StatelessWidget {
                 const Text('150% Premium', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
               ],
             ),
-            const SizedBox(height: 4),
             SliderTheme(
               data: SliderThemeData(
                 activeTrackColor: AppTheme.primary,

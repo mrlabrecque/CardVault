@@ -12,6 +12,7 @@ import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
@@ -852,9 +853,20 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Sticky chrome (segment row ± filters) ────────────────────
 
-  Widget _catalogSegmentRow(ColorScheme colors) {
+  Widget _catalogSegmentRow(
+    ColorScheme colors, {
+    bool includeVerticalSpacing = false,
+  }) {
+    final segmentPadding = includeVerticalSpacing
+        ? const EdgeInsets.fromLTRB(
+            ChromeMetrics.compactHorizontalInset,
+            ChromeMetrics.segmentOnlyTopInset,
+            ChromeMetrics.compactHorizontalInset,
+            ChromeMetrics.segmentOnlyBottomInset,
+          )
+        : const EdgeInsets.symmetric(horizontal: ChromeMetrics.compactHorizontalInset);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: segmentPadding,
       child: AdaptiveSegmentedControl(
         labels: const ['Browse', 'Search'],
         selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
@@ -938,21 +950,22 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   /// Single blurred strip under the app bar for this screen (segments only, or segments + bars).
   ({Widget child, double heightEstimate}) _catalogStickyChrome(ColorScheme colors) {
     final segment = _catalogSegmentRow(colors);
+    final standaloneSegment = _catalogSegmentRow(colors, includeVerticalSpacing: true);
     const segmentEst = _kStickyEstSegment;
 
     if (_restoringState) {
-      return (child: segment, heightEstimate: segmentEst);
+      return (child: standaloneSegment, heightEstimate: segmentEst);
     }
 
     if (_mode == _CatalogMode.search) {
       if (_searchSelectedCard != null && _searchParallelsLoading) {
-        return (child: segment, heightEstimate: segmentEst);
+        return (child: standaloneSegment, heightEstimate: segmentEst);
       }
       if (_searchSelectedCard != null && _searchParallels.isNotEmpty && !_searchParallelSelected) {
-        return (child: segment, heightEstimate: segmentEst);
+        return (child: standaloneSegment, heightEstimate: segmentEst);
       }
       if (_searchSelectedCard != null) {
-        return (child: segment, heightEstimate: segmentEst);
+        return (child: standaloneSegment, heightEstimate: segmentEst);
       }
       return (
         heightEstimate: segmentEst + _kStickyEstGlobalSearch,
@@ -1085,7 +1098,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       case _CatalogStep.parallel:
       case _CatalogStep.detail:
       case _CatalogStep.addCopy:
-        return (child: segment, heightEstimate: segmentEst);
+        return (child: standaloneSegment, heightEstimate: segmentEst);
     }
   }
 
