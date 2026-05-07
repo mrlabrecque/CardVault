@@ -219,15 +219,10 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
         return CustomScrollView(
           slivers: [
             SliverFrostedHeader(
-              height: navOffset + 134 + ChromeMetrics.segmentOnlyTopInset,
+              height: navOffset + ChromeMetrics.gradingHeaderExtent,
               child: FrostedChromeLayer(
                 child: Padding(
-                  padding: EdgeInsets.only(
-                    top: navOffset + ChromeMetrics.segmentOnlyTopInset,
-                    left: ChromeMetrics.horizontalInset,
-                    right: ChromeMetrics.horizontalInset,
-                    bottom: ChromeMetrics.multiRowBottomInset,
-                  ),
+                  padding: ChromeMetrics.gradingHeaderPadding(navOffset),
                   child: Column(
                     children: [
                       _buildFeeCard(),
@@ -246,11 +241,11 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
                 ),
               ),
             ),
-            const SliverChromeGap(),
+            const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
             if (ungradedCards.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: ChromeMetrics.listCountPadding(),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -272,7 +267,12 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  ChromeMetrics.listTopInsetAfterCountRoomy,
+                  16,
+                  40,
+                ),
                 sliver: SliverList.builder(
                   itemCount: display.length,
                   itemBuilder: (_, i) {

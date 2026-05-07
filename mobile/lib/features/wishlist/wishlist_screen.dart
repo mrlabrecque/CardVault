@@ -307,10 +307,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     return CustomScrollView(
       slivers: [
         SliverFrostedHeader(
-          height: navOffset + 58 + ChromeMetrics.searchOnlyExtraHeight,
+          height: navOffset + ChromeMetrics.searchHeaderExtent + ChromeMetrics.searchOnlyTightExtraHeight,
           child: FrostedChromeLayer(
             child: Padding(
-              padding: ChromeMetrics.searchOnlyPadding(navOffset),
+              padding: ChromeMetrics.searchOnlyTightPadding(navOffset),
               child: FilterSortActionBar<String>(
                 searchText: _searchQuery,
                 onSearchChanged: (v) => setState(() => _searchQuery = v),
@@ -323,10 +323,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             ),
           ),
         ),
-        const SliverChromeGap(),
+        const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: ChromeMetrics.listCountPadding(),
             child: CardCountLabel(total: items.length, shown: filtered.length),
           ),
         ),
@@ -347,7 +347,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
+            padding: ChromeMetrics.listBodyPadding(horizontal: 0),
             sliver: SliverList.builder(
               itemCount: filtered.length,
               itemBuilder: (_, i) {

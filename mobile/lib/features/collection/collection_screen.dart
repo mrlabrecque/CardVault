@@ -424,17 +424,19 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   child: CustomScrollView(
                     slivers: [
                       SliverFrostedHeader(
-                        height: navOffset + 102,
+                        height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
                         child: _buildPinnedChromeHeader(
                           colors: colors,
                           showSets: false,
                           navOffset: navOffset,
                         ),
                       ),
-                      const SliverChromeGap(),
+                      const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          padding: ChromeMetrics.listCountPadding(
+                            bottom: ChromeMetrics.listCountBottomInsetRoomy,
+                          ),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
@@ -503,14 +505,14 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       return CustomScrollView(
         slivers: [
             SliverFrostedHeader(
-              height: navOffset + 102,
+              height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
               child: _buildPinnedChromeHeader(
                 colors: colors,
                 showSets: true,
                 navOffset: navOffset,
               ),
             ),
-            const SliverChromeGap(),
+            const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -534,17 +536,19 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       child: CustomScrollView(
         slivers: [
           SliverFrostedHeader(
-            height: navOffset + 102,
+            height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
             child: _buildPinnedChromeHeader(
               colors: colors,
               showSets: true,
               navOffset: navOffset,
             ),
           ),
-          const SliverChromeGap(),
+          const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: ChromeMetrics.listCountPadding(
+                bottom: ChromeMetrics.listCountBottomInsetRoomy,
+              ),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(

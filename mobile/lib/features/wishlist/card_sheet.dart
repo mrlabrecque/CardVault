@@ -109,17 +109,39 @@ class _CardSheetState extends State<CardSheet> {
     }
   }
 
+  TextStyle _sheetLabelStyle(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final inputTheme = Theme.of(context).inputDecorationTheme;
+    final baseStyle =
+        inputTheme.labelStyle ??
+        textTheme.bodySmall ??
+        const TextStyle(fontSize: 12);
+    return baseStyle.copyWith(
+      color: colors.onSurface.withValues(alpha: 0.65),
+      fontWeight: FontWeight.w600,
+    );
+  }
+
+  Widget _fieldLabel(BuildContext context, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        label,
+        style: _sheetLabelStyle(context),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return ModalSheetScaffold(
       title: widget.title,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: DefaultTextStyle(
-        style: const TextStyle(color: Colors.black87),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
                     if (_error != null) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -171,6 +193,7 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 16),
                     ],
                     if (widget.showPricePaid) ...[
+                      _fieldLabel(context, 'Price Paid'),
                       AdaptiveTextField(
                         controller: widget.pricePaidCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -178,7 +201,6 @@ class _CardSheetState extends State<CardSheet> {
                         placeholder: '\$0.00',
                         cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: InputDecoration(
-                          labelText: 'Price Paid',
                           hintText: '\$0.00',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           isDense: true,
@@ -235,9 +257,14 @@ class _CardSheetState extends State<CardSheet> {
                                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                                     Text(word, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.error)),
                                     const SizedBox(width: 4),
-                                    GestureDetector(
+                                    InkResponse(
+                                      radius: 20,
                                       onTap: () => setState(() => _watchWords.remove(word)),
-                                      child: Icon(Icons.close, size: 12, color: colors.error.withValues(alpha: 0.6)),
+                                      child: SizedBox(
+                                        width: 28,
+                                        height: 28,
+                                        child: Icon(Icons.close, size: 14, color: colors.error.withValues(alpha: 0.75)),
+                                      ),
                                     ),
                                   ]),
                                 ),
@@ -248,6 +275,7 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 16),
                     ],
                     if (widget.showTargetPrice) ...[
+                      _fieldLabel(context, 'Target Price'),
                       AdaptiveTextField(
                         controller: widget.targetPriceCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -255,7 +283,6 @@ class _CardSheetState extends State<CardSheet> {
                         placeholder: '\$0.00',
                         cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: InputDecoration(
-                          labelText: 'Target Price',
                           hintText: '\$0.00',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           isDense: true,
@@ -264,14 +291,31 @@ class _CardSheetState extends State<CardSheet> {
                       const SizedBox(height: 12),
                     ],
                     if (widget.showGraded) ...[
-                      Row(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        constraints: const BoxConstraints(minHeight: 44),
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          color: colors.surfaceContainerHighest.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
                         children: [
-                          const Expanded(child: Text('Graded?')),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  'Graded copy',
+                                  style: _sheetLabelStyle(context),
+                                ),
+                              ),
+                            ),
                           AdaptiveSwitch(
                             value: widget.isGraded,
                             onChanged: widget.onGradedChanged,
                           ),
                         ],
+                      ),
                       ),
                       if (widget.isGraded) ...[
                         const SizedBox(height: 12),
@@ -308,11 +352,12 @@ class _CardSheetState extends State<CardSheet> {
                         ),
                       ],
                     ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
+              height: 50,
               child: AdaptiveButton.child(
                 onPressed: _saving ? null : _save,
                 style: AdaptiveButtonStyle.filled,
@@ -330,7 +375,6 @@ class _CardSheetState extends State<CardSheet> {
               ),
             ),
           ],
-        ),
       ),
     );
   }

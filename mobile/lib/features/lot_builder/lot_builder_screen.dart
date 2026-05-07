@@ -201,7 +201,7 @@ class _BasketHeader extends StatelessWidget {
   final ValueChanged<bool> onToggleBrowseBasket;
 
   /// Segment + subtle frost bleed below it. Keep in sync with pinned header height.
-  static const double extentBelowNav = 46 + ChromeMetrics.segmentOnlyTopInset;
+  static const double extentBelowNav = ChromeMetrics.lotBasketHeaderExtent + ChromeMetrics.segmentOnlyTopInset;
 
   @override
   Widget build(BuildContext context) {
@@ -266,7 +266,7 @@ class _BasketScrollView extends StatelessWidget {
             onToggleBrowseBasket: onToggleBrowseBasket,
           ),
         ),
-        const SliverChromeGap(),
+        const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
         SliverToBoxAdapter(
           child: _BasketView(lot: lot, notifier: notifier),
         ),
@@ -304,7 +304,7 @@ class _BrowseView extends ConsumerWidget {
 
   /// Chrome below app bar: segments + gap + search row + bottom inset (tight fit; avoids dead blur padding).
   static const double _browseChromeExtentBelowNav =
-      100 + ChromeMetrics.segmentOnlyTopInset;
+      ChromeMetrics.lotBrowseHeaderExtent + ChromeMetrics.segmentOnlyTopInset;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -361,10 +361,12 @@ class _BrowseView extends ConsumerWidget {
                 },
               ),
             ),
-            const SliverChromeGap(),
+            const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: ChromeMetrics.listCountPadding(
+                  bottom: ChromeMetrics.listCountBottomInsetRoomy,
+                ),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text('${cards.length} cards',

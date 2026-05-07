@@ -182,6 +182,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   String _parallelName = 'Base';
   final _pricePaidCtrl = TextEditingController();
   final _serialNumberCtrl = TextEditingController();
+  final _targetPriceCtrl = TextEditingController();
   bool _isGraded = false;
   String _grader = 'PSA';
   final _gradeValueCtrl = TextEditingController();
@@ -401,6 +402,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     _newSerialMaxCtrl.dispose();
     _pricePaidCtrl.dispose();
     _serialNumberCtrl.dispose();
+    _targetPriceCtrl.dispose();
     _gradeValueCtrl.dispose();
     _globalSearchCtrl.dispose();
     super.dispose();
@@ -770,31 +772,54 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     final release = _mode == _CatalogMode.search ? _searchSelectedRelease : _selectedRelease;
     final parallelName = _mode == _CatalogMode.search ? _searchParallelName : (_selectedParallel?.name ?? 'Base');
 
-    try {
-      await ref.read(wishlistProvider.notifier).add({
-        'player': (card?.player ?? '').trim(),
-        'year': release?.year,
-        'set_name': release?.name,
-        'card_number': (card?.cardNumber ?? '').trim(),
-        'parallel': parallelName,
-        'is_rookie': card?.isRookie ?? false,
-        'is_auto': card?.isAuto ?? false,
-        'is_patch': card?.isPatch ?? false,
-        'serial_max': card?.serialMax,
-        'grade': null,
-        'ebay_query': null,
-        'exclude_terms': [],
-        'target_price': null,
-        'master_card_id': card?.id,
-        'release_id': release?.id,
-        'set_id': set?.id,
-        'sport': release?.sport,
-      });
-      ref.invalidate(wishlistProvider);
-      if (mounted) AdaptiveSnackBar.show(context, message: 'Added to Wishlist!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
-    } catch (e) {
-      if (mounted) AdaptiveSnackBar.show(context, message: 'Error: $e', type: AdaptiveSnackBarType.error);
-    }
+    showAdaptiveSheet(
+      context: context,
+      builder: (_) => CardSheet(
+        title: 'Add to Wishlist',
+        card: card,
+        setName: set?.name,
+        releaseName: release?.displayName,
+        showTargetPrice: true,
+        targetPriceCtrl: _targetPriceCtrl,
+        showGraded: false,
+        onSave: (_) async {
+          try {
+            await ref.read(wishlistProvider.notifier).add({
+              'player': (card?.player ?? '').trim(),
+              'year': release?.year,
+              'set_name': release?.name,
+              'card_number': (card?.cardNumber ?? '').trim(),
+              'parallel': parallelName,
+              'is_rookie': card?.isRookie ?? false,
+              'is_auto': card?.isAuto ?? false,
+              'is_patch': card?.isPatch ?? false,
+              'serial_max': card?.serialMax,
+              'grade': null,
+              'ebay_query': null,
+              'exclude_terms': [],
+              'target_price': double.tryParse(_targetPriceCtrl.text.trim()),
+              'master_card_id': card?.id,
+              'release_id': release?.id,
+              'set_id': set?.id,
+              'sport': release?.sport,
+            });
+            ref.invalidate(wishlistProvider);
+            _targetPriceCtrl.clear();
+            if (mounted) {
+              AdaptiveSnackBar.show(
+                context,
+                message: 'Added to Wishlist!',
+                type: AdaptiveSnackBarType.success,
+                duration: const Duration(seconds: 2),
+              );
+            }
+            return null;
+          } catch (e) {
+            return e.toString();
+          }
+        },
+      ),
+    );
   }
 
   // ── AppBar helpers ─────────────────────────────────────────────
