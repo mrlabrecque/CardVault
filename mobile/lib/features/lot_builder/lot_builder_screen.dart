@@ -13,6 +13,7 @@ import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
@@ -223,7 +224,7 @@ class _BasketHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AdaptiveSegmentedControl(
+                AppSegmentedControl(
                   key: ValueKey<String>('basket_tab_$basketCount'),
                   labels: ['Browse', basketLabel],
                   selectedIndex: 1,
@@ -337,7 +338,7 @@ class _BrowseView extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          AdaptiveSegmentedControl(
+                          AppSegmentedControl(
                             key: ValueKey<String>('browse_tab_${lot.items.length}'),
                             labels: ['Browse', basketLabel],
                             selectedIndex: 0,

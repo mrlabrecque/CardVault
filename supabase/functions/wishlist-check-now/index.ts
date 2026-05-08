@@ -1,6 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-const SCRAPECHAIN_URL = 'https://ebay-api.scrapechain.com/findActiveItems';
+import { fetchActiveListingsBrowse } from '../_shared/ebay_browse_active.ts';
 
 // ── Query builder (mirrors wishlist.ts buildEbayQuery) ─────────────────────
 
@@ -23,30 +22,6 @@ function buildWishlistQuery(item: Record<string, any>): string {
   const base = item.ebay_query || parts.filter(Boolean).join(' ');
   const exclusions = (item.exclude_terms ?? []).map((t: string) => `-"${t}"`).join(' ');
   return exclusions ? `${base} ${exclusions}` : base;
-}
-
-// ── Active listings fetch ──────────────────────────────────────────────────
-
-async function fetchActiveListings(query: string): Promise<any[]> {
-  try {
-    const res = await fetch(SCRAPECHAIN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: query, max_search_results: 20, category_id: '261328' }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.products ?? []).map((p: any) => ({
-      ebay_item_id:  p.item_id ?? null,
-      title:         p.title ?? '',
-      price:         parseFloat(p.price ?? p.sale_price ?? '0'),
-      listing_type:  (p.buying_format ?? '').toLowerCase().includes('auction') ? 'AUCTION' : 'FIXED_PRICE',
-      url:           p.link ?? p.url ?? null,
-      image_url:     p.image ?? p.image_url ?? null,
-    })).filter((p: any) => p.price > 0);
-  } catch {
-    return [];
-  }
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
@@ -100,17 +75,17 @@ Deno.serve(async (req) => {
     if (!query.trim()) continue;
 
     checked++;
-    const listings = await fetchActiveListings(query);
+    const listings = await fetchActiveListingsBrowse(query);
 
     // Find listings below target price
     const matches = item.target_price
-      ? listings.filter((l: any) => l.price <= item.target_price)
+      ? listings.filter((l) => l.price <= item.target_price)
       : [];
 
     const lowestPrice = matches.length > 0
-      ? Math.min(...matches.map((m: any) => m.price))
+      ? Math.min(...matches.map((m) => m.price))
       : listings.length > 0
-        ? Math.min(...listings.map((l: any) => l.price))
+        ? Math.min(...listings.map((l) => l.price))
         : null;
 
     const newStatus = matches.length > 0 ? 'triggered' : 'active';
@@ -127,7 +102,7 @@ Deno.serve(async (req) => {
     if (matches.length > 0) {
       await admin.from('wishlist_matches').delete().eq('wishlist_id', item.id);
       await admin.from('wishlist_matches').insert(
-        matches.map((m: any) => ({
+        matches.map((m) => ({
           wishlist_id:  item.id,
           ebay_item_id: m.ebay_item_id,
           title:        m.title,

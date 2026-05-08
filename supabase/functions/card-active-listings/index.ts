@@ -1,6 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-const SCRAPECHAIN_ACTIVE_URL = 'https://ebay-api.scrapechain.com/findActiveItems';
+import { fetchActiveListingsBrowse, type EbayActiveListingRow } from '../_shared/ebay_browse_active.ts';
 
 const LISTING_NOISE = new Set([
   'rookie', 'rated', 'serial', 'numbered', 'graded', 'limited', 'edition',
@@ -97,7 +96,7 @@ function parseAndFilter(
   const is_patch = /\b(patch|relic|jersey)\b/i.test(query);
   const parallelExclusionList = buildParallelExclusionList(selectedParallelName, allParallelNames);
 
-  return raw.filter((item) => {
+  const filtered = raw.filter((item) => {
     const title = (item.title ?? '').toLowerCase();
     if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) return false;
     if (year && !title.includes(String(year))) return false;
@@ -123,33 +122,75 @@ function parseAndFilter(
     if (!noUnexpectedWords(item.title, query)) return false;
     return true;
   });
+  return filtered;
 }
 
-async function fetchActiveListings(query: string): Promise<any[]> {
-  try {
-    const res = await fetch(SCRAPECHAIN_ACTIVE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: query, max_search_results: 40, category_id: '261328' }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.products ?? []).map((p: any) => ({
-      title: p.title ?? '',
-      item_id: p.item_id ?? null,
-      price: parseFloat(String(p.price ?? p.sale_price ?? '0')),
-      buying_format: p.buying_format ?? '',
-      link: p.link ?? p.url ?? null,
-      image: p.image ?? p.image_url ?? null,
-    })).filter((row: any) => row.price > 0 && row.title);
-  } catch {
-    return [];
-  }
+function browseRowToFilterShape(row: EbayActiveListingRow) {
+  return {
+    title: row.title,
+    item_id: row.ebay_item_id,
+    price: row.price,
+    buying_format: row.buying_format_raw,
+    link: row.url,
+    image: row.image_url,
+  };
 }
 
 function listingTypeActive(buying_format: string): string {
   const fmt = (buying_format ?? '').toLowerCase();
   return fmt.includes('auction') ? 'AUCTION' : 'FIXED_PRICE';
+}
+
+function buildFallbackQueries(params: {
+  releaseName?: string;
+  setName?: string;
+  player?: string;
+  cardNumber?: string | null;
+  parallelName?: string | null;
+  year?: number | null;
+}) {
+  const {
+    releaseName,
+    setName,
+    player,
+    cardNumber,
+    parallelName,
+    year,
+  } = params;
+
+  const yearStr = year ? String(year) : '';
+  const cardNumNoHash = cardNumber ? String(cardNumber).replace(/^#/, '') : '';
+  const nonBaseParallel =
+    parallelName && parallelName.trim().toLowerCase() !== 'base' ? parallelName.trim() : '';
+
+  // Ordered broadening; strict parser still gates final output.
+  return [
+    [yearStr, releaseName, setName, player, cardNumNoHash ? `#${cardNumNoHash}` : '', nonBaseParallel].filter(Boolean).join(' '),
+    [yearStr, releaseName, setName, player, cardNumNoHash, nonBaseParallel].filter(Boolean).join(' '),
+    [yearStr, releaseName, player, cardNumNoHash, nonBaseParallel].filter(Boolean).join(' '),
+    [releaseName, setName, player, cardNumNoHash, nonBaseParallel].filter(Boolean).join(' '),
+  ]
+    .map(q => q.replace(/\s{2,}/g, ' ').trim())
+    .filter(Boolean);
+}
+
+async function fetchActiveWithFallbackQueries(queries: string[]) {
+  const seen = new Set<string>();
+  const merged: EbayActiveListingRow[] = [];
+
+  for (const q of queries) {
+    for (const useCategoryFilter of [true, false]) {
+      const rows = await fetchActiveListingsBrowse(q, { useCategoryFilter });
+
+      for (const row of rows) {
+        const key = row.ebay_item_id ?? `${row.title}|${row.url ?? ''}|${row.price}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(row);
+      }
+    }
+  }
+  return merged;
 }
 
 Deno.serve(async (req) => {
@@ -290,8 +331,21 @@ Deno.serve(async (req) => {
 
   const query = buildCardEbayQuery(cardRow);
 
-  const raw = await fetchActiveListings(query);
+  const queryVariants = buildFallbackQueries({
+    releaseName: release.name ?? undefined,
+    setName: setData.name ?? undefined,
+    player: mcd.player ?? undefined,
+    cardNumber: mcd.card_number ?? undefined,
+    parallelName,
+    year: release.year ?? undefined,
+  });
+  if (!queryVariants.includes(query)) {
+    queryVariants.unshift(query);
+  }
+  const browseRows = await fetchActiveWithFallbackQueries(queryVariants);
+  const raw = browseRows.map(browseRowToFilterShape);
   const filtered = parseAndFilter(raw, query, parallelName, allParallelNames, mcd.card_number ?? undefined, setData.name ?? undefined);
+  console.log('[card-active-listings] counts:', { raw: raw.length, filtered: filtered.length });
 
   const items = filtered.map((row: any) => ({
     ebay_item_id: row.item_id,
@@ -303,7 +357,11 @@ Deno.serve(async (req) => {
   }));
 
   return new Response(
-    JSON.stringify({ items, query }),
+    JSON.stringify({
+      items,
+      query,
+      counts: { raw: raw.length, filtered: filtered.length, returned: filtered.length },
+    }),
     { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
   );
 });

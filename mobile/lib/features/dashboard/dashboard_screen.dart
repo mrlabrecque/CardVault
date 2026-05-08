@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +6,7 @@ import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/adaptive_list_card.dart';
+import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 
@@ -459,7 +459,8 @@ class _ToggleButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     final selectedIndex = options.indexWhere((option) => option.$2 == selected);
     final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-    return AdaptiveSegmentedControl(
+    return AppSegmentedControl(
+      preset: AppSegmentedControlPreset.iconOnly,
       labels: const [],
       sfSymbols: isIOS
           ? options.map((option) => option.$3).toList()
@@ -467,8 +468,6 @@ class _ToggleButtons extends StatelessWidget {
       selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
       onValueChanged: (index) => onSelect(options[index].$2),
       color: _burgundy,
-      iconSize: 16,
-      shrinkWrap: true,
     );
   }
 }

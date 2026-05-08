@@ -7,9 +7,11 @@ import '../../core/models/user_card.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/adaptive_list_card.dart';
+import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/inline_notice_container.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/full_bleed_card_hero.dart';
 import 'widgets/market_analysis_section.dart';
@@ -66,7 +68,8 @@ class ItemDetailScreen extends ConsumerStatefulWidget {
 
 class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey _heroKey = GlobalKey();
+  int _marketRefreshVersion = 0;
+  bool _refreshingMarketValue = false;
 
   /// Scroll offset (px) at which the hero gradient is fully behind the AppBar.
   /// Re-measured from the rendered hero on every frame.
@@ -90,19 +93,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     final past = _scrollController.offset > _heroSwitchThreshold;
     if (past != _scrolledPastHero) {
       setState(() => _scrolledPastHero = past);
-    }
-  }
-
-  void _maybeMeasureHero() {
-    final ctx = _heroKey.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final topInset = MediaQuery.paddingOf(context).top;
-    final next = box.size.height - (topInset + kToolbarHeight) - 8;
-    if ((next - _heroSwitchThreshold).abs() > 1) {
-      _heroSwitchThreshold = next;
-      _onScroll();
     }
   }
 
@@ -170,6 +160,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
+            final colors = Theme.of(sheetContext).colorScheme;
             final isOtherParallel = selectedParallelId == '__other__';
 
             Future<void> saveFromSheet() async {
@@ -204,13 +195,23 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 
             return ModalSheetScaffold(
               title: 'Edit your copy',
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: _EditCardPreview(card: card),
+                  ),
+                  const SizedBox(height: 16),
+                  _SheetFieldLabel('Parallel'),
                   if (parallels.isNotEmpty)
                     AdaptiveDropdown<String?>(
                       value: selectedParallelId,
-                      decoration: const InputDecoration(labelText: 'Parallel', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        isDense: true,
+                      ),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('Base')),
                         ...parallels.map((p) => DropdownMenuItem(
@@ -228,67 +229,83 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     AdaptiveTextField(
                       controller: otherParallelCtrl,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      placeholder: 'Parallel',
+                      placeholder: 'Base',
                       cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
-                      decoration: const InputDecoration(labelText: 'Parallel', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                        hintText: 'Base',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        isDense: true,
+                      ),
                     ),
                   if (isOtherParallel) ...[
                     const SizedBox(height: 12),
+                    _SheetFieldLabel('Parallel name'),
                     AdaptiveTextField(
                       controller: otherParallelCtrl,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      placeholder: 'Parallel name',
+                      placeholder: 'e.g. Pink Refractor',
                       cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
-                      decoration: const InputDecoration(labelText: 'Parallel name', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Pink Refractor',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        isDense: true,
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+                  _SheetFieldLabel('Price Paid'),
                   AdaptiveTextField(
                     controller: pricePaidCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    placeholder: 'Price Paid',
+                    placeholder: '\$0.00',
                     cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
                     decoration: InputDecoration(
-                      labelText: 'Price Paid',
-                      prefixText: '\$',
-                      border: const OutlineInputBorder(),
-                      filled: true,
-                      fillColor: Theme.of(sheetContext).colorScheme.surface,
+                      hintText: '\$0.00',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      isDense: true,
                     ),
                   ),
                   if (card.serialMax != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    _SheetFieldLabel('Serial # (your copy, e.g. 34 of /${card.serialMax})'),
                     AdaptiveTextField(
                       controller: serialCtrl,
                       keyboardType: TextInputType.number,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      placeholder: 'Serial #',
+                      placeholder: 'e.g. 34',
                       cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
                       decoration: InputDecoration(
-                        labelText: 'Serial # (your copy, e.g. 34 of /${card.serialMax})',
-                        border: const OutlineInputBorder(),
-                        filled: true,
-                        fillColor: Theme.of(sheetContext).colorScheme.surface,
+                        hintText: 'e.g. 34',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        isDense: true,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text(
-                        'Graded',
-                        style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(sheetContext).colorScheme.onSurface.withValues(alpha: 0.65),
-                            ),
-                      ),
-                      const Spacer(),
-                      AdaptiveSwitch(
-                        value: isGraded,
-                        onChanged: (v) => setSheetState(() => isGraded = v),
-                        activeColor: const Color(0xFF800020),
-                      ),
-                    ],
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    constraints: const BoxConstraints(minHeight: 44),
+                    alignment: Alignment.centerLeft,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHighest.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: _SheetFieldLabel.inline('Graded copy'),
+                          ),
+                        ),
+                        AdaptiveSwitch(
+                          value: isGraded,
+                          onChanged: (v) => setSheetState(() => isGraded = v),
+                          activeColor: AppTheme.primary,
+                        ),
+                      ],
+                    ),
                   ),
                   if (isGraded) ...[
                     const SizedBox(height: 12),
@@ -299,9 +316,8 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                             value: graderCtrl.text.isEmpty ? 'PSA' : graderCtrl.text,
                             decoration: InputDecoration(
                               labelText: 'Grader',
-                              border: const OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Theme.of(sheetContext).colorScheme.surface,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              isDense: true,
                             ),
                             items: _graders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                             onChanged: (v) => setSheetState(() => graderCtrl.text = v ?? 'PSA'),
@@ -312,40 +328,40 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                           child: AdaptiveTextField(
                             controller: gradeCtrl,
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            placeholder: 'Grade',
+                            placeholder: '10',
                             cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
                             decoration: InputDecoration(
                               labelText: 'Grade',
-                              border: const OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Theme.of(sheetContext).colorScheme.surface,
+                              hintText: '10',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              isDense: true,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AdaptiveButton(
-                          onPressed: () => Navigator.of(sheetContext).pop(),
-                          label: 'Cancel',
-                          style: AdaptiveButtonStyle.bordered,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AdaptiveButton(
-                          onPressed: saving ? null : saveFromSheet,
-                          label: saving ? 'Saving…' : 'Save',
-                          style: AdaptiveButtonStyle.filled,
-                          color: const Color(0xFF800020),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: AdaptiveButton.child(
+                      onPressed: saving ? null : saveFromSheet,
+                      style: AdaptiveButtonStyle.filled,
+                      color: AppTheme.primary,
+                      child: saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text(
+                              'Save',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            ),
+                    ),
                   ),
                 ],
               ),
@@ -360,6 +376,37 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     graderCtrl.dispose();
     gradeCtrl.dispose();
     otherParallelCtrl.dispose();
+  }
+
+  Future<void> _refreshValue(UserCard card) async {
+    if (_refreshingMarketValue) return;
+    setState(() => _refreshingMarketValue = true);
+    try {
+      await ref.read(compsServiceProvider).refreshCardValue(card.id);
+      ref.invalidate(userCardsProvider);
+      if (mounted) {
+        setState(() => _marketRefreshVersion++);
+      }
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: 'Market value updated.',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final raw = e.toString();
+      final message = raw.startsWith('Exception: ') ? raw.substring('Exception: '.length) : raw;
+      AdaptiveSnackBar.show(
+        context,
+        message: 'Refresh failed: $message',
+        type: AdaptiveSnackBarType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _refreshingMarketValue = false);
+      }
+    }
   }
 
   Future<void> _delete(UserCard card) async {
@@ -388,10 +435,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     final padding = MediaQuery.paddingOf(context);
     final bottomPad = padding.bottom;
     final topInset = padding.top;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _maybeMeasureHero();
-    });
 
     final onLight = _scrolledPastHero;
     final iconTint = onLight ? colors.onSurface : Colors.white;
@@ -432,6 +475,11 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 buttonStyle: PopupButtonStyle.glass,
                 items: const [
                   AdaptivePopupMenuItem<String>(
+                    label: 'Refresh value',
+                    icon: 'refresh',
+                    value: 'refresh',
+                  ),
+                  AdaptivePopupMenuItem<String>(
                     label: 'Edit',
                     icon: 'pencil',
                     value: 'edit',
@@ -444,6 +492,9 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 ],
                 onSelected: (_, entry) {
                   switch (entry.value) {
+                    case 'refresh':
+                      _refreshValue(card);
+                      break;
                     case 'edit':
                       _openEditSheet(card);
                       break;
@@ -463,7 +514,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         padding: EdgeInsets.zero,
         children: [
           FullBleedHero(
-            key: _heroKey,
             topInset: topInset,
             details: HeroDetails(
               player: card.player,
@@ -589,6 +639,8 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     parallelName: card.parallel,
                     initialGrade: _resolveDefaultGrade(card),
                     segmentColor: colors.primary,
+                    refreshVersion: _marketRefreshVersion,
+                    externalLoading: _refreshingMarketValue,
                   )
                 else
                   Padding(
@@ -856,6 +908,111 @@ class _CopyTile extends StatelessWidget {
               Text(value, style: _detailCopyValueStyle(context)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Edit-sheet helpers (mirrors the catalog Add-to-Collection sheet) ────────
+
+class _SheetFieldLabel extends StatelessWidget {
+  const _SheetFieldLabel(this.label) : _inline = false;
+  const _SheetFieldLabel.inline(this.label) : _inline = true;
+
+  final String label;
+  final bool _inline;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final inputTheme = Theme.of(context).inputDecorationTheme;
+    final baseStyle = inputTheme.labelStyle ?? textTheme.bodySmall ?? const TextStyle(fontSize: 12);
+    final style = baseStyle.copyWith(
+      color: colors.onSurface.withValues(alpha: 0.65),
+      fontWeight: FontWeight.w600,
+    );
+    if (_inline) {
+      return Text(label, style: style);
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(label, style: style),
+    );
+  }
+}
+
+class _EditCardPreview extends StatelessWidget {
+  const _EditCardPreview({required this.card});
+
+  final UserCard card;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      cornerRadius: 12,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: card.player,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                if (card.cardNumber != null)
+                  TextSpan(
+                    text: '  #${card.cardNumber}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: colors.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+              ]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            if (card.year != null || card.set != null || card.checklist != null)
+              Text(
+                [
+                  if (card.year != null) '${card.year}',
+                  if (card.set != null) card.set,
+                  if (card.checklist != null && card.checklist != card.set) card.checklist,
+                ].join(' · '),
+                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (card.parallel != 'Base')
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  card.parallel,
+                  style: TextStyle(fontSize: 12, color: colors.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                if (card.rookie) AttrTag('RC', color: const Color(0xFF16A34A)),
+                if (card.autograph) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
+                if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
+                if (card.ssp) AttrTag('SSP', color: const Color(0xFFB45309)),
+                if (card.serialMax != null) AttrTag('/${card.serialMax}', color: const Color(0xFF6366F1)),
+              ],
+            ),
+          ],
         ),
       ),
     );

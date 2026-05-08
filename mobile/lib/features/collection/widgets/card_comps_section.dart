@@ -2,12 +2,13 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
+import '../../../core/widgets/app_segmented_control.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
+import 'market_listing_row.dart';
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -15,11 +16,15 @@ class CardCompsSection extends ConsumerStatefulWidget {
     required this.masterCardId,
     required this.parallelName,
     this.initialGrade = 'Raw',
+    this.refreshVersion = 0,
+    this.externalLoading = false,
   });
 
   final String masterCardId;
   final String parallelName;
   final String initialGrade;
+  final int refreshVersion;
+  final bool externalLoading;
 
   @override
   ConsumerState<CardCompsSection> createState() => _CardCompsSectionState();
@@ -30,6 +35,8 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   late bool _loading = true;
   late String _selectedGrade = widget.initialGrade;
   late int _selectedDays = 0; // 0 = all, 7 = 7 days, 30 = 30 days
+  bool _fetchInProgress = false;
+  bool _autoRefreshAttempted = false;
 
   @override
   void initState() {
@@ -44,17 +51,24 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         oldWidget.parallelName != widget.parallelName) {
       _selectedGrade = widget.initialGrade;
       _fetchComps();
+      return;
+    }
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _fetchComps();
     }
   }
 
   Future<void> _fetchComps() async {
+    if (_fetchInProgress) return;
+    _fetchInProgress = true;
     setState(() => _loading = true);
     try {
       var comps = await ref.read(compsServiceProvider).getMasterCardComps(
             widget.masterCardId,
             widget.parallelName,
           );
-      if (comps.isEmpty) {
+      if (comps.isEmpty && !_autoRefreshAttempted && !widget.externalLoading) {
+        _autoRefreshAttempted = true;
         await ref.read(compsServiceProvider).refreshMasterCardComps(
               widget.masterCardId,
               widget.parallelName,
@@ -74,6 +88,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         AdaptiveSnackBar.show(context, message: 'Failed to load comps: $e', type: AdaptiveSnackBarType.error);
       }
     } finally {
+      _fetchInProgress = false;
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -91,6 +106,17 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       final compGrade = c.grade ?? 'Raw'; // Default null grades to 'Raw'
       return compGrade == normalizedGrade && _isWithinDateRange(c.soldAt);
     }).toList();
+  }
+
+  String _formatCompDate(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final compDay = DateTime(dt.year, dt.month, dt.day);
+
+    if (compDay == today) return 'Today';
+    if (compDay == yesterday) return 'Yesterday';
+    return '${dt.month}/${dt.day}/${dt.year}';
   }
 
   double? _getGradeAverage(String grade) {
@@ -127,7 +153,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    if (_loading) {
+    if (_loading || widget.externalLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         child: Center(child: CardFanLoader()),
@@ -184,7 +210,8 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               const Spacer(),
               SizedBox(
                 width: 182,
-                child: AdaptiveSegmentedControl(
+                child: AppSegmentedControl(
+                  preset: AppSegmentedControlPreset.compact,
                   labels: const ['7d', '30d', 'All'],
                   selectedIndex: switch (_selectedDays) {
                     7 => 0,
@@ -297,7 +324,37 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (_, i) => AdaptiveListCard(
               margin: EdgeInsets.zero,
-              child: _CompRow(comp: _filteredComps[i]),
+              child: Builder(
+                builder: (context) {
+                  final comp = _filteredComps[i];
+                  final chipBg = switch (comp.saleType) {
+                    SaleType.auction => const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                    SaleType.bestOffer => const Color(0xFFF97316).withValues(alpha: 0.2),
+                    _ => const Color(0xFF16A34A).withValues(alpha: 0.15),
+                  };
+                  final chipFg = switch (comp.saleType) {
+                    SaleType.auction => const Color(0xFF2563EB),
+                    SaleType.bestOffer => const Color(0xFFF97316),
+                    _ => const Color(0xFF15803D),
+                  };
+                  final chipLabel = switch (comp.saleType) {
+                    SaleType.auction => 'Auction',
+                    SaleType.bestOffer => 'Best Offer',
+                    _ => 'Buy It Now',
+                  };
+                  final subtitle = comp.soldAt != null ? _formatCompDate(comp.soldAt!) : '—';
+                  return MarketListingRow(
+                    title: comp.title,
+                    price: comp.price,
+                    chipLabel: chipLabel,
+                    chipBackground: chipBg,
+                    chipForeground: chipFg,
+                    subtitle: subtitle,
+                    imageUrl: comp.imageUrl,
+                    url: comp.url,
+                  );
+                },
+              ),
             ),
           ),
       ],
@@ -510,139 +567,3 @@ class _PriceChart extends StatelessWidget {
   }
 }
 
-// ── Comp row ───────────────────────────────────────────────────────────────
-
-class _CompRow extends StatelessWidget {
-  const _CompRow({required this.comp});
-
-  final Comp comp;
-
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = DateTime(now.year, now.month, now.day - 1);
-    final compDay = DateTime(dt.year, dt.month, dt.day);
-
-    if (compDay == today) return 'Today';
-    if (compDay == yesterday) return 'Yesterday';
-    return '${dt.month}/${dt.day}/${dt.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-    final hasUrl = comp.url != null && comp.url!.isNotEmpty;
-
-    void openUrl() {
-      if (!hasUrl) return;
-      launchUrl(Uri.parse(comp.url!), mode: LaunchMode.externalApplication);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  comp.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  comp.soldAt != null ? _formatDate(comp.soldAt!) : '—',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurface.withValues(alpha: 0.60),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '\$${comp.price.toStringAsFixed(2)}',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (comp.saleType == SaleType.auction)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Auction',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF3B82F6),
-                        ),
-                      ),
-                    )
-                  else if (comp.saleType == SaleType.bestOffer)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF97316).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Best Offer',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFFF97316),
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colors.outline.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Buy It Now',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: colors.onSurface.withValues(alpha: 0.72),
-                        ),
-                      ),
-                    ),
-                  if (hasUrl) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: openUrl,
-                      icon: Icon(Icons.open_in_new, size: 18, color: colors.onSurface.withValues(alpha: 0.60)),
-                      visualDensity: VisualDensity.compact,
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(44, 44),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      tooltip: 'Open listing',
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}

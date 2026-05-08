@@ -3,12 +3,12 @@ import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/widgets/app_bar_avatar.dart';
+import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/services/comps_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/frosted_chrome_layer.dart';
+import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/list_item_card.dart';
@@ -33,12 +33,13 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   SortOption _sort = SortOption.dateDesc;
   SetSortOption _setSort = SetSortOption.pctDesc;
   final Set<String> _activeFilters = {};
-  final Set<String> _refreshingStacks = {};
+  final Set<String> _pendingDeleteStacks = {};
   final Set<String> _setViewSports = {};
   bool _showSets = false;
 
   List<CardStack> _filter(List<CardStack> stacks) {
     var result = stacks.where((s) {
+      if (_pendingDeleteStacks.contains(_stackKey(s))) return false;
       if (_query.isNotEmpty) {
         final q = _query.toLowerCase();
         if (!s.player.toLowerCase().contains(q) &&
@@ -78,21 +79,77 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     }
   }
 
+  Future<bool> _confirmStackDelete(CardStack stack) async {
+    final isMulti = stack.qty > 1;
+    final confirm = await showAdaptiveDialog<bool>(
+      context: context,
+      title: isMulti ? 'Delete ${stack.qty} copies?' : 'Delete Card',
+      content: isMulti
+          ? 'Remove all ${stack.qty} copies of ${stack.player} from your collection?'
+          : 'Remove this card from your collection?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    );
+    return confirm == true;
+  }
+
+  Future<void> _deleteStack(CardStack stack) async {
+    final key = _stackKey(stack);
+    setState(() => _pendingDeleteStacks.add(key));
+    try {
+      final service = ref.read(cardsServiceProvider);
+      await Future.wait(stack.cards.map((c) => service.deleteCard(c.id)));
+      ref.invalidate(userCardsProvider);
+      if (mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: stack.qty > 1 ? '${stack.qty} cards deleted' : 'Card deleted',
+          type: AdaptiveSnackBarType.success,
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      // Restore the stack on failure so the user sees it again.
+      if (mounted) {
+        setState(() => _pendingDeleteStacks.remove(key));
+        AdaptiveSnackBar.show(
+          context,
+          message: 'Delete failed: $e',
+          type: AdaptiveSnackBarType.error,
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
   String _stackKey(CardStack stack) => stack.stackKey;
 
-  Future<void> _refreshStack(CardStack stack) async {
-    final key = _stackKey(stack);
-    setState(() => _refreshingStacks.add(key));
-    final comps = ref.read(compsServiceProvider);
-    try {
-      await Future.wait(stack.cards.map((c) => comps.refreshCardValue(c.id)));
-      ref.invalidate(userCardsProvider);
-      if (mounted) AdaptiveSnackBar.show(context, message: 'Market value updated', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
-    } catch (e) {
-      if (mounted) AdaptiveSnackBar.show(context, message: 'Refresh failed: $e', type: AdaptiveSnackBarType.error, duration: const Duration(seconds: 3));
-    } finally {
-      if (mounted) setState(() => _refreshingStacks.remove(key));
-    }
+  Widget _buildSwipeDeleteBackground(ColorScheme colors) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: colors.error,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.delete_outline, color: colors.onError, size: 22),
+          const SizedBox(width: 6),
+          Text(
+            'Delete',
+            style: TextStyle(
+              color: colors.onError,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String get _setSortKey => switch (_setSort) {
@@ -114,7 +171,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       ),
       child: Column(
         children: [
-          AdaptiveSegmentedControl(
+          AppSegmentedControl(
             labels: const ['Cards', 'Sets'],
             selectedIndex: showSets ? 1 : 0,
             onValueChanged: (index) => setState(() => _showSets = index == 1),
@@ -212,6 +269,17 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // Clear pending-delete keys once the provider returns fresh data —
+    // those stacks will already be absent (or, on failure, restored).
+    ref.listen<AsyncValue<List<UserCard>>>(userCardsProvider, (_, next) {
+      if (next is AsyncData<List<UserCard>> && _pendingDeleteStacks.isNotEmpty) {
+        final liveKeys = CardStack.fromCards(next.value).map(_stackKey).toSet();
+        final stale = _pendingDeleteStacks.difference(liveKeys);
+        if (stale.isNotEmpty) {
+          setState(() => _pendingDeleteStacks.removeAll(stale));
+        }
+      }
+    });
     final cardsAsync = ref.watch(userCardsProvider);
     final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
     final sportsList = (cardsAsync.asData?.value ?? const <UserCard>[])
@@ -392,18 +460,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             ],
           ),
           const SizedBox(width: 6),
-          _buildActionCapsule(
-            colors: colors,
-            children: [
-              AppBarAvatar(
-                iconOnly: true,
-                tint: colors.onSurface,
-                buttonStyle: PopupButtonStyle.plain,
-                padding: const EdgeInsets.only(left: 2, right: 6),
-              ),
-            ],
-          ),
-          const SizedBox(width: 8),
+          ...appBarShellTrailingActions(context, tint: colors.onSurface),
         ],
       ),
       body: Column(
@@ -464,13 +521,21 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                           padding: const EdgeInsets.only(bottom: 100),
                           sliver: SliverList.builder(
                             itemCount: filtered.length,
-                            itemBuilder: (_, i) => ListItemCard(
-                              index: i,
-                              stack: filtered[i],
-                              onDelete: _deleteCard,
-                              onRefresh: _refreshStack,
-                              isRefreshing: _refreshingStacks.contains(_stackKey(filtered[i])),
-                            ),
+                            itemBuilder: (_, i) {
+                              final stack = filtered[i];
+                              return Dismissible(
+                                key: ValueKey('stack-${_stackKey(stack)}'),
+                                direction: DismissDirection.endToStart,
+                                background: _buildSwipeDeleteBackground(colors),
+                                confirmDismiss: (_) => _confirmStackDelete(stack),
+                                onDismissed: (_) => _deleteStack(stack),
+                                child: ListItemCard(
+                                  index: i,
+                                  stack: stack,
+                                  onDelete: _deleteCard,
+                                ),
+                              );
+                            },
                           ),
                         ),
                     ],

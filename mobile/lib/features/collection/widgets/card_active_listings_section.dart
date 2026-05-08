@@ -1,12 +1,11 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/comp.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
+import 'market_listing_row.dart';
 
 /// Active eBay listings for a master card + parallel (from Edge Function).
 class CardActiveListingsSection extends ConsumerStatefulWidget {
@@ -154,133 +153,29 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
           separatorBuilder: (_, _) => const SizedBox(height: 8),
           itemBuilder: (_, i) => AdaptiveListCard(
             margin: EdgeInsets.zero,
-            child: _ActiveListingRow(listing: items[i]),
+            child: Builder(
+              builder: (context) {
+                final listing = items[i];
+                final chipBg = listing.isAuction
+                    ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                    : const Color(0xFF16A34A).withValues(alpha: 0.15);
+                final chipFg = listing.isAuction
+                    ? const Color(0xFF2563EB)
+                    : const Color(0xFF15803D);
+                return MarketListingRow(
+                  title: listing.title,
+                  price: listing.price,
+                  chipLabel: listing.isAuction ? 'Auction' : 'Buy It Now',
+                  chipBackground: chipBg,
+                  chipForeground: chipFg,
+                  imageUrl: listing.imageUrl,
+                  url: listing.url,
+                );
+              },
+            ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ActiveListingRow extends StatelessWidget {
-  const _ActiveListingRow({required this.listing});
-
-  final ActiveListing listing;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final thumb = listing.imageUrl;
-    final hasUrl = listing.url != null && listing.url!.isNotEmpty;
-
-    void openListing() {
-      if (!hasUrl) return;
-      launchUrl(Uri.parse(listing.url!), mode: LaunchMode.externalApplication);
-    }
-
-    Widget innerRow() {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (thumb != null && thumb.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: CachedNetworkImage(
-                imageUrl: thumb,
-                width: 48,
-                height: 48,
-                fit: BoxFit.cover,
-                errorWidget: (context, url, error) => const SizedBox(width: 48, height: 48),
-              ),
-            )
-          else
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.image_not_supported_outlined, size: 22, color: colors.outline),
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  listing.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      '\$${listing.price.toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: listing.isAuction
-                            ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                            : colors.outline.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        listing.isAuction ? 'Auction' : 'Buy It Now',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: listing.isAuction
-                                  ? const Color(0xFF2563EB)
-                                  : colors.onSurface.withValues(alpha: 0.72),
-                            ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: hasUrl
-                ? InkWell(
-                    onTap: openListing,
-                    borderRadius: BorderRadius.circular(8),
-                    child: innerRow(),
-                  )
-                : innerRow(),
-          ),
-          if (hasUrl)
-            IconButton(
-              onPressed: openListing,
-              icon: Icon(Icons.open_in_new, size: 18, color: colors.onSurface.withValues(alpha: 0.60)),
-              visualDensity: VisualDensity.compact,
-              style: IconButton.styleFrom(
-                minimumSize: const Size(44, 44),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              tooltip: 'Open listing',
-            ),
-        ],
-      ),
     );
   }
 }

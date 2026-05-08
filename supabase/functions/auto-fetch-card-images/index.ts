@@ -1,6 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { fetchUploadAndSetMasterImage } from '../_shared/card_image_cardsight.ts';
 
-const CARDSIGHT_BASE = 'https://api.cardsight.ai';
 const BATCH_SIZE = 20; // Process 20 cards per run
 const DELAY_MS = 250; // Delay between CardSight calls
 
@@ -9,21 +9,6 @@ function json(data: unknown, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
-}
-
-async function getCardSightImage(cardsightCardId: string): Promise<ArrayBuffer | null> {
-  const apiKey = Deno.env.get('CARDSIGHT_API_KEY');
-  if (!apiKey) return null;
-
-  try {
-    const url = `${CARDSIGHT_BASE}/v1/images/cards/${cardsightCardId}`;
-    const res = await fetch(url, { headers: { 'X-API-Key': apiKey } });
-    if (!res.ok) return null;
-    return res.arrayBuffer();
-  } catch (e) {
-    console.error('CardSight fetch error:', e);
-    return null;
-  }
 }
 
 Deno.serve(async (req) => {
@@ -54,7 +39,7 @@ Deno.serve(async (req) => {
 
     if (!cards || cards.length === 0) {
       console.log('[auto-fetch-card-images] no cards to fetch');
-      return json({ processed: 0 });
+      return json({ processed: 0, uploaded: 0 });
     }
 
     console.log(`[auto-fetch-card-images] processing ${cards.length} cards`);
@@ -65,50 +50,14 @@ Deno.serve(async (req) => {
       if (i > 0) await new Promise(resolve => setTimeout(resolve, DELAY_MS));
 
       const card = cards[i];
-      const imageBuffer = await getCardSightImage(card.cardsight_card_id);
+      const publicUrl = await fetchUploadAndSetMasterImage(supabase, {
+        masterCardId: card.id,
+        cardsightCardId: card.cardsight_card_id,
+      });
 
-      if (!imageBuffer) {
-        console.log(`[auto-fetch-card-images] no image for ${card.cardsight_card_id}`);
-        processed++;
-        continue;
-      }
-
-      try {
-        const storagePath = `cards/${card.cardsight_card_id}.jpg`;
-
-        // Upload to storage
-        const { error: uploadError } = await supabase.storage
-          .from('card-images')
-          .upload(storagePath, imageBuffer, { contentType: 'image/jpeg', upsert: true });
-
-        if (uploadError) {
-          console.log(`[auto-fetch-card-images] upload error for ${card.cardsight_card_id}:`, uploadError);
-          processed++;
-          continue;
-        }
-
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('card-images')
-          .getPublicUrl(storagePath);
-
-        // Update database
-        const { error: updateError } = await supabase
-          .from('master_card_definitions')
-          .update({ image_url: publicUrl })
-          .eq('id', card.id);
-
-        if (updateError) {
-          console.log(`[auto-fetch-card-images] update error for ${card.id}:`, updateError);
-        } else {
-          uploaded++;
-        }
-
-        processed++;
-      } catch (e) {
-        console.error('[auto-fetch-card-images] processing error:', e);
-        processed++;
-      }
+      processed++;
+      if (publicUrl) uploaded++;
+      else console.log(`[auto-fetch-card-images] no image for ${card.cardsight_card_id}`);
     }
 
     console.log(`[auto-fetch-card-images] completed: ${processed} processed, ${uploaded} uploaded`);

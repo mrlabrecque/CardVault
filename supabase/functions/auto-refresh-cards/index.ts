@@ -1,10 +1,9 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-const SCRAPECHAIN_URL = 'https://ebay-api.scrapechain.com/findCompletedItems';
+import { fetchSoldListingsScrapingBee } from '../_shared/sold_listings_sgai.ts';
 const LOOKBACK_DAYS   = 90;
 const DAILY_LIMIT     = 10; // top-value cards refreshed each run
 const WEEKLY_LIMIT    = 5;  // opted-in cards refreshed each run
-const DELAY_MS        = 400; // between Scrapechain calls to stay rate-limit safe
+const DELAY_MS        = 400; // between provider calls to stay rate-limit safe
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -127,32 +126,12 @@ function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
   });
 }
 
-function resolveSaleType(buying_format: string | null): string {
-  const fmt = (buying_format ?? '').toLowerCase();
-  if (fmt.includes('auction'))                              return 'auction';
-  if (fmt.includes('best offer') || fmt.includes('best_offer')) return 'best_offer';
-  return 'fixed_price';
-}
-
 async function fetchSoldListings(query: string): Promise<any[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
-  const res = await fetch(SCRAPECHAIN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keywords: query, max_search_results: 120, remove_outliers: false, category_id: '261328' }),
-  });
-  if (!res.ok) throw new Error(`scrapechain ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return (data.products ?? [])
-    .map((p: any) => ({
-      itemId:        p.item_id ?? null,
-      title:         p.title ?? '',
-      price:         { value: String(p.sale_price ?? 0), currency: p.currency ?? 'USD' },
-      buyingOptions: resolveSaleType(p.buying_format),
-      itemEndDate:   p.date_sold ?? null,
-      itemWebUrl:    p.link ?? null,
-    }))
+  const sourceItems = await fetchSoldListingsScrapingBee(query);
+  return sourceItems
+    .filter((item: any) => item.title && Number.parseFloat(item.price.value) > 0)
     .filter((item: any) => !item.itemEndDate || new Date(item.itemEndDate) >= cutoff);
 }
 

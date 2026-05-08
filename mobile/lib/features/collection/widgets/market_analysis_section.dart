@@ -1,6 +1,6 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_segmented_control.dart';
 import 'card_active_listings_section.dart';
 import 'card_comps_section.dart';
 
@@ -12,12 +12,16 @@ class MarketAnalysisSection extends StatefulWidget {
     required this.parallelName,
     required this.initialGrade,
     required this.segmentColor,
+    this.refreshVersion = 0,
+    this.externalLoading = false,
   });
 
   final String masterCardId;
   final String parallelName;
   final String initialGrade;
   final Color segmentColor;
+  final int refreshVersion;
+  final bool externalLoading;
 
   @override
   State<MarketAnalysisSection> createState() => _MarketAnalysisSectionState();
@@ -42,7 +46,7 @@ class _MarketAnalysisSectionState extends State<MarketAnalysisSection> {
           ),
         ),
         const SizedBox(height: 16),
-        AdaptiveSegmentedControl(
+        AppSegmentedControl(
           labels: const ['Sold Comps', 'For Sale'],
           selectedIndex: _segment,
           onValueChanged: (index) => setState(() => _segment = index),
@@ -54,6 +58,8 @@ class _MarketAnalysisSectionState extends State<MarketAnalysisSection> {
             masterCardId: widget.masterCardId,
             parallelName: widget.parallelName,
             initialGrade: widget.initialGrade,
+            refreshVersion: widget.refreshVersion,
+            externalLoading: widget.externalLoading,
           )
         else
           CardActiveListingsSection(

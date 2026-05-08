@@ -326,7 +326,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
       final svc = ref.read(cardsServiceProvider);
 
       for (final staged in _staged) {
-        final cardId = await svc.addCard(AddCardFormData(
+        final created = await svc.addCard(AddCardFormData(
           masterCardId: staged.masterCardId,
           player: staged.player,
           cardNumber: staged.cardNumber,
@@ -343,10 +343,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
           isSSP: staged.isSSP,
         ));
 
-        // Fetch pricing from scrapechain (fire-and-forget)
-        unawaited(ref.read(compsServiceProvider).refreshCardValue(cardId).catchError((_) {
+        // Fetch pricing from comps provider (fire-and-forget)
+        unawaited(ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {
           // Pricing fetch failed, but card was added — user can refresh later
         }));
+        unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
       }
 
       // Invalidate the cards provider to refresh the list

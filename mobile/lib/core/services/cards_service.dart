@@ -583,7 +583,7 @@ class CardsService {
     await _supabase.from('set_parallels').delete().eq('id', id);
   }
 
-  Future<String> addCard(AddCardFormData form) async {
+  Future<({String userCardId, String masterCardId})> addCard(AddCardFormData form) async {
     String? masterCardId = form.masterCardId;
 
     if (masterCardId == null) {
@@ -619,7 +619,10 @@ class CardsService {
       'grade_value': form.isGraded && form.gradeValue?.isNotEmpty == true ? form.gradeValue : null,
     }).select('id').single();
 
-    return result['id'] as String;
+    return (
+      userCardId: result['id'] as String,
+      masterCardId: masterCardId,
+    );
   }
 
   /// Fuzzy search across releases, sets, and cards in the catalog

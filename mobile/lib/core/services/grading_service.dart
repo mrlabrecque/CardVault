@@ -48,7 +48,7 @@ class GradingService {
 
   Future<GradingResult> analyzeCard(String userCardId) async {
     final res = await _supabase.functions.invoke(
-      'grading-analyze',
+      'grading-comps-sold-analyze',
       body: {'userCardId': userCardId},
     );
     if (res.status != 200) {

@@ -1,6 +1,3 @@
-/**
- * @deprecated Deploy and call `grading-comps-sold-analyze` instead. This entry remains for older clients.
- */
 import { handleGradingCompsSoldAnalyze } from '../_shared/grading-comps-sold-analyze.ts';
 
 Deno.serve(handleGradingCompsSoldAnalyze);

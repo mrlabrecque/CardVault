@@ -1,6 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-const SCRAPECHAIN_URL = 'https://ebay-api.scrapechain.com/findCompletedItems';
+import { fetchSoldListingsScrapingBee, soldRefreshRowsToSearchShape } from '../_shared/sold_listings_sgai.ts';
 const DELAY_MS = 300;
 const BATCH_SIZE = 20;
 
@@ -156,38 +155,25 @@ async function fetchESPNLeaders(
   }
 }
 
-// Fetch sold listings from Scrapechain
+// Fetch sold listings from ScrapeGraphAI
 async function fetchSoldListings(query: string): Promise<{ avgPrice: number; compCount: number } | null> {
   try {
-    const res = await fetch(SCRAPECHAIN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        keywords: query,
-        max_search_results: 120,
-        remove_outliers: false,
-        category_id: '261328', // Sports Trading Cards
-      }),
-    });
-
-    if (!res.ok) {
-      console.warn(`[market-movers] Scrapechain ${query}: ${res.status}`);
-      return null;
-    }
-
-    const data = await res.json();
-    const products = data.products ?? [];
-
+    if (!Deno.env.get('SGAI_API_KEY')) return null;
+    const rows = await fetchSoldListingsScrapingBee(query);
+    const products = soldRefreshRowsToSearchShape(rows);
     if (products.length === 0) {
       return null;
     }
-
-    const avgPrice = data.average_price ?? 0;
+    const prices = products
+      .map((p: any) => p.price)
+      .filter((p: number) => p > 0);
+    if (prices.length == 0) return null;
+    const avgPrice = prices.reduce((sum: number, p: number) => sum + p, 0) / prices.length;
     const compCount = products.length;
 
     return { avgPrice, compCount };
   } catch (e: any) {
-    console.error(`[market-movers] Scrapechain ${query} error: ${e.message}`);
+    console.error(`[market-movers] ScrapeGraphAI ${query} error: ${e.message}`);
     return null;
   }
 }
@@ -298,7 +284,7 @@ Deno.serve(async (req) => {
       .eq('espn_id', espnId);
   }
 
-  // ── Step 2: Fetch and snapshot Scrapechain data ────────────────────────────
+  // ── Step 2: Fetch and snapshot sold comps data ─────────────────────────────
 
   // Fetch all players with their IDs
   const { data: topPlayersData, error: fetchError } = await admin
@@ -315,7 +301,7 @@ Deno.serve(async (req) => {
   }
 
   const players = topPlayersData ?? [];
-  console.log(`[market-movers] Fetched ${players.length} top players for Scrapechain queries`);
+  console.log(`[market-movers] Fetched ${players.length} top players for sold-comps queries`);
 
   let snapshotsWritten = 0;
   let failed = 0;

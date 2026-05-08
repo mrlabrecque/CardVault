@@ -5,7 +5,7 @@ CREATE TABLE market_movers_snapshots (
   avg_price       numeric(10,2) NOT NULL,
   comp_count      integer NOT NULL DEFAULT 0,  -- qty sold on eBay
   snapshot_week   date NOT NULL,               -- Monday of ISO week (dedup key)
-  query           text,                        -- Scrapechain query used
+  query           text,                        -- Provider query used
   created_at      timestamptz DEFAULT now()
 );
 

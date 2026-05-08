@@ -17,6 +17,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
+import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sticky_chrome_scaffold.dart';
@@ -657,9 +658,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         grader: _isGraded ? _grader : 'PSA',
         gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
       );
-      final newCardId = await ref.read(cardsServiceProvider).addCard(form);
+      final created = await ref.read(cardsServiceProvider).addCard(form);
       ref.invalidate(userCardsProvider);
-      unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
+      unawaited(ref.read(compsServiceProvider).refreshCardValue(created.userCardId));
+      unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
       if (mounted) {
         AdaptiveSnackBar.show(context, message: 'Card added!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
         unawaited(_clearNavigationState());
@@ -742,9 +744,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               grader: _isGraded ? _grader : 'PSA',
               gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
             );
-            final newCardId = await ref.read(cardsServiceProvider).addCard(form);
+            final created = await ref.read(cardsServiceProvider).addCard(form);
             ref.invalidate(userCardsProvider);
-            unawaited(ref.read(compsServiceProvider).refreshCardValue(newCardId));
+            unawaited(ref.read(compsServiceProvider).refreshCardValue(created.userCardId));
+            unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
             if (mounted) {
               _pricePaidCtrl.clear();
               _serialNumberCtrl.clear();
@@ -940,19 +943,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   Widget _catalogSegmentRow(
     ColorScheme colors, {
-    bool includeVerticalSpacing = false,
+    required bool hasSecondaryChrome,
   }) {
-    final segmentPadding = includeVerticalSpacing
-        ? const EdgeInsets.fromLTRB(
-            ChromeMetrics.compactHorizontalInset,
-            ChromeMetrics.segmentOnlyTopInset,
-            ChromeMetrics.compactHorizontalInset,
-            ChromeMetrics.segmentOnlyBottomInset,
-          )
-        : const EdgeInsets.symmetric(horizontal: ChromeMetrics.compactHorizontalInset);
+    final segmentPadding = EdgeInsets.fromLTRB(
+      ChromeMetrics.compactHorizontalInset,
+      ChromeMetrics.segmentOnlyTopInset,
+      ChromeMetrics.compactHorizontalInset,
+      hasSecondaryChrome ? 0 : ChromeMetrics.segmentOnlyBottomInset,
+    );
     return Padding(
       padding: segmentPadding,
-      child: AdaptiveSegmentedControl(
+      child: AppSegmentedControl(
+        segmentKey: const ValueKey('catalog-mode-segment'),
         labels: const ['Browse', 'Search'],
         selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
         onValueChanged: (index) {
@@ -1034,43 +1036,57 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   /// Single blurred strip under the app bar for this screen (segments only, or segments + bars).
   ({Widget child, double heightEstimate}) _catalogStickyChrome(ColorScheme colors) {
-    final segment = _catalogSegmentRow(colors);
-    final standaloneSegment = _catalogSegmentRow(colors, includeVerticalSpacing: true);
     const segmentEst = _kStickyEstSegment;
+    Widget? secondary;
+    double secondaryHeight = 0;
 
     if (_restoringState) {
-      return (child: standaloneSegment, heightEstimate: segmentEst);
+      return (
+        child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
+        heightEstimate: segmentEst,
+      );
     }
 
     if (_mode == _CatalogMode.search) {
       if (_searchSelectedCard != null && _searchParallelsLoading) {
-        return (child: standaloneSegment, heightEstimate: segmentEst);
+        return (
+          child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
+          heightEstimate: segmentEst,
+        );
       }
       if (_searchSelectedCard != null && _searchParallels.isNotEmpty && !_searchParallelSelected) {
-        return (child: standaloneSegment, heightEstimate: segmentEst);
+        return (
+          child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
+          heightEstimate: segmentEst,
+        );
       }
       if (_searchSelectedCard != null) {
-        return (child: standaloneSegment, heightEstimate: segmentEst);
+        return (
+          child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
+          heightEstimate: segmentEst,
+        );
       }
+      secondaryHeight = _kStickyEstGlobalSearch;
+      secondary = Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: FilterSortActionBar<void>(
+          searchText: _globalSearchCtrl.text,
+          onSearchChanged: _onSearchChanged,
+          onSearchClear: () => setState(() {
+            _globalSearchCtrl.clear();
+            _globalSearchResults = [];
+          }),
+          searchHint: 'Search releases, sets, or cards…',
+        ),
+      );
       return (
-        heightEstimate: segmentEst + _kStickyEstGlobalSearch,
+        heightEstimate: segmentEst + secondaryHeight,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            segment,
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              child: FilterSortActionBar<void>(
-                searchText: _globalSearchCtrl.text,
-                onSearchChanged: _onSearchChanged,
-                onSearchClear: () => setState(() {
-                  _globalSearchCtrl.clear();
-                  _globalSearchResults = [];
-                }),
-                searchHint: 'Search releases, sets, or cards…',
-              ),
-            ),
+            _catalogSegmentRow(colors, hasSecondaryChrome: true),
+            secondary,
           ],
         ),
       );
@@ -1078,113 +1094,101 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
     switch (_catalogStep) {
       case _CatalogStep.browsing:
-        return (
-          heightEstimate: segmentEst + _kStickyEstBrowsePlus,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              segment,
-              _browseReleaseFiltersColumn(colors),
-            ],
-          ),
-        );
+        secondaryHeight = _kStickyEstBrowsePlus;
+        secondary = _browseReleaseFiltersColumn(colors);
+        break;
       case _CatalogStep.sets:
-        return (
-          heightEstimate: segmentEst + _kStickyEstSetSearch,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              segment,
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: AdaptiveTextField(
-                  controller: _setSearchCtrl,
-                  onChanged: (_) => setState(() {}),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  placeholder: 'Search sets…',
-                  prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                  suffixIcon: _setSearchCtrl.text.isNotEmpty
-                      ? GestureDetector(
-                          onTap: () => setState(() => _setSearchCtrl.clear()),
-                          child: const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Icon(Icons.close, size: 16),
-                          ),
-                        )
-                      : null,
-                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
-                  decoration: InputDecoration(
-                    labelText: 'Search sets',
-                    hintText: 'Search sets…',
-                    hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-                    prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                    suffixIcon: _setSearchCtrl.text.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () => setState(() => _setSearchCtrl.clear()),
-                            child: const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(Icons.close, size: 16),
-                            ),
-                          )
-                        : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
+        secondaryHeight = _kStickyEstSetSearch;
+        secondary = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: AdaptiveTextField(
+            controller: _setSearchCtrl,
+            onChanged: (_) => setState(() {}),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Search sets…',
+            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+            suffixIcon: _setSearchCtrl.text.isNotEmpty
+                ? GestureDetector(
+                    onTap: () => setState(() => _setSearchCtrl.clear()),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(Icons.close, size: 16),
+                    ),
+                  )
+                : null,
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
+            decoration: InputDecoration(
+              labelText: 'Search sets',
+              hintText: 'Search sets…',
+              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
+              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
+              suffixIcon: _setSearchCtrl.text.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () => setState(() => _setSearchCtrl.clear()),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.close, size: 16),
+                      ),
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
           ),
         );
+        break;
       case _CatalogStep.card:
-        return (
-          heightEstimate: segmentEst + _kStickyEstCardSearch,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              segment,
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: AdaptiveTextField(
-                  controller: _cardCtrl,
-                  onChanged: _searchCards,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  placeholder: 'Search player name…',
-                  prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                  suffixIcon: _loadingCards
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                        )
-                      : null,
-                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
-                  decoration: InputDecoration(
-                    labelText: 'Search players',
-                    hintText: 'Search player name…',
-                    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                    suffixIcon: _loadingCards
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                          )
-                        : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
+        secondaryHeight = _kStickyEstCardSearch;
+        secondary = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: AdaptiveTextField(
+            controller: _cardCtrl,
+            onChanged: _searchCards,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            placeholder: 'Search player name…',
+            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+            suffixIcon: _loadingCards
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                : null,
+            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
+            decoration: InputDecoration(
+              labelText: 'Search players',
+              hintText: 'Search player name…',
+              hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+              prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
+              suffixIcon: _loadingCards
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              isDense: true,
+            ),
           ),
         );
+        break;
       case _CatalogStep.sportPicker:
       case _CatalogStep.parallel:
       case _CatalogStep.detail:
       case _CatalogStep.addCopy:
-        return (child: standaloneSegment, heightEstimate: segmentEst);
+        break;
     }
+    final hasSecondaryChrome = secondary != null;
+    return (
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _catalogSegmentRow(colors, hasSecondaryChrome: hasSecondaryChrome),
+          if (secondary != null) secondary,
+        ],
+      ),
+      heightEstimate: segmentEst + secondaryHeight,
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────────

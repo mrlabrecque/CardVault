@@ -10,6 +10,7 @@ class CardInfoSection extends StatelessWidget {
     required this.cardNumber,
     required this.year,
     required this.set,
+    this.checklist,
     required this.parallel,
     required this.serialMax,
     this.sport = 'Unknown',
@@ -25,6 +26,7 @@ class CardInfoSection extends StatelessWidget {
   final String? cardNumber;
   final int? year;
   final String? set;
+  final String? checklist;
   final String? parallel;
   final int? serialMax;
   final String sport;
@@ -60,9 +62,13 @@ class CardInfoSection extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
-          if (year != null || set != null)
+          if (year != null || set != null || checklist != null)
             Text(
-              [if (year != null) '$year', if (set != null) set].join(' · '),
+              [
+                if (year != null) '$year',
+                if (set != null) set,
+                if (checklist != null && checklist != set) checklist,
+              ].join(' · '),
               style: TextStyle(
                 fontSize: 12,
                 color: colors.onSurface.withValues(alpha: 0.6),

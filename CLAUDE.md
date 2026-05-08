@@ -23,7 +23,7 @@ The active codebase is the **Flutter mobile app** (`mobile/`) with **Supabase Ed
 | Backend Logic | Supabase Edge Functions (Deno/TypeScript, `supabase/functions/`) |
 | Database & Auth | Supabase (PostgreSQL + Supabase Auth) |
 | Navigation | go_router |
-| Integrations | Scrapechain (eBay sold comps), CardSight AI API |
+| Integrations | ScrapeGraphAI (eBay sold/active comps), CardSight AI API |
 
 All network calls from Flutter use `supabase.from()` or `supabase.functions.invoke()`. Never reference `localhost:3000` or the Express backend.
 
@@ -100,7 +100,16 @@ Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the
 - **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
-- **Scrapechain API**: Fetches real-time eBay sold comps via Edge Functions (`refresh-card-value`, `comps-search`, etc.) to populate `current_value` on user cards and lookup results. Called after card add/bulk add to populate pricing.
+- **ScrapeGraphAI API**: Primary provider for eBay sold/active comps via Supabase Edge Functions (`refresh-comps`, `comps-search`, `card-active-listings`, `wishlist-check-now`) to populate `current_value`, comps lookup results, and listing alerts.
+  - Endpoint: `POST https://v2-api.scrapegraphai.com/api/scrape`
+  - Auth header: `SGAI-APIKEY: <key>`
+  - Core request shape: `{ url, formats, fetchConfig }`
+  - Keep provider usage centralized in edge functions so Flutter does not change when providers change.
+  - Reference docs: https://docs.scrapegraphai.com/api-reference/endpoint/scrape
+- **eBay Browse API (active listings)**: Use for current listing search in `card-active-listings` and `wishlist-check-now` (active-only scenarios should not rely on sold comps scraping).
+  - Endpoint: `GET /buy/browse/v1/item_summary/search`
+  - Auth: OAuth2 client credentials (`EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`)
+  - Optional marketplace header: `X-EBAY-C-MARKETPLACE-ID` (default `EBAY_US`)
 - **CardSight AI API** (`api.cardsight.ai`) — used server-side only (API key in backend `.env`). Raw `fetch` calls, not the SDK. Two flows:
   - **Admin release import**: Search CardSight releases → select → backend upserts `releases`, `sets` (with `cardsight_id`), `set_parallels` (with `cardsight_id`), and all `master_card_definitions` for every set. Cards are paginated at 100 per page with 250ms delays between pages to avoid rate-limiting.
   - **Lazy image fetch**: `POST /api/cardsight/cards/:masterCardId/image` — called fire-and-forget after a user adds a card. Fetches from CardSight, uploads to Supabase Storage (`card-images` bucket, public), writes URL to `master_card_definitions.image_url`. Safe to call multiple times — returns cached URL immediately if already populated.
@@ -338,7 +347,7 @@ Running list of small things to implement that aren't full features:
 - [ ] Item detail — full card editor; "Post to eBay" button
 - [ ] Comps search — eBay sold listings integration; lookup history
 - [ ] Wishlist — price threshold editor; alert status
-- [ ] Auto-fetch pricing on card add — invoke scrapechain edge function after `addCard()` to fetch and store `current_value`
+- [ ] Auto-fetch pricing on card add — invoke comps edge function after `addCard()` to fetch and store `current_value`
 - [ ] Lot Builder — group cards into lots for bulk eBay listing; lot valuation and P/L
 - [ ] Market Movers — surface cards in the collection with the biggest recent price changes (up or down) using eBay sold comps data
 - [ ] Grade Recommendations — analyze raw cards and recommend which are worth grading based on estimated PSA 10 premium vs. raw value

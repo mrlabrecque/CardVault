@@ -13,14 +13,10 @@ class ListItemCard extends StatefulWidget {
     super.key,
     required this.stack,
     this.onDelete,
-    this.onRefresh,
-    this.isRefreshing = false,
     this.index = 0,
   });
   final CardStack stack;
   final void Function(String cardId)? onDelete;
-  final void Function(CardStack)? onRefresh;
-  final bool isRefreshing;
   final int index;
 
   @override
@@ -29,27 +25,6 @@ class ListItemCard extends StatefulWidget {
 
 class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderStateMixin {
   bool _expanded = false;
-  late final AnimationController _spinCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 800),
-  );
-
-  @override
-  void didUpdateWidget(ListItemCard old) {
-    super.didUpdateWidget(old);
-    if (widget.isRefreshing && !_spinCtrl.isAnimating) {
-      _spinCtrl.repeat();
-    } else if (!widget.isRefreshing && _spinCtrl.isAnimating) {
-      _spinCtrl.stop();
-      _spinCtrl.reset();
-    }
-  }
-
-  @override
-  void dispose() {
-    _spinCtrl.dispose();
-    super.dispose();
-  }
 
   Color get _plColor => widget.stack.pl >= 0 ? Colors.green : Colors.red;
 
@@ -71,31 +46,45 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
       }
     }
 
+    final info = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+      child: CardInfoSection(
+        player: stack.player,
+        cardNumber: stack.cardNumber,
+        year: stack.year,
+        set: stack.set,
+        checklist: stack.checklist,
+        parallel: stack.parallel,
+        serialMax: stack.serialMax,
+        sport: stack.sport,
+        rookie: stack.rookie,
+        autograph: stack.autograph,
+        memorabilia: stack.memorabilia,
+        ssp: stack.ssp,
+        isGraded: stack.isGraded,
+        gradeLabel: stack.gradeLabel,
+      ),
+    );
+
+    final tappableInfo = isIOS
+        ? CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: onHeaderTap,
+            child: info,
+          )
+        : InkWell(
+            onTap: onHeaderTap,
+            borderRadius: BorderRadius.circular(12),
+            child: info,
+          );
+
     final header = IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CardThumbnail(imageUrl: stack.imageUrl, sport: stack.sport, width: 70),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
-              child: CardInfoSection(
-                player: stack.player,
-                cardNumber: stack.cardNumber,
-                year: stack.year,
-                set: stack.set,
-                parallel: stack.parallel,
-                serialMax: stack.serialMax,
-                sport: stack.sport,
-                rookie: stack.rookie,
-                autograph: stack.autograph,
-                memorabilia: stack.memorabilia,
-                ssp: stack.ssp,
-                isGraded: stack.isGraded,
-                gradeLabel: stack.gradeLabel,
-              ),
-            ),
-          ),
+          Expanded(child: tappableInfo),
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 8, 12, 12),
             child: _buildValue(colors, stack),
@@ -104,23 +93,10 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
       ),
     );
 
-    final tappableHeader = isIOS
-        ? CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: Size.zero,
-            onPressed: onHeaderTap,
-            child: header,
-          )
-        : InkWell(
-            onTap: onHeaderTap,
-            borderRadius: BorderRadius.circular(12),
-            child: header,
-          );
-
     return AdaptiveListCard(
       child: Column(
         children: [
-          tappableHeader
+          header
               .animate(delay: staggerDelay)
               .fadeIn(duration: const Duration(milliseconds: 200))
               .slideY(begin: 0.08, end: 0, duration: const Duration(milliseconds: 200)),
@@ -145,25 +121,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (widget.onRefresh != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 2),
-                child: IconButton(
-                  onPressed: widget.isRefreshing ? null : () => widget.onRefresh!(stack),
-                  icon: RotationTransition(
-                    turns: _spinCtrl,
-                    child: Icon(Icons.refresh, size: 18, color: colors.onSurface.withValues(alpha: widget.isRefreshing ? 0.8 : 0.45)),
-                  ),
-                  style: IconButton.styleFrom(
-                    padding: const EdgeInsets.all(8),
-                    minimumSize: const Size(44, 44),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: BorderSide(color: colors.outlineVariant),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    backgroundColor: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
             if (stack.valueTrend != 0)
               Icon(
                 stack.valueTrend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
