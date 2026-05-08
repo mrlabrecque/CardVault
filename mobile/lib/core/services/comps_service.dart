@@ -27,7 +27,8 @@ class CompsService {
     dynamic payload,
     Object? source,
   }) {
-    final lower = _extractErrorMessage(payload).toLowerCase();
+    final payloadMessage = _extractErrorMessage(payload);
+    final lower = payloadMessage.toLowerCase();
     if (status == 404) {
       return Exception(
         'Price refresh service is not deployed. Run: supabase functions deploy refresh-comps',
@@ -43,16 +44,24 @@ class CompsService {
     }
     if (status == 502 || status == 503 || status == 504) {
       return Exception(
-        'Pricing service is temporarily unavailable (${status ?? 'upstream error'}). Please try again in a minute.',
+        'Could not refresh market data right now. Showing your most recent saved values. Please try again in a few minutes.',
+      );
+    }
+    if (lower.contains('marketplace temporarily blocked') ||
+        lower.contains('ebay_bot_protection_page') ||
+        lower.contains('task not found') ||
+        lower.contains('incorrect username or password')) {
+      return Exception(
+        'Could not refresh market data right now. Showing your most recent saved values. Please try again soon.',
       );
     }
     if (source != null) {
-      return Exception('Refresh comps failed: $source');
+      return Exception(
+        'Could not refresh market data right now. Please try again shortly.',
+      );
     }
     return Exception(
-      'Refresh comps failed'
-      '${status != null ? ' ($status)' : ''}'
-      '${lower.isNotEmpty ? ': ${_extractErrorMessage(payload)}' : ''}',
+      'Could not refresh market data right now. Please try again shortly.',
     );
   }
 

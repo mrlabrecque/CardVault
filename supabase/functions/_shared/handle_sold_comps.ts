@@ -4,7 +4,11 @@ import {
   parseAndFilterSoldComps,
   parseGrade,
 } from './comps_master_refresh.ts';
-import { fetchSoldListingsScrapingBee, soldRefreshRowsToSearchShape } from './sold_listings_sgai.ts';
+import {
+  fetchSoldListingsDecodo,
+  fetchSoldListingsSelfHosted,
+  soldRefreshRowsToSearchShape,
+} from './sold_listings_sgai.ts';
 import { verifyUserJwt } from './supabase_user_jwt.ts';
 
 const HISTORY_LIMIT = 50;
@@ -46,6 +50,34 @@ function averagesFromCompsRows(allCompsData: any[] | null | undefined) {
   const psa9Avg = psa9Comps.length > 0 ? psa9Comps.reduce((s: number, c: any) => s + (c.price ?? 0), 0) / psa9Comps.length : 0;
 
   return { rawAvg, psa10Avg, psa9Avg };
+}
+
+async function fetchSoldListingsWithFallback(query: string, path: 'refresh' | 'search'): Promise<any[]> {
+  try {
+    const rows = await fetchSoldListingsSelfHosted(query);
+    console.log(`[sold-comps/${path}] provider=self_hosted rows: ${rows.length}`);
+    return rows;
+  } catch (selfHostedError: any) {
+    const selfHostedMsg = String(selfHostedError?.message ?? selfHostedError ?? '');
+    console.warn(`[sold-comps/${path}] self-hosted failed: ${selfHostedMsg}`);
+
+    try {
+      const rows = await fetchSoldListingsDecodo(query);
+      console.log(`[sold-comps/${path}] provider=decodo rows: ${rows.length}`);
+      return rows;
+    } catch (decodoError: any) {
+      const decodoMsg = String(decodoError?.message ?? decodoError ?? '');
+      console.error(`[sold-comps/${path}] decodo failed: ${decodoMsg}`);
+
+      if (decodoMsg.includes('decodo_not_configured') && selfHostedMsg.includes('self_hosted_not_configured')) {
+        throw new Error('provider_not_configured');
+      }
+      if (selfHostedMsg.includes('ebay_bot_protection_page') || decodoMsg.includes('ebay_bot_protection_page')) {
+        throw new Error('ebay_bot_protection_page');
+      }
+      throw decodoError;
+    }
+  }
 }
 
 /**
@@ -155,11 +187,35 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
       let raw: any[];
       try {
-        raw = await fetchSoldListingsScrapingBee(query);
-        console.log(`[sold-comps/refresh] provider rows: ${raw.length}`);
+        raw = await fetchSoldListingsWithFallback(query, 'refresh');
       } catch (e: any) {
         const msg = String(e?.message ?? e ?? '');
         console.error('[sold-comps/refresh] provider error:', msg);
+        // Graceful degradation: keep app usable by returning latest stored comps
+        // instead of a hard 502 when provider access is blocked.
+        const { data: staleCompsData } = await admin
+          .from('card_sold_comps')
+          .select('price, grade')
+          .eq('master_card_id', masterCardId)
+          .eq('parallel_name', parallelName);
+        const staleCount = (staleCompsData as any[] | null)?.length ?? 0;
+        if (staleCount > 0) {
+          const { rawAvg, psa10Avg, psa9Avg } = averagesFromCompsRows(staleCompsData as any[]);
+          return json({
+            comps: [],
+            rawAvg,
+            psa10Avg,
+            psa9Avg,
+            totalCount: staleCount,
+            query,
+            cached: true,
+            stale: true,
+            warning: 'Using previously stored comps because marketplace refresh is temporarily blocked.',
+          });
+        }
+        if (msg.includes('provider_not_configured')) {
+          return json({ error: 'Scraper provider is not configured.' }, 502);
+        }
         if (msg.includes('ebay_bot_protection_page')) {
           return json({ error: 'Marketplace temporarily blocked this refresh request. Please try again later.' }, 502);
         }
@@ -245,9 +301,12 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
     let rawRows: any[];
     try {
-      rawRows = await fetchSoldListingsScrapingBee(queryText);
+      rawRows = await fetchSoldListingsWithFallback(queryText, 'search');
     } catch (e: any) {
       console.error('[sold-comps/search] provider error:', e?.message ?? e);
+      if (String(e?.message ?? e ?? '').includes('provider_not_configured')) {
+        return json({ error: 'Scraper provider is not configured.' }, 502);
+      }
       return json({ error: 'Failed to fetch sold comps' }, 502);
     }
 

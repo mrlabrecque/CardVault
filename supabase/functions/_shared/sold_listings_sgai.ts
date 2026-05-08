@@ -3,6 +3,7 @@
  */
 
 const SCRAPEGRAPH_SCRAPE_URL = 'https://v2-api.scrapegraphai.com/api/scrape';
+const DECODO_SCRAPER_URL = 'https://scraper-api.decodo.com/v2/scrape';
 const LOOKBACK_DAYS = 90;
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 800;
@@ -98,12 +99,81 @@ function extractHtmlFromScrapeGraphResponse(data: any): string {
   return '';
 }
 
+function extractHtmlFromDecodoResponse(data: any): string {
+  const candidates: unknown[] = [
+    data?.results?.[0]?.content,
+    data?.results?.[0]?.html,
+    data?.result?.content,
+    data?.result?.html,
+    data?.content,
+    data?.html,
+    data?.data?.content,
+    data?.data?.html,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const joined = candidate
+        .filter((part): part is string => typeof part === 'string')
+        .join('\n');
+      if (joined.length > 0) return joined;
+    }
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  }
+  return '';
+}
+
+async function fetchDecodoTaskResultHtml(
+  taskId: string,
+  authValue: string,
+  timeoutMs: number,
+): Promise<string> {
+  const resultsUrl = `https://scraper-api.decodo.com/v3/task/${encodeURIComponent(taskId)}/results`;
+  const startedAt = Date.now();
+  const maxPolls = 8;
+
+  for (let poll = 1; poll <= maxPolls; poll++) {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > timeoutMs) break;
+
+    const res = await fetch(resultsUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Basic ${authValue}`,
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`decodo task_results ${res.status}: ${body}`);
+    }
+
+    const data = await res.json();
+    const html = extractHtmlFromDecodoResponse(data);
+    if (html) return html;
+
+    const status = String(data?.status ?? data?.results?.[0]?.status ?? '').toLowerCase();
+    if (status.includes('failed') || status.includes('error')) {
+      throw new Error(`decodo task_failed: ${JSON.stringify(data).slice(0, 500)}`);
+    }
+
+    const waitMs = Math.min(5000, 800 * poll);
+    await new Promise(r => setTimeout(r, waitMs));
+  }
+
+  return '';
+}
+
 function isEbaySecurityPage(html: string): boolean {
   const t = html.toLowerCase();
   return t.includes('<title>security measure') ||
     t.includes('captcha') ||
     t.includes('robot check') ||
-    t.includes('verify you are human');
+    t.includes('verify you are human') ||
+    t.includes('pardon our interruption') ||
+    t.includes('automated access to ebay') ||
+    t.includes('access denied') ||
+    t.includes('please enable js and disable any ad blocker');
 }
 
 function parseSoldListingsFromHtml(html: string, maxItems: number): any[] {
@@ -256,4 +326,167 @@ export function soldRefreshRowsToSearchShape(rows: any[]) {
     url: r.itemWebUrl ?? null,
     image_url: r.imageUrl ?? null,
   }));
+}
+
+function normalizeProviderItems(rows: any[]): any[] {
+  return rows
+    .map((p: any) => {
+      const priceValue = parsePrice(
+        p?.price?.value ??
+        p?.price ??
+        p?.priceText ??
+        p?.amount,
+      );
+      return {
+        itemId: p?.itemId ?? null,
+        title: p?.title ?? '',
+        price: { value: String(priceValue), currency: p?.currency ?? p?.price?.currency ?? 'USD' },
+        buyingOptions: resolveSaleType(p?.buyingOptions ?? p?.sale_type ?? null),
+        itemEndDate: p?.itemEndDate ?? p?.soldDate ?? p?.sold_at ?? null,
+        itemWebUrl: p?.itemWebUrl ?? p?.url ?? null,
+        imageUrl: p?.imageUrl ?? p?.image_url ?? null,
+      };
+    })
+    .filter((item: any) => item.title && Number.parseFloat(item.price.value) > 0);
+}
+
+export async function fetchSoldListingsSelfHosted(query: string): Promise<any[]> {
+  const endpoint = Deno.env.get('SELF_HOSTED_SCRAPER_URL');
+  if (!endpoint) throw new Error('self_hosted_not_configured');
+
+  const apiKey = Deno.env.get('SELF_HOSTED_SCRAPER_API_KEY') ?? '';
+  const timeoutMs = Number(Deno.env.get('SELF_HOSTED_TIMEOUT_MS') ?? '90000');
+  const maxItems = Number(Deno.env.get('SELF_HOSTED_MAX_ITEMS') ?? '40');
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'x-api-key': apiKey } : {}),
+      },
+      body: JSON.stringify({ query, maxItems }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`self_hosted ${res.status}: ${body}`);
+    }
+
+    const payload = await res.json();
+    const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : [];
+    const normalized = normalizeProviderItems(rows);
+    return normalized.filter((item: any) => !item.itemEndDate || new Date(item.itemEndDate) >= cutoff);
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('self_hosted_timeout');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchSoldListingsDecodo(query: string): Promise<any[]> {
+  const username = Deno.env.get('DECODO_SCRAPER_USERNAME') ?? '';
+  const password = Deno.env.get('DECODO_SCRAPER_PASSWORD') ?? '';
+  const token = Deno.env.get('DECODO_SCRAPER_TOKEN') ?? '';
+  if ((!username || !password) && !token) throw new Error('decodo_not_configured');
+
+  const endpoint = Deno.env.get('DECODO_SCRAPER_URL') ?? DECODO_SCRAPER_URL;
+  const timeoutMs = Number(Deno.env.get('DECODO_SCRAPER_TIMEOUT_MS') ?? '90000');
+  const maxItems = Number(Deno.env.get('DECODO_SCRAPER_MAX_ITEMS') ?? '40');
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
+
+  const ebayUrl =
+    `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_sop=13&rt=nc`;
+  const authValue = token
+    ? token
+    : btoa(`${username}:${password}`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Basic ${authValue}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: ebayUrl,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        if (attempt === MAX_RETRIES) throw new Error(`decodo ${res.status}: ${body}`);
+        await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt - 1)));
+        continue;
+      }
+
+      const data = await res.json();
+      let html = extractHtmlFromDecodoResponse(data);
+      if (!html && typeof data?.task_id === 'string' && data.task_id.length > 0) {
+        const status = String(data?.status ?? '').toLowerCase();
+        const statusCode = Number(data?.status_code ?? 0);
+        if (status.includes('failed') || statusCode === 613) {
+          console.warn('[sold-listings-decodo] async task failed before results poll', {
+            taskId: data.task_id,
+            status,
+            statusCode,
+            message: data?.message ?? null,
+            query,
+          });
+          throw new Error('ebay_bot_protection_page');
+        }
+        console.log('[sold-listings-decodo] async task received', {
+          taskId: data.task_id,
+          status: data?.status ?? null,
+          statusCode: data?.status_code ?? null,
+          query,
+        });
+        html = await fetchDecodoTaskResultHtml(data.task_id, authValue, timeoutMs);
+      }
+      if (!html) {
+        console.warn('[sold-listings-decodo] empty html payload', {
+          hasResults: Array.isArray(data?.results),
+          topLevelKeys: Object.keys(data ?? {}).slice(0, 12),
+          query,
+        });
+        return [];
+      }
+      if (isEbaySecurityPage(html)) throw new Error('ebay_bot_protection_page');
+      const rows = parseSoldListingsFromHtml(html, maxItems);
+      if (rows.length === 0) {
+        const htmlSnippet = html
+          .replace(/\s+/g, ' ')
+          .slice(0, 300)
+          .toLowerCase();
+        console.warn('[sold-listings-decodo] parsed 0 rows', {
+          query,
+          htmlSnippet,
+          hasEbayMarkers: html.toLowerCase().includes('ebay'),
+          hasSrpResults: html.toLowerCase().includes('srp-results'),
+          hasSItem: html.toLowerCase().includes('s-item'),
+        });
+      }
+      return normalizeProviderItems(rows)
+        .filter((item: any) => !item.itemEndDate || new Date(item.itemEndDate) >= cutoff);
+    }
+    return [];
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw new Error('decodo_timeout');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
