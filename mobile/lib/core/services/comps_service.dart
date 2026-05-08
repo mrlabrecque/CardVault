@@ -6,6 +6,7 @@ import '../models/comp.dart';
 class CompsService {
   CompsService(this._supabase);
   final SupabaseClient _supabase;
+  static const Duration _compsRefreshCooldown = Duration(hours: 24);
 
   String _extractErrorMessage(dynamic raw) {
     if (raw == null) return '';
@@ -170,6 +171,18 @@ class CompsService {
     return total / filtered.length;
   }
 
+  Future<bool> _hasFreshCachedComps(String masterCardId, String parallelName) async {
+    final cutoff = DateTime.now().subtract(_compsRefreshCooldown).toIso8601String();
+    final rows = await _supabase
+        .from('card_sold_comps')
+        .select('id')
+        .eq('master_card_id', masterCardId)
+        .eq('parallel_name', parallelName)
+        .gte('fetched_at', cutoff)
+        .limit(1);
+    return (rows as List).isNotEmpty;
+  }
+
   String? _normalizeGradeValue(dynamic value) {
     if (value == null) return null;
     final s = value.toString().trim();
@@ -209,17 +222,20 @@ class CompsService {
       final masterId = first['master_card_id'] as String;
       final parallelName = (first['parallel_name'] as String?) ?? 'Base';
 
-      late final FunctionResponse res;
-      try {
-        res = await _supabase.functions.invoke(
-          'refresh-comps',
-          body: {'masterCardId': masterId, 'parallelName': parallelName},
-        );
-      } on FunctionException catch (e) {
-        throw _friendlyRefreshException(status: e.status, source: e, payload: e.details);
-      }
-      if (res.status != 200) {
-        throw _friendlyRefreshException(status: res.status, payload: res.data);
+      final hasFreshCachedComps = await _hasFreshCachedComps(masterId, parallelName);
+      if (!hasFreshCachedComps) {
+        late final FunctionResponse res;
+        try {
+          res = await _supabase.functions.invoke(
+            'refresh-comps',
+            body: {'masterCardId': masterId, 'parallelName': parallelName},
+          );
+        } on FunctionException catch (e) {
+          throw _friendlyRefreshException(status: e.status, source: e, payload: e.details);
+        }
+        if (res.status != 200) {
+          throw _friendlyRefreshException(status: res.status, payload: res.data);
+        }
       }
 
       // Re-read the same DB rows the UI uses so `current_value` and
