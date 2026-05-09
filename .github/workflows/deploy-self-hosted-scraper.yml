@@ -1,0 +1,39 @@
+# Builds mobile/tools/self-hosted-scraper/Dockerfile and releases to Heroku Container Registry.
+# Requires repo secret: HEROKU_API_KEY
+name: Deploy self-hosted scraper (Heroku)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "mobile/tools/self-hosted-scraper/**"
+      - ".github/workflows/deploy-self-hosted-scraper.yml"
+
+env:
+  HEROKU_APP: card-vault
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Heroku Container Registry
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
+
+      - name: Build and push image
+        run: |
+          cd mobile/tools/self-hosted-scraper
+          docker build -t registry.heroku.com/${{ env.HEROKU_APP }}/web .
+          docker push registry.heroku.com/${{ env.HEROKU_APP }}/web
+
+      - name: Install Heroku CLI and release
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          curl -sSL https://cli-assets.heroku.com/install.sh | sh
+          heroku container:release web -a "${{ env.HEROKU_APP }}"
