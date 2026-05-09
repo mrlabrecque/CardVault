@@ -32,6 +32,7 @@ const MAX_ITEMS = Number(process.env.SELF_HOSTED_MAX_ITEMS || 60);
 const HEADLESS = process.env.SELF_HOSTED_HEADLESS !== "false";
 const ATTEMPTS = Math.max(1, Number(process.env.SELF_HOSTED_ATTEMPTS || 3));
 const RETRY_BASE_MS = Math.max(100, Number(process.env.SELF_HOSTED_RETRY_BASE_MS || 1500));
+const PROXY_ROTATE = process.env.SELF_HOSTED_PROXY_ROTATE !== "false";
 /** Default: aggregate eBay sold comps via 130point.com (see README). Use `ebay` for direct eBay HTML (often blocked). */
 const SALES_SOURCE = (process.env.SELF_HOSTED_SALES_SOURCE || "130point").toLowerCase();
 const POINT_SALES_URL = process.env.SELF_HOSTED_130POINT_URL || "https://130point.com/sales/";
@@ -169,11 +170,36 @@ function toErr(code, message) {
   return err;
 }
 
-function buildProxy() {
+function stableHash(input) {
+  let h = 0;
+  const text = String(input || "");
+  for (let i = 0; i < text.length; i += 1) {
+    h = ((h << 5) - h + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function withSessionSuffix(username, sessionId) {
+  if (!username || !sessionId) return username;
+  if (username.includes("session-")) {
+    return username.replace(/session-[^_-]+/i, `session-${sessionId}`);
+  }
+  const joiner = username.includes("-") ? "" : "-";
+  return `${username}${joiner}session-${sessionId}`;
+}
+
+function buildProxy({ attempt = 1, query = "", source = SALES_SOURCE } = {}) {
   const cfg = getProxyConfig();
   if (!cfg || !cfg.server) return undefined;
   const proxy = { server: cfg.server };
-  if (cfg.username) proxy.username = cfg.username;
+  let username = cfg.username;
+  if (PROXY_ROTATE && username) {
+    // Keep sticky session within one attempt, rotate across attempts/queries.
+    const seed = stableHash(`${source}|${query}|${attempt}`) % 1_000_000;
+    const sessionId = `${seed}`.padStart(6, "0");
+    username = withSessionSuffix(username, sessionId);
+  }
+  if (username) proxy.username = username;
   if (cfg.password) proxy.password = cfg.password;
   return proxy;
 }
@@ -215,9 +241,10 @@ async function scrapeEbayOnce({ query, maxItems, attempt }) {
   targetUrl.searchParams.set("LH_Complete", "1");
   targetUrl.searchParams.set("rt", "nc");
 
+  const proxy = buildProxy({ attempt, query, source: "ebay" });
   const browser = await chromium.launch({
     headless: HEADLESS,
-    proxy: buildProxy(),
+    proxy,
     args: [
       "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
@@ -226,16 +253,25 @@ async function scrapeEbayOnce({ query, maxItems, attempt }) {
   });
 
   try {
-    const userAgent = process.env.SELF_HOSTED_USER_AGENT || pick(USER_AGENTS, attempt);
+    const seed = stableHash(`${query}|${attempt}|ebay`);
+    const userAgent = process.env.SELF_HOSTED_USER_AGENT || pick(USER_AGENTS, seed);
     const context = await browser.newContext({
       userAgent,
-      viewport: { width: 1366 + ((attempt * 37) % 240), height: 900 + ((attempt * 31) % 380) },
+      viewport: { width: 1366 + ((seed * 37) % 240), height: 900 + ((seed * 31) % 380) },
       locale: "en-US",
       timezoneId: "America/New_York",
     });
     const page = await context.newPage();
+    const secChPlatforms = ["\"Windows\"", "\"macOS\"", "\"Linux\""];
     await context.setExtraHTTPHeaders({
-      "accept-language": pick(ACCEPT_LANGUAGES, attempt),
+      "accept-language": pick(ACCEPT_LANGUAGES, seed),
+      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "none",
+      "sec-fetch-user": "?1",
+      "sec-ch-ua": "\"Chromium\";v=\"136\", \"Not_A Brand\";v=\"99\"",
+      "sec-ch-ua-platform": pick(secChPlatforms, seed),
       "upgrade-insecure-requests": "1",
       "sec-ch-ua-mobile": "?0",
       dnt: "1",
@@ -430,13 +466,14 @@ async function extract130PointRows(page, limit) {
 }
 
 async function scrape130PointOnce({ query, maxItems, attempt }) {
-  if (REQUIRE_PROXY_130POINT && !buildProxy()) {
+  if (REQUIRE_PROXY_130POINT && !buildProxy({ attempt, query, source: "130point" })) {
     throw toErr("proxy_required", "130point requires SELF_HOSTED_PROXY_* or DECODO_PROXY_* (set SELF_HOSTED_REQUIRE_PROXY=false to override)");
   }
 
+  const proxy = buildProxy({ attempt, query, source: "130point" });
   const browser = await chromium.launch({
     headless: HEADLESS,
-    proxy: buildProxy(),
+    proxy,
     args: [
       "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
@@ -445,16 +482,25 @@ async function scrape130PointOnce({ query, maxItems, attempt }) {
   });
 
   try {
-    const userAgent = process.env.SELF_HOSTED_USER_AGENT || pick(USER_AGENTS, attempt);
+    const seed = stableHash(`${query}|${attempt}|130point`);
+    const userAgent = process.env.SELF_HOSTED_USER_AGENT || pick(USER_AGENTS, seed);
     const context = await browser.newContext({
       userAgent,
-      viewport: { width: 1366 + ((attempt * 37) % 240), height: 900 + ((attempt * 31) % 380) },
+      viewport: { width: 1366 + ((seed * 37) % 240), height: 900 + ((seed * 31) % 380) },
       locale: "en-US",
       timezoneId: "America/New_York",
     });
     const page = await context.newPage();
+    const secChPlatforms = ["\"Windows\"", "\"macOS\"", "\"Linux\""];
     await context.setExtraHTTPHeaders({
-      "accept-language": pick(ACCEPT_LANGUAGES, attempt),
+      "accept-language": pick(ACCEPT_LANGUAGES, seed),
+      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "none",
+      "sec-fetch-user": "?1",
+      "sec-ch-ua": "\"Chromium\";v=\"136\", \"Not_A Brand\";v=\"99\"",
+      "sec-ch-ua-platform": pick(secChPlatforms, seed),
       "upgrade-insecure-requests": "1",
       "sec-ch-ua-mobile": "?0",
       dnt: "1",
@@ -581,6 +627,7 @@ const server = http.createServer(async (req, res) => {
         salesSource: SALES_SOURCE,
         asyncJobs: true,
         proxyConfigured,
+        proxyRotate: PROXY_ROTATE,
         requireProxy130point: REQUIRE_PROXY_130POINT,
       });
     }

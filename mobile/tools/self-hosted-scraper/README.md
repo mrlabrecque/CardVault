@@ -64,7 +64,12 @@ Proxy configuration (first match wins):
 
 Optional: `SELF_HOSTED_REQUIRE_PROXY=true` makes 130point scrapes fail fast if no proxy is set (useful to catch misconfigured Heroku env).
 
-`GET /health` includes `proxyConfigured: true|false` so you can confirm the dyno sees proxy env vars (no secrets returned).
+Session rotation + header jitter:
+
+- `SELF_HOSTED_PROXY_ROTATE=true` (default) appends/updates a sticky `session-<id>` token in proxy usernames per attempt/query so retries are more likely to use a different exit IP/session.
+- User-Agent, viewport, `accept-language`, and a few navigation headers are jittered per attempt/query to reduce repeat fingerprints.
+
+`GET /health` includes `proxyConfigured: true|false` and `proxyRotate: true|false` so you can confirm runtime behavior (no secrets returned).
 
 To fall back to scraping eBay directly (not recommended):
 
