@@ -23,7 +23,7 @@ The active codebase is the **Flutter mobile app** (`mobile/`) with **Supabase Ed
 | Backend Logic | Supabase Edge Functions (Deno/TypeScript, `supabase/functions/`) |
 | Database & Auth | Supabase (PostgreSQL + Supabase Auth) |
 | Navigation | go_router |
-| Integrations | ScrapeGraphAI (eBay sold/active comps), CardSight AI API |
+| Integrations | Bright Data Web Unlocker (eBay sold comps), eBay Browse API (active listings), CardSight AI API |
 
 All network calls from Flutter use `supabase.from()` or `supabase.functions.invoke()`. Never reference `localhost:3000` or the Express backend.
 
@@ -100,12 +100,8 @@ Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the
 - **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
-- **ScrapeGraphAI API**: Primary provider for eBay sold/active comps via Supabase Edge Functions (`refresh-comps`, `comps-search`, `card-active-listings`, `wishlist-check-now`) to populate `current_value`, comps lookup results, and listing alerts.
-  - Endpoint: `POST https://v2-api.scrapegraphai.com/api/scrape`
-  - Auth header: `SGAI-APIKEY: <key>`
-  - Core request shape: `{ url, formats, fetchConfig }`
-  - Keep provider usage centralized in edge functions so Flutter does not change when providers change.
-  - Reference docs: https://docs.scrapegraphai.com/api-reference/endpoint/scrape
+- **Bright Data Web Unlocker**: Primary provider for **eBay sold / completed comps** via Supabase Edge Functions (`refresh-comps`, `comps-search`, `auto-refresh-cards`, `market-movers-refresh`, etc.). Uses `POST https://api.brightdata.com/request` with Bearer `BRIGHTDATA_API_KEY`, zone `BRIGHTDATA_UNLOCKER_ZONE`, `format: raw`. Sold-search HTML is parsed (cap 80 rows); “Best offer accepted” listings may trigger a second unlock per item for the real sold price. See [`supabase/functions/brightdata.env.example`](supabase/functions/brightdata.env.example).
+  - Reference: https://docs.brightdata.com/scraping-automation/web-unlocker/introduction
 - **eBay Browse API (active listings)**: Use for current listing search in `card-active-listings` and `wishlist-check-now` (active-only scenarios should not rely on sold comps scraping).
   - Endpoint: `GET /buy/browse/v1/item_summary/search`
   - Auth: OAuth2 client credentials (`EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`)

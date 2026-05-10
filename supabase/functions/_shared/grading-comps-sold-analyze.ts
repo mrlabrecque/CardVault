@@ -1,5 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchSoldListingsScrapingBee, soldRefreshRowsToSearchShape } from './sold_listings_sgai.ts';
+import { fetchSoldListingsBrightData, soldRefreshRowsToSearchShape } from './sold_listings_brightdata.ts';
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 2000;
 
@@ -93,7 +93,7 @@ function buildCardEbayQuery(card: any): string {
 async function fetchSoldListings(query: string): Promise<any[]> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const rows = await fetchSoldListingsScrapingBee(query);
+      const rows = await fetchSoldListingsBrightData(query);
       return soldRefreshRowsToSearchShape(rows)
         .map((p: any) => ({ ...p, url: p.url ?? null }))
         .filter((p: any) => p.title && p.price > 0);

@@ -1,5 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchSoldListingsScrapingBee, soldRefreshRowsToSearchShape } from '../_shared/sold_listings_sgai.ts';
+import { fetchSoldListingsBrightData, soldRefreshRowsToSearchShape } from '../_shared/sold_listings_brightdata.ts';
 const DELAY_MS = 300;
 const BATCH_SIZE = 20;
 
@@ -155,11 +155,11 @@ async function fetchESPNLeaders(
   }
 }
 
-// Fetch sold listings from ScrapeGraphAI
+// Fetch sold listings via Bright Data Web Unlocker
 async function fetchSoldListings(query: string): Promise<{ avgPrice: number; compCount: number } | null> {
   try {
-    if (!Deno.env.get('SGAI_API_KEY')) return null;
-    const rows = await fetchSoldListingsScrapingBee(query);
+    if (!Deno.env.get('BRIGHTDATA_API_KEY') || !Deno.env.get('BRIGHTDATA_UNLOCKER_ZONE')) return null;
+    const rows = await fetchSoldListingsBrightData(query);
     const products = soldRefreshRowsToSearchShape(rows);
     if (products.length === 0) {
       return null;
@@ -173,7 +173,7 @@ async function fetchSoldListings(query: string): Promise<{ avgPrice: number; com
 
     return { avgPrice, compCount };
   } catch (e: any) {
-    console.error(`[market-movers] ScrapeGraphAI ${query} error: ${e.message}`);
+    console.error(`[market-movers] brightdata ${query} error: ${e.message}`);
     return null;
   }
 }

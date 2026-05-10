@@ -1,5 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchSoldListingsScrapingBee } from '../_shared/sold_listings_sgai.ts';
+import { fetchSoldListingsBrightData } from '../_shared/sold_listings_brightdata.ts';
 const LOOKBACK_DAYS   = 90;
 const DAILY_LIMIT     = 10; // top-value cards refreshed each run
 const WEEKLY_LIMIT    = 5;  // opted-in cards refreshed each run
@@ -129,7 +129,7 @@ function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
 async function fetchSoldListings(query: string): Promise<any[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
-  const sourceItems = await fetchSoldListingsScrapingBee(query);
+  const sourceItems = await fetchSoldListingsBrightData(query);
   return sourceItems
     .filter((item: any) => item.title && Number.parseFloat(item.price.value) > 0)
     .filter((item: any) => !item.itemEndDate || new Date(item.itemEndDate) >= cutoff);

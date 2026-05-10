@@ -5,10 +5,9 @@ import {
   parseGrade,
 } from './comps_master_refresh.ts';
 import {
-  fetchSoldListingsDecodo,
-  fetchSoldListingsSelfHosted,
+  fetchSoldListingsBrightData,
   soldRefreshRowsToSearchShape,
-} from './sold_listings_sgai.ts';
+} from './sold_listings_brightdata.ts';
 import { verifyUserJwt } from './supabase_user_jwt.ts';
 
 const HISTORY_LIMIT = 50;
@@ -52,35 +51,31 @@ function averagesFromCompsRows(allCompsData: any[] | null | undefined) {
   return { rawAvg, psa10Avg, psa9Avg };
 }
 
-async function fetchSoldListingsWithFallback(query: string, path: 'refresh' | 'search'): Promise<any[]> {
+async function fetchSoldListingsProvider(query: string, path: 'refresh' | 'search'): Promise<any[]> {
   try {
-    const rows = await fetchSoldListingsSelfHosted(query);
-    console.log(`[sold-comps/${path}] provider=self_hosted rows: ${rows.length}`);
+    const rows = await fetchSoldListingsBrightData(query);
+    console.log(`[sold-comps/${path}] provider=brightdata rows: ${rows.length}`);
     return rows;
-  } catch (selfHostedError: any) {
-    const selfHostedMsg = String(selfHostedError?.message ?? selfHostedError ?? '');
-    console.warn(`[sold-comps/${path}] self-hosted failed: ${selfHostedMsg}`);
-
-    try {
-      const rows = await fetchSoldListingsDecodo(query);
-      console.log(`[sold-comps/${path}] provider=decodo rows: ${rows.length}`);
-      return rows;
-    } catch (decodoError: any) {
-      const decodoMsg = String(decodoError?.message ?? decodoError ?? '');
-      console.error(`[sold-comps/${path}] decodo failed: ${decodoMsg}`);
-
-      if (decodoMsg.includes('decodo_not_configured') && selfHostedMsg.includes('self_hosted_not_configured')) {
-        throw new Error('provider_not_configured');
-      }
-      if (selfHostedMsg.includes('ebay_bot_protection_page') || decodoMsg.includes('ebay_bot_protection_page')) {
-        throw new Error('ebay_bot_protection_page');
-      }
-      throw decodoError;
+  } catch (e: unknown) {
+    const msg = String((e as { message?: string })?.message ?? e ?? '');
+    console.error(`[sold-comps/${path}] brightdata failed: ${msg}`);
+    if (msg.includes('brightdata_not_configured') || msg.includes('brightdata_async_missing_customer')) {
+      throw new Error('provider_not_configured');
     }
+    const blocked =
+      msg.includes('ebay_bot_protection_page') ||
+      msg.includes('brightdata_empty_body') ||
+      msg.includes('brightdata_unlock_failed');
+    if (blocked) {
+      throw new Error('ebay_bot_protection_page');
+    }
+    throw e;
   }
 }
 
 /**
+ * Sold comps via Bright Data Web Unlocker (`sold_listings_brightdata.ts`).
+ *
  * Handles both:
  * - refresh path: { masterCardId, parallelName }
  * - search path: { query }
@@ -165,8 +160,13 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         .gte('fetched_at', cooldownCutoffIso)
         .limit(1);
 
-      if ((recentCompsData ?? []).length > 0) {
-        console.log(`[sold-comps/refresh] cooldown hit for ${masterCardId} ${parallelName}; skipping provider call`);
+      const recentRowCount = (recentCompsData ?? []).length;
+      console.log(
+        `[sold-comps/refresh] cooldown_check recent_rows=${recentRowCount} window_h=${REFRESH_COOLDOWN_HOURS}`,
+      );
+
+      if (recentRowCount > 0) {
+        console.log(`[sold-comps/refresh] cooldown hit for ${masterCardId} ${parallelName}; skipping Bright Data`);
         const { data: allCompsData } = await admin
           .from('card_sold_comps')
           .select('price, grade')
@@ -187,7 +187,8 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
       let raw: any[];
       try {
-        raw = await fetchSoldListingsWithFallback(query, 'refresh');
+        console.log('[sold-comps/refresh] invoking Bright Data (fresh fetch, no cooldown)');
+        raw = await fetchSoldListingsProvider(query, 'refresh');
       } catch (e: any) {
         const msg = String(e?.message ?? e ?? '');
         console.error('[sold-comps/refresh] provider error:', msg);
@@ -214,7 +215,10 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
           });
         }
         if (msg.includes('provider_not_configured')) {
-          return json({ error: 'Scraper provider is not configured.' }, 502);
+          return json({
+            error:
+              'Bright Data: set BRIGHTDATA_API_KEY and BRIGHTDATA_UNLOCKER_ZONE. Optional: BRIGHTDATA_PROXY_USERNAME for async. See supabase/functions/brightdata.env.example.',
+          }, 502);
         }
         if (msg.includes('ebay_bot_protection_page')) {
           return json({ error: 'Marketplace temporarily blocked this refresh request. Please try again later.' }, 502);
@@ -301,11 +305,14 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
     let rawRows: any[];
     try {
-      rawRows = await fetchSoldListingsWithFallback(queryText, 'search');
+      rawRows = await fetchSoldListingsProvider(queryText, 'search');
     } catch (e: any) {
       console.error('[sold-comps/search] provider error:', e?.message ?? e);
       if (String(e?.message ?? e ?? '').includes('provider_not_configured')) {
-        return json({ error: 'Scraper provider is not configured.' }, 502);
+        return json({
+          error:
+            'Bright Data: set BRIGHTDATA_API_KEY and BRIGHTDATA_UNLOCKER_ZONE. See supabase/functions/brightdata.env.example.',
+        }, 502);
       }
       return json({ error: 'Failed to fetch sold comps' }, 502);
     }

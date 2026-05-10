@@ -37,6 +37,7 @@ class CompsService {
     if (lower.contains('rapidapi') ||
         lower.contains('scrapegraphai') ||
         lower.contains('scrapingbee') ||
+        lower.contains('brightdata') ||
         lower.contains('forbidden')) {
       return Exception(
         'Pricing provider rejected this request. Please verify your pricing API credentials in Supabase secrets, then try again.',
