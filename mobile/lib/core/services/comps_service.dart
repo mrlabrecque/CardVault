@@ -266,6 +266,17 @@ class CompsService {
       // Re-read the same DB rows the UI uses so `current_value` and
       // displayed Sold Comps averages always stay in sync.
       final comps = await getMasterCardComps(masterId, parallelName);
+      if (comps.isEmpty) {
+        for (final card in entry.value) {
+          final id = card['id'] as String?;
+          if (id == null) continue;
+          await _supabase.from('user_cards').update({
+            'current_value': null,
+            'value_refreshed_at': DateTime.now().toIso8601String(),
+          }).eq('id', id);
+        }
+        continue;
+      }
       final rawAvg = _averageForGrade(comps, 'Raw');
       final psa10Avg = _averageForGrade(comps, 'PSA 10');
       final psa9Avg = _averageForGrade(comps, 'PSA 9');

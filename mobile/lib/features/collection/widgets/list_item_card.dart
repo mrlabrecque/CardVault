@@ -113,6 +113,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
 
 
   Widget _buildValue(ColorScheme colors, CardStack stack) {
+    final hasAnyValue = stack.cards.any((c) => c.currentValue != null);
     return DefaultTextStyle(
       style: TextStyle(color: colors.onSurface, fontFamily: AppFonts.fontFamily),
       child: Column(
@@ -122,17 +123,32 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (stack.valueTrend != 0)
+            if (hasAnyValue && stack.valueTrend != 0)
               Icon(
                 stack.valueTrend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
                 size: 13,
                 color: stack.valueTrend > 0 ? Colors.green : Colors.red,
               ),
-            Text('\$${stack.totalValue.toFixed2()}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(
+              hasAnyValue ? '\$${stack.totalValue.toFixed2()}' : 'N/A',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
           ],
         ),
-        if (stack.qty > 1) Text('\$${(stack.totalValue / stack.qty).toFixed2()}/card', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
-        if (stack.totalCost > 0)
+        if (!hasAnyValue)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.info_outline, size: 12, color: colors.onSurface.withValues(alpha: 0.55)),
+              const SizedBox(width: 4),
+              Text(
+                'No recent comps',
+                style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.55)),
+              ),
+            ],
+          ),
+        if (hasAnyValue && stack.qty > 1) Text('\$${(stack.totalValue / stack.qty).toFixed2()}/card', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
+        if (hasAnyValue && stack.totalCost > 0)
           Text('${stack.pl >= 0 ? '+' : ''}${stack.plPct.toFixed2()}%', style: TextStyle(fontSize: 12, color: _plColor, fontWeight: FontWeight.w600)),
         if (stack.qty > 1)
           Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
@@ -167,7 +183,10 @@ class _IndividualCardRow extends StatelessWidget {
                 ],
               ),
             ),
-            Text('\$${(card.currentValue ?? 0).toFixed2()}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              card.currentValue != null ? '\$${card.currentValue!.toFixed2()}' : 'N/A',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             IconButton(
               icon: Icon(Icons.delete_outline, size: 20, color: colors.error),
               onPressed: () => onDelete?.call(card.id),

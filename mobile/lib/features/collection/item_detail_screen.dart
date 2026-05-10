@@ -436,8 +436,11 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   Widget build(BuildContext context) {
     final card = _resolvedCard();
     final colors = Theme.of(context).colorScheme;
-    final pl = (card.currentValue ?? 0) - (card.pricePaid ?? 0);
-    final plPct = card.pricePaid != null && card.pricePaid! > 0 ? (pl / card.pricePaid!) * 100 : 0.0;
+    final hasValue = card.currentValue != null;
+    final pl = hasValue ? (card.currentValue! - (card.pricePaid ?? 0)) : null;
+    final plPct = (hasValue && card.pricePaid != null && card.pricePaid! > 0)
+        ? (pl! / card.pricePaid!) * 100
+        : null;
 
     final padding = MediaQuery.paddingOf(context);
     final bottomPad = padding.bottom;
@@ -569,8 +572,8 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                           Expanded(
                             child: _InfoBox(
                               label: 'Current Value',
-                              value: '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                              trend: card.valueTrend,
+                              value: hasValue ? '\$${card.currentValue!.toStringAsFixed(2)}' : 'N/A',
+                              trend: hasValue ? card.valueTrend : 0,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -583,10 +586,24 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _ValueRefreshNotice(
-                  refreshedAt: card.valueRefreshedAt,
-                  relativeRefreshed: _relativeRefreshed,
-                ),
+                if (hasValue)
+                  _ValueRefreshNotice(
+                    refreshedAt: card.valueRefreshedAt,
+                    relativeRefreshed: _relativeRefreshed,
+                  )
+                else
+                  InlineNoticeContainer(
+                    icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.60)),
+                    child: Text(
+                      card.valueRefreshedAt != null
+                          ? 'No recent comps for this card/parallel. Last checked ${_relativeRefreshed(card.valueRefreshedAt!)}.'
+                          : 'No recent comps for this card/parallel yet. Value will appear after a successful refresh.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            height: 1.35,
+                            color: colors.onSurface.withValues(alpha: 0.75),
+                          ),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 if (ref.watch(dailyTierCardIdsProvider).contains(card.id))
                   const _DailyRefreshBadge()
@@ -671,13 +688,14 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 class _PlCard extends StatelessWidget {
   const _PlCard({required this.pl, required this.plPct});
 
-  final double pl;
-  final double plPct;
+  final double? pl;
+  final double? plPct;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final positive = pl >= 0;
+    final hasValue = pl != null && plPct != null;
+    final positive = hasValue ? pl! >= 0 : true;
     final accent = positive ? _detailProfitColor(context) : colors.error;
 
     return AdaptiveListCard(
@@ -694,11 +712,11 @@ class _PlCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${positive ? '+' : ''}\$${pl.toStringAsFixed(2)}',
+                  hasValue ? '${positive ? '+' : ''}\$${pl!.toStringAsFixed(2)}' : 'N/A',
                   style: _detailValueEmphasisStyle(context)?.copyWith(color: accent),
                 ),
                 Text(
-                  '${plPct.toStringAsFixed(1)}%',
+                  hasValue ? '${plPct!.toStringAsFixed(1)}%' : 'N/A',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: accent,
