@@ -163,6 +163,15 @@ export function isEbaySecurityPage(html: string): boolean {
     (t.includes('access denied') && t.includes('ebay'));
 }
 
+function shouldCheckEbaySecurity(targetUrl: string): boolean {
+  try {
+    const host = new URL(targetUrl).hostname.toLowerCase();
+    return host === 'ebay.com' || host.endsWith('.ebay.com');
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Bright Data sometimes returns the unlocked target page as raw `text/html` (no `{ status_code, body }` JSON).
  * In that case the document is real eBay HTML — not a Bright Data login/error page.
@@ -843,6 +852,7 @@ async function unlockViaAsyncPoll(targetUrl: string, label: string): Promise<str
   console.log(
     `[sold-listings-brightdata] unlocker ctx source=${ctxSource} zone="${zone}" customer_len=${customer.length}`,
   );
+  const checkEbaySecurity = shouldCheckEbaySecurity(targetUrl);
 
   const maxPollMs = Number(Deno.env.get('BRIGHTDATA_ASYNC_POLL_MAX_MS') ?? String(DEFAULT_ASYNC_POLL_MAX_MS));
   const pollEveryMs = Number(Deno.env.get('BRIGHTDATA_ASYNC_POLL_INTERVAL_MS') ?? String(DEFAULT_ASYNC_POLL_INTERVAL_MS));
@@ -960,7 +970,7 @@ async function unlockViaAsyncPoll(targetUrl: string, label: string): Promise<str
     if (pollData === null) {
       if (isLikelyRawUnlockedEbayHtml(pollText)) {
         console.log('[sold-listings-brightdata] async poll returned raw eBay HTML (no JSON envelope)');
-        if (isEbaySecurityPage(pollText)) {
+        if (checkEbaySecurity && isEbaySecurityPage(pollText)) {
           throw new Error('ebay_bot_protection_page');
         }
         console.log(`[sold-listings-brightdata] async unlock ok label=${label} html_bytes=${pollText.length}`);
@@ -983,7 +993,7 @@ async function unlockViaAsyncPoll(targetUrl: string, label: string): Promise<str
       throw new Error('brightdata_empty_body');
     }
 
-    if (isEbaySecurityPage(html)) {
+    if (checkEbaySecurity && isEbaySecurityPage(html)) {
       throw new Error('ebay_bot_protection_page');
     }
 
@@ -1016,6 +1026,7 @@ async function brightDataUnlockSync(
   }
 
   const timeoutMs = unlockTimeoutMs(kind);
+  const checkEbaySecurity = shouldCheckEbaySecurity(targetUrl);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -1061,7 +1072,7 @@ async function brightDataUnlockSync(
     if (data === null) {
       if (isLikelyRawUnlockedEbayHtml(text)) {
         console.log('[sold-listings-brightdata] sync POST /request returned raw eBay HTML (no JSON envelope)');
-        if (isEbaySecurityPage(text)) {
+        if (checkEbaySecurity && isEbaySecurityPage(text)) {
           throw new Error('ebay_bot_protection_page');
         }
         console.log(
@@ -1091,7 +1102,7 @@ async function brightDataUnlockSync(
       throw new Error('brightdata_empty_body');
     }
 
-    if (isEbaySecurityPage(html)) {
+    if (checkEbaySecurity && isEbaySecurityPage(html)) {
       throw new Error('ebay_bot_protection_page');
     }
 

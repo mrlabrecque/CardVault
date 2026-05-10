@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +7,6 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/app_segmented_control.dart';
-import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
 import 'market_listing_row.dart';
@@ -31,22 +32,35 @@ class CardCompsSection extends ConsumerStatefulWidget {
 }
 
 class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
+  static const List<String> _loadingStatusSteps = [
+    'Refreshing sold comps...',
+    'Pulling recent sold listings...',
+    'Matching sales to this card...',
+    'Finalizing market averages...',
+  ];
+
   late List<Comp> _allComps = [];
   late bool _loading = true;
   late String _selectedGrade = widget.initialGrade;
   late int _selectedDays = 0; // 0 = all, 7 = 7 days, 30 = 30 days
   bool _fetchInProgress = false;
   bool _autoRefreshAttempted = false;
+  int _loadingStatusIndex = 0;
+  Timer? _loadingStatusTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchComps();
+    _syncLoadingTicker();
   }
 
   @override
   void didUpdateWidget(CardCompsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.externalLoading != widget.externalLoading) {
+      _syncLoadingTicker();
+    }
     if (oldWidget.masterCardId != widget.masterCardId ||
         oldWidget.parallelName != widget.parallelName) {
       _selectedGrade = widget.initialGrade;
@@ -58,10 +72,41 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
   }
 
+  @override
+  void dispose() {
+    _loadingStatusTimer?.cancel();
+    super.dispose();
+  }
+
+  bool get _isRefreshingUi => _loading || widget.externalLoading;
+
+  String get _loadingStatusText {
+    final idx = _loadingStatusIndex.clamp(0, _loadingStatusSteps.length - 1);
+    return _loadingStatusSteps[idx];
+  }
+
+  void _syncLoadingTicker() {
+    if (!_isRefreshingUi) {
+      _loadingStatusTimer?.cancel();
+      _loadingStatusTimer = null;
+      _loadingStatusIndex = 0;
+      return;
+    }
+    if (_loadingStatusTimer != null) return;
+    _loadingStatusIndex = 0;
+    _loadingStatusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingStatusIndex = (_loadingStatusIndex + 1) % _loadingStatusSteps.length;
+      });
+    });
+  }
+
   Future<void> _fetchComps() async {
     if (_fetchInProgress) return;
     _fetchInProgress = true;
     setState(() => _loading = true);
+    _syncLoadingTicker();
     try {
       var comps = await ref.read(compsServiceProvider).getMasterCardComps(
             widget.masterCardId,
@@ -89,7 +134,10 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       }
     } finally {
       _fetchInProgress = false;
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _syncLoadingTicker();
+      }
     }
   }
 
@@ -153,10 +201,39 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    if (_loading || widget.externalLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Center(child: CardFanLoader()),
+    if (_isRefreshingUi && _allComps.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 450),
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
+                  child: Text(
+                    _loadingStatusText,
+                    key: ValueKey(_loadingStatusText),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurface.withValues(alpha: 0.75),
+                          fontWeight: FontWeight.w500,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _CompCardSkeletonWave(),
+            const SizedBox(height: 8),
+            const _CompCardSkeletonWave(),
+            const SizedBox(height: 8),
+            const _CompCardSkeletonWave(),
+          ],
+        ),
       );
     }
 
@@ -202,6 +279,25 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_isRefreshingUi)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 450),
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: Text(
+                  _loadingStatusText,
+                  key: ValueKey(_loadingStatusText),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurface.withValues(alpha: 0.75),
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+            ),
+          ),
         // Date range filter
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -358,6 +454,115 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _CompCardSkeletonWave extends StatelessWidget {
+  const _CompCardSkeletonWave();
+
+  @override
+  Widget build(BuildContext context) {
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            _WaveSkeletonBox(
+              width: 56,
+              height: 56,
+              radius: 10,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _WaveSkeletonBox(
+                    height: 12,
+                    width: double.infinity,
+                    radius: 8,
+                  ),
+                  const SizedBox(height: 8),
+                  const _WaveSkeletonBox(
+                    height: 11,
+                    width: 140,
+                    radius: 8,
+                  ),
+                  const SizedBox(height: 8),
+                  const _WaveSkeletonBox(
+                    height: 20,
+                    width: 88,
+                    radius: 20,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            const _WaveSkeletonBox(
+              height: 14,
+              width: 56,
+              radius: 8,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WaveSkeletonBox extends StatefulWidget {
+  const _WaveSkeletonBox({
+    required this.width,
+    required this.height,
+    this.radius = 8,
+  });
+
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  State<_WaveSkeletonBox> createState() => _WaveSkeletonBoxState();
+}
+
+class _WaveSkeletonBoxState extends State<_WaveSkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final base = colors.surfaceContainerHighest.withValues(alpha: 0.72);
+    final glow = colors.surface.withValues(alpha: 0.75);
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final shift = (_controller.value * 2) - 1;
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.radius),
+            gradient: LinearGradient(
+              begin: Alignment(-1.6 + shift, 0),
+              end: Alignment(-0.4 + shift, 0),
+              colors: [base, glow, base],
+              stops: const [0.1, 0.45, 0.9],
+            ),
+          ),
+        );
+      },
     );
   }
 }

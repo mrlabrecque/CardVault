@@ -185,6 +185,37 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         });
       }
 
+      // If the last refresh produced zero rows, still honor cooldown to avoid
+      // re-hitting provider repeatedly for likely-empty searches.
+      const { data: recentRefreshMarker } = await admin
+        .from('card_comps_refresh_log')
+        .select('last_refreshed_at, last_result_count')
+        .eq('master_card_id', masterCardId)
+        .eq('parallel_name', parallelName)
+        .gte('last_refreshed_at', cooldownCutoffIso)
+        .maybeSingle();
+
+      if (recentRefreshMarker && Number(recentRefreshMarker.last_result_count ?? 0) <= 0) {
+        console.log(`[sold-comps/refresh] cooldown hit (zero-result marker) for ${masterCardId} ${parallelName}`);
+        const { data: allCompsData } = await admin
+          .from('card_sold_comps')
+          .select('price, grade')
+          .eq('master_card_id', masterCardId)
+          .eq('parallel_name', parallelName);
+
+        const { rawAvg, psa10Avg, psa9Avg } = averagesFromCompsRows(allCompsData as any[]);
+        return json({
+          comps: [],
+          rawAvg,
+          psa10Avg,
+          psa9Avg,
+          totalCount: 0,
+          query,
+          cached: true,
+          zeroResultCooldown: true,
+        });
+      }
+
       let raw: any[];
       try {
         console.log('[sold-comps/refresh] invoking Bright Data (fresh fetch, no cooldown)');
@@ -279,6 +310,18 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         });
         await admin.from('card_sold_comps').insert(rows);
       }
+
+      await admin
+        .from('card_comps_refresh_log')
+        .upsert(
+          {
+            master_card_id: masterCardId,
+            parallel_name: parallelName,
+            last_refreshed_at: new Date().toISOString(),
+            last_result_count: items.length,
+          },
+          { onConflict: 'master_card_id,parallel_name' },
+        );
 
       const { data: allCompsData } = await admin
         .from('card_sold_comps')
