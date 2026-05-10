@@ -8,6 +8,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/app_breadcrumb.dart';
+import '../../core/widgets/card_attributes_wrap.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
@@ -343,10 +344,9 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
           isSSP: staged.isSSP,
         ));
 
-        // Fetch pricing from comps provider (fire-and-forget)
-        unawaited(ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {
-          // Pricing fetch failed, but card was added — user can refresh later
-        }));
+        unawaited(
+          ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {}),
+        );
         unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
       }
 
@@ -611,11 +611,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                             Text(card.setName, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                             if (card.attributes.contains('RC')) ...[
                               const SizedBox(width: 4),
-                              const AttrTag('RC'),
+                              const AttrTag('RC', color: CardAttributePalette.rookie),
                             ],
                             if (card.attributes.contains('AU')) ...[
                               const SizedBox(width: 4),
-                              const AttrTag('AU'),
+                              const AttrTag('AUTO', color: CardAttributePalette.auto),
                             ],
                           ],
                         ),
@@ -661,11 +661,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                                   Text(_selectedCsCard!.setName, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                                   if (_selectedCard!.isRookie) ...[
                                     const SizedBox(width: 4),
-                                    const AttrTag('RC'),
+                                    const AttrTag('RC', color: CardAttributePalette.rookie),
                                   ],
                                   if (_selectedCard!.isAuto) ...[
                                     const SizedBox(width: 4),
-                                    const AttrTag('AU'),
+                                    const AttrTag('AUTO', color: CardAttributePalette.auto),
                                   ],
                                 ],
                               ),

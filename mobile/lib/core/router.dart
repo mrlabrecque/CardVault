@@ -83,6 +83,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 MasterCardDetailScreen(
                   masterCard: args.masterCard,
                   parallelName: args.parallelName,
+                  parallelSerialMax: args.parallelSerialMax,
+                  parallelIsAuto: args.parallelIsAuto,
                   releaseName: args.releaseName,
                   setName: args.setName,
                   year: args.year,

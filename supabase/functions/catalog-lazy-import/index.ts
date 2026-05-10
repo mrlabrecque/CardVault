@@ -115,24 +115,41 @@ Deno.serve(async (req) => {
 
     // ── Upsert parallels ─────────────────────────────────────────────────────
     const rawParallels = setDetail.parallels ?? [];
-    // Deduplicate by name in case the catalog returns duplicates
-    const seenNames = new Set<string>();
-    const parallels = rawParallels.filter(p => {
-      if (seenNames.has(p.name)) return false;
-      seenNames.add(p.name);
-      return true;
-    });
+    // Deduplicate by name while preserving the richest parallel payload.
+    // CardSight can return duplicate names where only one carries numberedTo.
+    const parallelsByName = new Map<string, { id: string; name: string; numberedTo?: number }>();
+    for (const p of rawParallels) {
+      const existing = parallelsByName.get(p.name);
+      if (!existing) {
+        parallelsByName.set(p.name, p);
+        continue;
+      }
+      const existingHasNumbered = existing.numberedTo != null;
+      const candidateHasNumbered = p.numberedTo != null;
+      if (!existingHasNumbered && candidateHasNumbered) {
+        parallelsByName.set(p.name, p);
+      }
+    }
+    const parallels = Array.from(parallelsByName.values());
     let dbParallels: unknown[] = [];
     if (parallels.length > 0) {
-      const rows = parallels.map((p, i) => ({
-        set_id:       dbSet.id,
-        name:         p.name,
-        serial_max:   p.numberedTo ?? null,
-        is_auto:      /\bauto(graph)?\b/i.test(p.name),
-        color_hex:    null,
-        sort_order:   i,
-        cardsight_id: p.id,
-      }));
+      const rows = parallels.map((p, i) => {
+        const serialFromName = (() => {
+          const m = p.name.match(/\/\s*(\d{1,4})\b/);
+          if (!m) return null;
+          const n = Number.parseInt(m[1], 10);
+          return Number.isFinite(n) ? n : null;
+        })();
+        return {
+          set_id:       dbSet.id,
+          name:         p.name,
+          serial_max:   p.numberedTo ?? serialFromName ?? null,
+          is_auto:      /\bauto(graph)?\b/i.test(p.name),
+          color_hex:    null,
+          sort_order:   i,
+          cardsight_id: p.id,
+        };
+      });
       const { data, error } = await supabase
         .from('set_parallels')
         .upsert(rows, { onConflict: 'set_id,name' })

@@ -10,6 +10,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/card_attributes_wrap.dart';
 import '../../core/widgets/info_box.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/theme/chrome_metrics.dart';
@@ -337,17 +338,35 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       }
 
       final scanParallel = card.parallel;
+      String normalizeParallelName(String name) =>
+          name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
       SetParallel? matchedParallel;
       if (scanParallel != null && scanParallel.name.isNotEmpty) {
-        final nameLower = scanParallel.name.toLowerCase();
+        final target = normalizeParallelName(scanParallel.name);
         for (final p in resolved.parallels) {
-          if (p.name.toLowerCase() == nameLower) {
+          final candidate = normalizeParallelName(p.name);
+          if (candidate == target || candidate.contains(target) || target.contains(candidate)) {
             matchedParallel = p;
             break;
           }
         }
       }
       final parallelLabel = scanParallel?.name ?? 'Base';
+      final effectiveParallel = switch ((matchedParallel, scanParallel)) {
+        (SetParallel p, ParallelInfo s) when p.serialMax == null && s.numberedTo != null => SetParallel(
+            id: p.id,
+            name: p.name,
+            serialMax: s.numberedTo,
+            isAuto: p.isAuto,
+          ),
+        (SetParallel p, _) => p,
+        (_, ParallelInfo s) when s.name.isNotEmpty => SetParallel(
+            id: s.id.isNotEmpty ? s.id : '__scan_parallel__',
+            name: s.name,
+            serialMax: s.numberedTo,
+          ),
+        _ => null,
+      };
 
       if (!mounted) return;
       setState(() {
@@ -375,6 +394,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       _openMasterCardDetail(
         card: master,
         parallelName: parallelLabel,
+        parallel: effectiveParallel,
         release: relSet.release,
         set: relSet.set,
       );
@@ -578,6 +598,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       _openMasterCardDetail(
         card: card,
         parallelName: 'Base',
+        parallel: null,
         release: _selectedRelease,
         set: _selectedSet,
       );
@@ -603,6 +624,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   Future<void> _openMasterCardDetail({
     required MasterCard card,
     required String parallelName,
+    SetParallel? parallel,
     ReleaseRecord? release,
     SetRecord? set,
   }) async {
@@ -617,9 +639,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     await context.push<void>(
       '/catalog/master',
       extra: MasterCardDetailArgs(
-        masterCard: card,
+        masterCard: MasterCard(
+          id: card.id,
+          player: card.player,
+          cardNumber: card.cardNumber,
+          isRookie: card.isRookie,
+          isAuto: card.isAuto || (parallel?.isAuto ?? false),
+          isPatch: card.isPatch,
+          isSSP: card.isSSP,
+          serialMax: parallel?.serialMax ?? card.serialMax,
+          imageUrl: card.imageUrl,
+        ),
         parallelName: parallelName,
-        releaseName: release?.displayName,
+        parallelSerialMax: parallel?.serialMax,
+        parallelIsAuto: parallel?.isAuto ?? false,
+        releaseName: release?.name,
         setName: set?.name,
         year: release?.year,
         sport: release?.sport,
@@ -660,7 +694,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       );
       final created = await ref.read(cardsServiceProvider).addCard(form);
       ref.invalidate(userCardsProvider);
-      unawaited(ref.read(compsServiceProvider).refreshCardValue(created.userCardId));
+      unawaited(
+        ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {}),
+      );
       unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
       if (mounted) {
         AdaptiveSnackBar.show(context, message: 'Card added!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
@@ -712,6 +748,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         card: card,
         setName: set?.name,
         releaseName: release?.displayName,
+        previewParallelName: _mode == _CatalogMode.search ? _searchParallelName : _parallelName,
+        previewParallelSerialMax: selectedParallel?.serialMax,
+        previewParallelIsAuto: selectedParallel?.isAuto ?? false,
         showPricePaid: true,
         pricePaidCtrl: _pricePaidCtrl,
         showSerialNumber: selectedParallel?.serialMax != null,
@@ -746,7 +785,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
             );
             final created = await ref.read(cardsServiceProvider).addCard(form);
             ref.invalidate(userCardsProvider);
-            unawaited(ref.read(compsServiceProvider).refreshCardValue(created.userCardId));
+            unawaited(
+              ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {}),
+            );
             unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
             if (mounted) {
               _pricePaidCtrl.clear();
@@ -782,6 +823,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         card: card,
         setName: set?.name,
         releaseName: release?.displayName,
+        previewParallelName: parallelName,
+        previewParallelSerialMax: (_mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel)?.serialMax,
+        previewParallelIsAuto: (_mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel)?.isAuto ?? false,
         showTargetPrice: true,
         targetPriceCtrl: _targetPriceCtrl,
         showGraded: false,
@@ -1438,6 +1482,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                     _openMasterCardDetail(
                       card: _selectedCard!,
                       parallelName: p?.name ?? 'Base',
+                      parallel: p,
                       release: _selectedRelease,
                       set: _selectedSet,
                     );
@@ -1723,8 +1768,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       mainAxisSize: MainAxisSize.min,
       spacing: 4,
       children: [
-        if (p.isAuto) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-        if (p.serialMax != null) AttrTag('/${p.serialMax}', color: const Color(0xFF6366F1)),
+        if (p.isAuto) const AttrTag('AUTO', color: CardAttributePalette.auto),
+        if (p.serialMax != null) AttrTag('/${p.serialMax}', color: const Color(0xFF3B82F6)),
       ],
     );
   }
@@ -1770,11 +1815,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       mainAxisSize: MainAxisSize.min,
       spacing: 4,
       children: [
-        if (c.isRookie) AttrTag('RC', color: const Color(0xFF16A34A)),
-        if (c.isAuto) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-        if (c.isPatch) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-        if (c.isSSP) AttrTag('SSP', color: const Color(0xFFEA580C)),
-        if (c.serialMax != null) AttrTag('/${c.serialMax}', color: const Color(0xFF6366F1)),
+        if (c.isRookie) const AttrTag('RC', color: CardAttributePalette.rookie),
+        if (c.isAuto) const AttrTag('AUTO', color: CardAttributePalette.auto),
+        if (c.isPatch) const AttrTag('PATCH', color: CardAttributePalette.patch),
+        if (c.isSSP) const AttrTag('SSP', color: CardAttributePalette.ssp),
+        if (c.serialMax != null) AttrTag('/${c.serialMax}', color: const Color(0xFF3B82F6)),
       ],
     );
   }
@@ -1877,6 +1922,7 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
                       _openMasterCardDetail(
                         card: _searchSelectedCard!,
                         parallelName: p?.name ?? 'Base',
+                        parallel: p,
                         release: _searchSelectedRelease,
                         set: _searchSelectedSet,
                       );
@@ -2045,6 +2091,7 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
                 await _openMasterCardDetail(
                   card: card,
                   parallelName: 'Base',
+                  parallel: null,
                   release: release,
                   set: set,
                 );

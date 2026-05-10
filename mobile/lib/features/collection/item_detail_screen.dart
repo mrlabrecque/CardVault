@@ -7,7 +7,7 @@ import '../../core/models/user_card.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/adaptive_list_card.dart';
-import '../../core/widgets/attr_tag.dart';
+import '../../core/widgets/card_attributes_wrap.dart';
 import '../../core/widgets/inline_notice_container.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/services/cards_service.dart';
@@ -166,9 +166,16 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
             Future<void> saveFromSheet() async {
               setSheetState(() => saving = true);
               try {
+                final selectedParallelName = selectedParallelId == null
+                    ? null
+                    : parallels
+                        .where((p) => p.id == selectedParallelId)
+                        .map((p) => p.name.trim())
+                        .where((name) => name.isNotEmpty)
+                        .firstOrNull;
                 final parallelName = isOtherParallel
                     ? (otherParallelCtrl.text.trim().isEmpty ? 'Base' : otherParallelCtrl.text.trim())
-                    : (selectedParallelId == null ? 'Base' : null);
+                    : (selectedParallelId == null ? 'Base' : (selectedParallelName ?? card.parallel));
                 await ref.read(cardsServiceProvider).updateCard(card.id, {
                   'price_paid': double.tryParse(pricePaidCtrl.text),
                   'serial_number': serialCtrl.text.isEmpty ? null : serialCtrl.text,
@@ -1001,16 +1008,12 @@ class _EditCardPreview extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                if (card.rookie) AttrTag('RC', color: const Color(0xFF16A34A)),
-                if (card.autograph) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-                if (card.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-                if (card.ssp) AttrTag('SSP', color: const Color(0xFFB45309)),
-                if (card.serialMax != null) AttrTag('/${card.serialMax}', color: const Color(0xFF6366F1)),
-              ],
+            CardAttributesWrap(
+              rookie: card.rookie,
+              autograph: card.autograph,
+              memorabilia: card.memorabilia,
+              ssp: card.ssp,
+              serialMax: card.serialMax,
             ),
           ],
         ),

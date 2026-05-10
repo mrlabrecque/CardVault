@@ -244,6 +244,56 @@ class AddCardFormData {
 class CardsService {
   CardsService(this._supabase);
   final SupabaseClient _supabase;
+  static const Duration _compsRefreshCooldown = Duration(hours: 24);
+
+  String? _normalizeGradeValue(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  double _averageForGrade(List<Map<String, dynamic>> comps, String grade) {
+    final filtered = comps.where((c) {
+      final compGrade = ((c['grade'] as String?)?.trim().isNotEmpty ?? false)
+          ? (c['grade'] as String).trim()
+          : 'Raw';
+      return compGrade == grade;
+    }).toList();
+    if (filtered.isEmpty) return 0;
+    final total = filtered.fold<double>(0, (sum, c) {
+      final price = c['price'];
+      if (price is num) return sum + price.toDouble();
+      return sum;
+    });
+    return total / filtered.length;
+  }
+
+  Future<double?> _seedCurrentValueFromCachedComps({
+    required String masterCardId,
+    required String parallelName,
+    required bool isGraded,
+    required String? gradeValue,
+  }) async {
+    final cutoff = DateTime.now().subtract(_compsRefreshCooldown).toIso8601String();
+    final rows = await _supabase
+        .from('card_sold_comps')
+        .select('price, grade')
+        .eq('master_card_id', masterCardId)
+        .eq('parallel_name', parallelName)
+        .gte('fetched_at', cutoff);
+    final comps = (rows as List).cast<Map<String, dynamic>>();
+    if (comps.isEmpty) return null;
+
+    final rawAvg = _averageForGrade(comps, 'Raw');
+    final psa10Avg = _averageForGrade(comps, 'PSA 10');
+    final psa9Avg = _averageForGrade(comps, 'PSA 9');
+    final normalizedGrade = _normalizeGradeValue(gradeValue);
+
+    if (!isGraded) return rawAvg;
+    if (normalizedGrade == '10' || normalizedGrade == '10.0') return psa10Avg;
+    if (normalizedGrade == '9' || normalizedGrade == '9.0') return psa9Avg;
+    return rawAvg;
+  }
 
   Future<List<UserCard>> loadUserCards() async {
     try {
@@ -585,6 +635,7 @@ class CardsService {
 
   Future<({String userCardId, String masterCardId})> addCard(AddCardFormData form) async {
     String? masterCardId = form.masterCardId;
+    String normalizedParallelName = form.parallelName.trim().isEmpty ? 'Base' : form.parallelName.trim();
 
     if (masterCardId == null) {
       final result = await _supabase
@@ -604,6 +655,34 @@ class CardsService {
       masterCardId = result['id'] as String;
     }
 
+    // Canonicalize parallel_name from the selected parallel row whenever possible
+    // so downstream comps/value refresh always uses the intended parallel.
+    if (form.parallelId != null && form.parallelId!.isNotEmpty) {
+      final parallelRow = await _supabase
+          .from('set_parallels')
+          .select('name')
+          .eq('id', form.parallelId!)
+          .maybeSingle();
+      final dbName = parallelRow == null
+          ? null
+          : (Map<String, dynamic>.from(parallelRow)['name'] as String?)?.trim();
+      if (dbName != null && dbName.isNotEmpty) {
+        normalizedParallelName = dbName;
+      }
+    }
+
+    double? seededCurrentValue;
+    try {
+      seededCurrentValue = await _seedCurrentValueFromCachedComps(
+        masterCardId: masterCardId,
+        parallelName: normalizedParallelName,
+        isGraded: form.isGraded,
+        gradeValue: form.gradeValue,
+      );
+    } catch (_) {
+      // If cache read fails, card creation should still succeed.
+    }
+
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
@@ -611,12 +690,14 @@ class CardsService {
       'master_card_id': masterCardId,
       'user_id': userId,
       'parallel_id': form.parallelId,
-      'parallel_name': form.parallelName,
+      'parallel_name': normalizedParallelName,
       'price_paid': form.pricePaid,
       'serial_number': form.serialNumber?.isNotEmpty == true ? form.serialNumber : null,
       'is_graded': form.isGraded,
       'grader': form.isGraded ? form.grader : null,
       'grade_value': form.isGraded && form.gradeValue?.isNotEmpty == true ? form.gradeValue : null,
+      if (seededCurrentValue != null) 'current_value': seededCurrentValue,
+      if (seededCurrentValue != null) 'value_refreshed_at': DateTime.now().toIso8601String(),
     }).select('id').single();
 
     return (

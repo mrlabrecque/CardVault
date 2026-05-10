@@ -8,10 +8,10 @@ class AttrTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color ?? Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color != null ? Colors.white : Theme.of(context).colorScheme.onPrimaryContainer)),
     );

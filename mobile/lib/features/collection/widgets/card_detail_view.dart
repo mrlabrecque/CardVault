@@ -4,8 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/models/user_card.dart';
 import '../../../core/services/cards_service.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/attr_tag.dart';
-import '../../../core/widgets/serial_tag.dart';
+import '../../../core/widgets/card_attributes_wrap.dart';
 
 enum CardDetailSection { hero, attributes, actions }
 
@@ -65,7 +64,14 @@ class CardDetailView extends StatelessWidget {
   String? get _set => userCard?.set ?? setName;
   String? get _checklist => userCard?.checklist;
   String? get _releaseName => releaseName;
-  String? get _parallelName => userCard?.parallel ?? (parallelName != 'Base' ? parallelName : null);
+  String? get _parallelName {
+    final raw = userCard?.parallel ?? parallelName;
+    final trimmed = raw?.trim();
+    if (trimmed == null || trimmed.isEmpty || trimmed.toLowerCase() == 'base') {
+      return null;
+    }
+    return trimmed;
+  }
   bool get _isRookie => userCard?.rookie ?? masterCard?.isRookie ?? false;
   bool get _isAuto => userCard?.autograph ?? masterCard?.isAuto ?? false;
   bool get _isPatch => userCard?.memorabilia ?? masterCard?.isPatch ?? false;
@@ -170,17 +176,15 @@ class CardDetailView extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    if (_isRookie) AttrTag('RC', color: const Color(0xFF16A34A)),
-                    if (_isAuto) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-                    if (_isPatch) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-                    if (_isSSP) AttrTag('SSP', color: const Color(0xFFB45309)),
-                    if (_isGraded) AttrTag('${_grader ?? 'PSA'} ${_grade ?? ''}'),
-                    SerialTag(serialNumber: _serialNumber, serialMax: _serialMax),
-                  ],
+                CardAttributesWrap(
+                  rookie: _isRookie,
+                  autograph: _isAuto,
+                  memorabilia: _isPatch,
+                  ssp: _isSSP,
+                  isGraded: _isGraded,
+                  gradeLabel: '${_grader ?? 'PSA'} ${_grade ?? ''}'.trim(),
+                  serialNumber: _serialNumber,
+                  serialMax: _serialMax,
                 ),
               ],
             ),

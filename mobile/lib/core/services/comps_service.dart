@@ -8,6 +8,21 @@ class CompsService {
   final SupabaseClient _supabase;
   static const Duration _compsRefreshCooldown = Duration(hours: 24);
 
+  String _effectiveParallelName(Map<String, dynamic> row) {
+    final rawParallelName = (row['parallel_name'] as String?)?.trim();
+    if (rawParallelName != null && rawParallelName.isNotEmpty) {
+      return rawParallelName;
+    }
+    final linkedParallel = row['set_parallels'];
+    if (linkedParallel is Map) {
+      final linkedName = (Map<String, dynamic>.from(linkedParallel)['name'] as String?)?.trim();
+      if (linkedName != null && linkedName.isNotEmpty) {
+        return linkedName;
+      }
+    }
+    return 'Base';
+  }
+
   String _extractErrorMessage(dynamic raw) {
     if (raw == null) return '';
     if (raw is String) return raw;
@@ -81,12 +96,12 @@ class CompsService {
     // Resolve master_card_id + parallel_name from user_card, then fetch comps
     final cardData = await _supabase
         .from('user_cards')
-        .select('master_card_id, parallel_name')
+        .select('master_card_id, parallel_name, set_parallels!parallel_id(name)')
         .eq('id', cardId)
         .single();
 
     final masterId = (cardData as Map)['master_card_id'] as String?;
-    final parallelName = ((cardData as Map)['parallel_name'] as String?) ?? 'Base';
+    final parallelName = _effectiveParallelName(Map<String, dynamic>.from(cardData));
 
     if (masterId == null) {
       return [];
@@ -206,7 +221,7 @@ class CompsService {
     for (final cardId in cardIds) {
       final cardData = await _supabase
           .from('user_cards')
-          .select('id, master_card_id, parallel_name, is_graded, grade_value')
+          .select('id, master_card_id, parallel_name, is_graded, grade_value, set_parallels!parallel_id(name)')
           .eq('id', cardId)
           .maybeSingle();
       if (cardData == null) continue;
@@ -219,7 +234,7 @@ class CompsService {
       final id = row['id'] as String?;
       final masterId = row['master_card_id'] as String?;
       if (id == null || masterId == null) continue;
-      final parallelName = (row['parallel_name'] as String?) ?? 'Base';
+      final parallelName = _effectiveParallelName(row);
       final key = '$masterId|$parallelName';
       byCompsKey.putIfAbsent(key, () => []).add(row);
     }
@@ -230,7 +245,7 @@ class CompsService {
     for (final entry in byCompsKey.entries) {
       final first = entry.value.first;
       final masterId = first['master_card_id'] as String;
-      final parallelName = (first['parallel_name'] as String?) ?? 'Base';
+      final parallelName = _effectiveParallelName(first);
 
       final hasFreshCachedComps = await _hasFreshCachedComps(masterId, parallelName);
       if (!hasFreshCachedComps) {
@@ -256,7 +271,18 @@ class CompsService {
       final psa9Avg = _averageForGrade(comps, 'PSA 9');
       final refreshedAt = DateTime.now().toIso8601String();
 
-      for (final card in entry.value) {
+      // Fan-out reconciliation: once comps for this master+parallel are ready,
+      // apply value updates to all matching user_cards, not just the caller card.
+      final matchingRowsRaw = await _supabase
+          .from('user_cards')
+          .select('id, master_card_id, parallel_name, is_graded, grade_value, set_parallels!parallel_id(name)')
+          .eq('master_card_id', masterId);
+      final matchingRows = (matchingRowsRaw as List)
+          .map((r) => Map<String, dynamic>.from(r as Map))
+          .where((row) => _effectiveParallelName(row) == parallelName)
+          .toList();
+
+      for (final card in matchingRows) {
         final id = card['id'] as String?;
         if (id == null) continue;
         final isGraded = card['is_graded'] as bool? ?? false;

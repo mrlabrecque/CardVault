@@ -20,6 +20,8 @@ class MasterCardDetailArgs {
   const MasterCardDetailArgs({
     required this.masterCard,
     required this.parallelName,
+    this.parallelSerialMax,
+    this.parallelIsAuto = false,
     this.releaseName,
     this.setName,
     this.year,
@@ -30,6 +32,8 @@ class MasterCardDetailArgs {
 
   final MasterCard masterCard;
   final String parallelName;
+  final int? parallelSerialMax;
+  final bool parallelIsAuto;
   final String? releaseName;
   final String? setName;
   final int? year;
@@ -49,6 +53,8 @@ class MasterCardDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.masterCard,
     required this.parallelName,
+    this.parallelSerialMax,
+    this.parallelIsAuto = false,
     this.releaseName,
     this.setName,
     this.year,
@@ -59,6 +65,8 @@ class MasterCardDetailScreen extends ConsumerStatefulWidget {
 
   final MasterCard masterCard;
   final String parallelName;
+  final int? parallelSerialMax;
+  final bool parallelIsAuto;
   final String? releaseName;
   final String? setName;
   final int? year;
@@ -198,9 +206,9 @@ class _MasterCardDetailScreenState
               year: widget.year,
               releaseName: widget.releaseName,
               setName: widget.setName,
-              serialMax: masterCard.serialMax,
+              serialMax: widget.parallelSerialMax ?? masterCard.serialMax,
               rookie: masterCard.isRookie,
-              autograph: masterCard.isAuto,
+              autograph: masterCard.isAuto || widget.parallelIsAuto,
               memorabilia: masterCard.isPatch,
               ssp: masterCard.isSSP,
             ),

@@ -15,6 +15,20 @@ double? _tryParseDouble(dynamic value) {
   return null;
 }
 
+String? _tryParseString(dynamic value) {
+  if (value == null) return null;
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+  return value.toString();
+}
+
+bool _hasAttribute(dynamic attrs, String code) {
+  if (attrs is! List) return false;
+  return attrs.any((a) => (a?.toString().toUpperCase() ?? '') == code);
+}
+
 class UserCard {
   final String id;
   final String? masterCardId;
@@ -83,6 +97,10 @@ class UserCard {
     final setData = master?['sets'] as Map<String, dynamic>?;
     final release = setData?['releases'] as Map<String, dynamic>?;
     final parallel = json['set_parallels'] as Map<String, dynamic>?;
+    final attrs = master?['attributes'];
+    final parallelName = _tryParseString(json['parallel_name']) ??
+        _tryParseString(parallel?['name']) ??
+        'Base';
 
     return UserCard(
       id: json['id'] as String,
@@ -95,7 +113,7 @@ class UserCard {
       year: _tryParseInt(release?['year']),
       setId: setData?['id'] as String?,
       setCardCount: _tryParseInt(setData?['card_count']),
-      parallel: json['parallel_name'] as String? ?? 'Base',
+      parallel: parallelName,
       parallelId: json['parallel_id'] as String?,
       grade: json['grade_value'] as String?,
       isGraded: json['is_graded'] as bool? ?? false,
@@ -106,10 +124,12 @@ class UserCard {
       pricePaid: _tryParseDouble(json['price_paid']),
       currentValue: _tryParseDouble(json['current_value']),
       previousValue: _tryParseDouble(json['previous_value']),
-      rookie: master?['is_rookie'] as bool? ?? false,
-      autograph: master?['is_auto'] as bool? ?? false,
-      memorabilia: master?['is_patch'] as bool? ?? false,
-      ssp: master?['is_ssp'] as bool? ?? false,
+      rookie: (master?['is_rookie'] as bool? ?? false) || _hasAttribute(attrs, 'RC'),
+      autograph: (master?['is_auto'] as bool? ?? false) ||
+          (parallel?['is_auto'] as bool? ?? false) ||
+          _hasAttribute(attrs, 'AU'),
+      memorabilia: (master?['is_patch'] as bool? ?? false) || _hasAttribute(attrs, 'GU'),
+      ssp: (master?['is_ssp'] as bool? ?? false) || _hasAttribute(attrs, 'SSP'),
       imageUrl: master?['image_url'] as String?,
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
       weeklyPriceCheck: json['weekly_price_check'] as bool? ?? false,

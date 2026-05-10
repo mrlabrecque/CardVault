@@ -35,6 +35,9 @@ class CardSheet extends StatefulWidget {
     this.gradeValueCtrl,
     this.onGradedChanged,
     this.onGraderChanged,
+    this.previewParallelName,
+    this.previewParallelSerialMax,
+    this.previewParallelIsAuto = false,
   });
 
   final String title;
@@ -73,6 +76,9 @@ class CardSheet extends StatefulWidget {
   final TextEditingController? gradeValueCtrl;
   final void Function(bool)? onGradedChanged;
   final void Function(String?)? onGraderChanged;
+  final String? previewParallelName;
+  final int? previewParallelSerialMax;
+  final bool previewParallelIsAuto;
 
   @override
   State<CardSheet> createState() => _CardSheetState();
@@ -164,6 +170,9 @@ class _CardSheetState extends State<CardSheet> {
                         card: widget.card,
                         setName: widget.setName,
                         releaseName: widget.releaseName,
+                        parallelName: widget.previewParallelName,
+                        parallelSerialMax: widget.previewParallelSerialMax,
+                        parallelIsAuto: widget.previewParallelIsAuto,
                       ),
                     ),
                     const SizedBox(height: 16),

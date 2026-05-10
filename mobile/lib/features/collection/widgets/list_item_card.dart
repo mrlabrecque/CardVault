@@ -47,7 +47,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     }
 
     final info = Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+      padding: const EdgeInsets.fromLTRB(0, 8, 6, 12),
       child: CardInfoSection(
         player: stack.player,
         cardNumber: stack.cardNumber,
@@ -71,7 +71,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
             onPressed: onHeaderTap,
-            child: info,
+            child: Align(alignment: Alignment.centerLeft, child: info),
           )
         : InkWell(
             onTap: onHeaderTap,
@@ -84,6 +84,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CardThumbnail(imageUrl: stack.imageUrl, sport: stack.sport, width: 70),
+          const SizedBox(width: 10),
           Expanded(child: tappableInfo),
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 8, 12, 12),

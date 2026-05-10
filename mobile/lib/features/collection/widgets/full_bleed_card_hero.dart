@@ -3,8 +3,7 @@ import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/widgets/attr_tag.dart';
-import '../../../core/widgets/serial_tag.dart';
+import '../../../core/widgets/card_attributes_wrap.dart';
 
 /// Display data backing a [FullBleedHero]. Both the user-collection detail
 /// (`UserCard`) and the catalog's master-card detail map their fields onto
@@ -76,8 +75,11 @@ class FullBleedHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = details.imageUrl;
-    final parallelName = (details.parallel != null && details.parallel != 'Base')
-        ? details.parallel
+    final trimmedParallel = details.parallel?.trim();
+    final parallelName = (trimmedParallel != null &&
+            trimmedParallel.isNotEmpty &&
+            trimmedParallel.toLowerCase() != 'base')
+        ? trimmedParallel
         : null;
     final textTheme = Theme.of(context).textTheme;
 
@@ -182,19 +184,16 @@ class FullBleedHero extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
+          CardAttributesWrap(
+            rookie: details.rookie,
+            autograph: details.autograph,
+            memorabilia: details.memorabilia,
+            ssp: details.ssp,
+            isGraded: details.isGraded,
+            gradeLabel: '${details.grader ?? 'PSA'} ${details.grade ?? ''}'.trim(),
+            serialNumber: details.serialNumber,
+            serialMax: details.serialMax,
             alignment: WrapAlignment.center,
-            children: [
-              if (details.rookie) AttrTag('RC', color: const Color(0xFF16A34A)),
-              if (details.autograph) AttrTag('AUTO', color: const Color(0xFF7C3AED)),
-              if (details.memorabilia) AttrTag('PATCH', color: const Color(0xFF0369A1)),
-              if (details.ssp) AttrTag('SSP', color: const Color(0xFFB45309)),
-              if (details.isGraded)
-                AttrTag('${details.grader ?? 'PSA'} ${details.grade ?? ''}'.trim()),
-              SerialTag(serialNumber: details.serialNumber, serialMax: details.serialMax),
-            ],
           ),
         ],
       ),
