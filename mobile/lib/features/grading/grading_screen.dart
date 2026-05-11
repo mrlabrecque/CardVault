@@ -8,6 +8,8 @@ import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
+import '../../core/utils/currency_format.dart';
+import '../../core/utils/usd_field.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
@@ -77,9 +79,18 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
 
   final Map<String, _CardState> _cardStates = {};
   final _searchController = TextEditingController();
+  final _gradingFeeUsdFmt = createUsdCurrencyInputFormatter();
+  late final TextEditingController _gradingFeeCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _gradingFeeCtrl = TextEditingController(text: _gradingFeeUsdFmt.formatDouble(_gradingFee));
+  }
 
   @override
   void dispose() {
+    _gradingFeeCtrl.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -313,39 +324,35 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
               ],
             ),
           ),
-          Row(
-            children: [
-              const Text('\$', style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
-              SizedBox(
-                width: 56,
-                child: TextFormField(
-                  initialValue: _gradingFee.toStringAsFixed(0),
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
-                    ),
-                  ),
-                  onChanged: (v) {
-                    final parsed = double.tryParse(v);
-                    if (parsed != null) setState(() => _gradingFee = parsed);
-                  },
+          SizedBox(
+            width: 112,
+            child: TextFormField(
+              controller: _gradingFeeCtrl,
+              inputFormatters: [_gradingFeeUsdFmt],
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
                 ),
               ),
-            ],
+              onChanged: (v) {
+                final parsed = parseUsdInput(v);
+                if (parsed != null) setState(() => _gradingFee = parsed);
+              },
+            ),
           ),
         ],
         ),
@@ -412,20 +419,7 @@ class _CardRow extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CardInfoSection(
-              player: card.player,
-              cardNumber: card.cardNumber,
-              year: card.year,
-              set: card.set,
-              parallel: card.parallel,
-              serialMax: card.serialMax,
-              sport: card.sport,
-              rookie: card.rookie,
-              autograph: card.autograph,
-              memorabilia: card.memorabilia,
-              ssp: card.ssp,
-              isGraded: false,
-            ),
+            CardInfoSection.fromUserCard(card, isGraded: false),
             if (tier != _Tier.pending) ...[
               const SizedBox(width: 6),
               Padding(
@@ -438,7 +432,7 @@ class _CardRow extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '\$${(card.pricePaid ?? 0).toStringAsFixed(2)} paid · \$${(card.currentValue ?? 0).toStringAsFixed(2)} raw',
+          '${formatUsdOrNa(card.pricePaid, zeroIsNa: false)} paid · ${formatUsdOrNa(card.currentValue)} raw',
           style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
         ),
       ],
@@ -599,7 +593,7 @@ class _GradeBox extends StatelessWidget {
           if (avg == null)
             const Text('No data', style: TextStyle(fontSize: 9, color: Color(0xFFD1D5DB)))
           else ...[
-            Text('\$${avg!.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF111827)), overflow: TextOverflow.ellipsis),
+            Text(formatUsd(avg!), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF111827)), overflow: TextOverflow.ellipsis),
             Text(_formatProfit(profit!), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: _profitColor(profit!)), overflow: TextOverflow.ellipsis),
           ],
         ],
@@ -608,8 +602,8 @@ class _GradeBox extends StatelessWidget {
   }
 
   String _formatProfit(double v) {
-    final abs = v.abs();
-    return '${v >= 0 ? '+' : '-'}\$${abs.toStringAsFixed(2)}';
+    final core = formatUsd(v.abs());
+    return '${v >= 0 ? '+' : '-'}$core';
   }
 
   Color _profitColor(double v) {

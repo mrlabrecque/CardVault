@@ -1,6 +1,8 @@
+import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/utils/usd_field.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
@@ -88,6 +90,19 @@ class _CardSheetState extends State<CardSheet> {
   final List<String> _watchWords = [];
   bool _saving = false;
   String? _error;
+  CurrencyTextInputFormatter? _priceUsdFmt;
+  CurrencyTextInputFormatter? _targetUsdFmt;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showPricePaid && widget.pricePaidCtrl != null) {
+      _priceUsdFmt = createUsdCurrencyInputFormatter();
+    }
+    if (widget.showTargetPrice && widget.targetPriceCtrl != null) {
+      _targetUsdFmt = createUsdCurrencyInputFormatter();
+    }
+  }
 
   void _addWatchWord() {
     final word = widget.watchWordsCtrl?.text.trim() ?? '';
@@ -206,6 +221,7 @@ class _CardSheetState extends State<CardSheet> {
                       AdaptiveTextField(
                         controller: widget.pricePaidCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: _priceUsdFmt != null ? [_priceUsdFmt!] : null,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         placeholder: '\$0.00',
                         cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
@@ -288,6 +304,7 @@ class _CardSheetState extends State<CardSheet> {
                       AdaptiveTextField(
                         controller: widget.targetPriceCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: _targetUsdFmt != null ? [_targetUsdFmt!] : null,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         placeholder: '\$0.00',
                         cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),

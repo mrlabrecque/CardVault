@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/utils/usd_field.dart';
 import '../../core/widgets/attr_tag.dart';
 import '../../core/widgets/card_attributes_wrap.dart';
 import '../../core/widgets/info_box.dart';
@@ -188,6 +190,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   bool _isGraded = false;
   String _grader = 'PSA';
   final _gradeValueCtrl = TextEditingController();
+  final _pricePaidUsdFormatter = createUsdCurrencyInputFormatter();
 
   bool _saving = false;
 
@@ -686,7 +689,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         isSSP: _isNewCard ? _newIsSSP : false,
         parallelId: _selectedParallel?.id,
         parallelName: _parallelName,
-        pricePaid: double.tryParse(_pricePaidCtrl.text.trim()),
+        pricePaid: parseUsdInput(_pricePaidCtrl.text),
         serialNumber: _serialNumberCtrl.text.trim().isEmpty ? null : _serialNumberCtrl.text.trim(),
         isGraded: _isGraded,
         grader: _isGraded ? _grader : 'PSA',
@@ -777,7 +780,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               isSSP: card?.isSSP ?? false,
               parallelId: selectedParallel?.id,
               parallelName: parallelName,
-              pricePaid: double.tryParse(_pricePaidCtrl.text.trim()),
+              pricePaid: parseUsdInput(_pricePaidCtrl.text),
               serialNumber: _serialNumberCtrl.text.trim().isEmpty ? null : _serialNumberCtrl.text.trim(),
               isGraded: _isGraded,
               grader: _isGraded ? _grader : 'PSA',
@@ -844,7 +847,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               'grade': null,
               'ebay_query': null,
               'exclude_terms': [],
-              'target_price': double.tryParse(_targetPriceCtrl.text.trim()),
+              'target_price': parseUsdInput(_targetPriceCtrl.text),
               'master_card_id': card?.id,
               'release_id': release?.id,
               'set_id': set?.id,
@@ -1693,6 +1696,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                 selectedParallel: _selectedParallel,
                 parallelName: _parallelName,
                 pricePaidCtrl: _pricePaidCtrl,
+                pricePaidInputFormatters: [_pricePaidUsdFormatter],
                 serialNumberCtrl: _serialNumberCtrl,
                 isGraded: _isGraded,
                 grader: _grader,
@@ -2208,6 +2212,7 @@ class _YourCopyFields extends StatelessWidget {
     required this.selectedParallel,
     required this.parallelName,
     required this.pricePaidCtrl,
+    this.pricePaidInputFormatters,
     required this.serialNumberCtrl,
     required this.isGraded,
     required this.grader,
@@ -2222,6 +2227,7 @@ class _YourCopyFields extends StatelessWidget {
   final SetParallel? selectedParallel;
   final String parallelName;
   final TextEditingController pricePaidCtrl;
+  final List<TextInputFormatter>? pricePaidInputFormatters;
   final TextEditingController serialNumberCtrl;
   final bool isGraded;
   final String grader;
@@ -2273,12 +2279,12 @@ class _YourCopyFields extends StatelessWidget {
             child: AdaptiveTextField(
               controller: pricePaidCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: pricePaidInputFormatters,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               placeholder: 'Price Paid',
               cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
               decoration: InputDecoration(
                 labelText: 'Price Paid',
-                prefixText: '\$ ',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 isDense: true,
               ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
+
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/usd_field.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/models/wishlist_item.dart';
 import 'wishlist_screen.dart';
@@ -40,10 +43,12 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
   bool _queryEdited = false;
   bool _saving = false;
   String? _error;
+  late final CurrencyTextInputFormatter _targetUsdFmt;
 
   @override
   void initState() {
     super.initState();
+    _targetUsdFmt = createUsdCurrencyInputFormatter();
     final e = widget.editing;
     final pf = widget.prefill ?? {};
 
@@ -56,7 +61,7 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
     _queryCtrl      = TextEditingController(text: e?.ebayQuery ?? '');
     _excludeCtrl    = TextEditingController();
     _targetPriceCtrl = TextEditingController(
-      text: e?.targetPrice != null ? e!.targetPrice!.toStringAsFixed(2) : '',
+      text: e?.targetPrice != null ? _targetUsdFmt.formatDouble(e!.targetPrice!) : '',
     );
     _serialMaxCtrl  = TextEditingController(
       text: e?.serialMax != null ? '${e!.serialMax}' : (pf['serialMax'] != null ? '${pf['serialMax']}' : ''),
@@ -128,7 +133,7 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
       'grade':         str(_gradeCtrl.text),
       'ebay_query':    str(_queryCtrl.text),
       'exclude_terms': _excludeTerms,
-      'target_price':  double.tryParse(_targetPriceCtrl.text),
+      'target_price':  parseUsdInput(_targetPriceCtrl.text),
     };
     final error = await widget.onSave(data);
     if (!mounted) return;
@@ -331,13 +336,13 @@ class _WishlistFormSheetState extends State<WishlistFormSheet> {
                     AdaptiveTextField(
                       controller: _targetPriceCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [_targetUsdFmt],
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       placeholder: '0.00',
                       cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                       decoration: InputDecoration(
                         labelText: 'Target Price',
                         hintText: '0.00',
-                        prefixText: '\$ ',
                         hintStyle: TextStyle(color: colors.onSurface.withValues(alpha: 0.3), fontSize: 14),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         enabledBorder: OutlineInputBorder(

@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart' as animate;
 import 'package:go_router/go_router.dart';
 import '../../../core/models/user_card.dart';
 import '../../../core/widgets/card_info_section.dart';
+import '../../../core/widgets/list_item_usd_text.dart';
 
 class SingleItemCard extends StatelessWidget {
   const SingleItemCard({
@@ -50,21 +51,7 @@ class SingleItemCard extends StatelessWidget {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
-            child: CardInfoSection(
-              player: card.player,
-              cardNumber: card.cardNumber,
-              year: card.year,
-              set: card.set,
-              parallel: card.parallel,
-              serialMax: card.serialMax,
-              sport: card.sport,
-              rookie: card.rookie,
-              autograph: card.autograph,
-              memorabilia: card.memorabilia,
-              ssp: card.ssp,
-              isGraded: card.isGraded,
-              gradeLabel: card.isGraded ? '${card.grader ?? 'PSA'} ${card.gradeValue ?? card.grade ?? ''}' : null,
-            ),
+            child: CardInfoSection.fromUserCard(card),
           ),
         ),
         Padding(
@@ -128,7 +115,10 @@ class SingleItemCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('\$${(card.currentValue ?? 0).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ListItemUsdText(
+            value: card.currentValue,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           if (card.pricePaid != null && card.pricePaid! > 0) ...[
             const SizedBox(height: 2),
             Text(

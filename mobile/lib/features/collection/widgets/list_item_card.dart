@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import 'package:go_router/go_router.dart';
 import '../../../core/models/user_card.dart';
+import '../../../core/utils/currency_format.dart';
 import '../../../core/widgets/card_info_section.dart';
 class ListItemCard extends StatefulWidget {
   const ListItemCard({
@@ -130,7 +131,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                 color: stack.valueTrend > 0 ? Colors.green : Colors.red,
               ),
             Text(
-              hasAnyValue ? '\$${stack.totalValue.toFixed2()}' : 'N/A',
+              hasAnyValue ? formatUsd(stack.totalValue) : 'N/A',
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
             ),
           ],
@@ -147,9 +148,9 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
               ),
             ],
           ),
-        if (hasAnyValue && stack.qty > 1) Text('\$${(stack.totalValue / stack.qty).toFixed2()}/card', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
+        if (hasAnyValue && stack.qty > 1) Text('${formatUsd(stack.totalValue / stack.qty)}/card', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
         if (hasAnyValue && stack.totalCost > 0)
-          Text('${stack.pl >= 0 ? '+' : ''}${stack.plPct.toFixed2()}%', style: TextStyle(fontSize: 12, color: _plColor, fontWeight: FontWeight.w600)),
+          Text('${stack.pl >= 0 ? '+' : ''}${stack.plPct.toStringAsFixed(2)}%', style: TextStyle(fontSize: 12, color: _plColor, fontWeight: FontWeight.w600)),
         if (stack.qty > 1)
           Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
       ],
@@ -179,12 +180,12 @@ class _IndividualCardRow extends StatelessWidget {
                   if (card.serialNumber != null)
                     Text('Copy #${card.serialNumber}', style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6))),
                   if (card.pricePaid != null)
-                    Text('Paid \$${card.pricePaid!.toFixed2()}', style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6))),
+                    Text('Paid ${formatUsd(card.pricePaid!)}', style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.6))),
                 ],
               ),
             ),
             Text(
-              card.currentValue != null ? '\$${card.currentValue!.toFixed2()}' : 'N/A',
+              card.currentValue != null ? formatUsd(card.currentValue!) : 'N/A',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             IconButton(
@@ -224,6 +225,3 @@ extension on CardStack {
   }
 }
 
-extension on double {
-  String toFixed2() => toStringAsFixed(2);
-}

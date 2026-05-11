@@ -2,6 +2,10 @@
 
 A new Flutter project.
 
+## Docs
+
+- [Slab Lab backlog](docs/SLAB_LAB_BACKLOG.md) — UX / bug feedback tracker for mobile work.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

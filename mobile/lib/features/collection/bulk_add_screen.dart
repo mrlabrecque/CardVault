@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/currency_format.dart';
+import '../../core/utils/usd_field.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/widgets/attr_tag.dart';
@@ -93,8 +95,9 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
   // ── Box price calculator ─────────────────────────────────────
   final _boxPriceCtrl = TextEditingController();
   final _boxQtyCtrl = TextEditingController();
+  final _boxPriceUsdFmt = createUsdCurrencyInputFormatter();
   double? get _pricePerCard {
-    final price = double.tryParse(_boxPriceCtrl.text);
+    final price = parseUsdInput(_boxPriceCtrl.text);
     final qty = int.tryParse(_boxQtyCtrl.text);
     if (price == null || qty == null || qty <= 0) return null;
     return (price / qty * 100).roundToDouble() / 100;
@@ -122,6 +125,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
   bool _isGraded = false;
   String _grader = 'PSA';
   final _gradeValueCtrl = TextEditingController();
+  final _pricePaidUsdFmt = createUsdCurrencyInputFormatter();
 
   // ── Staging ──────────────────────────────────────────────────
   final List<_StagedCard> _staged = [];
@@ -224,7 +228,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
         _selectedParallel = null;
         _parallelName = 'Base';
         if (ppc != null) {
-          _pricePaidCtrl.text = ppc.toStringAsFixed(2);
+          _pricePaidCtrl.text = _pricePaidUsdFmt.formatDouble(ppc);
         }
         _resolvingCard = false;
       });
@@ -257,7 +261,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
   bool get _canStage {
     if (_selectedCard == null) return false;
     if (_pricePaidCtrl.text.isEmpty) return false;
-    if (double.tryParse(_pricePaidCtrl.text) == null) return false;
+    if (parseUsdInput(_pricePaidCtrl.text) == null) return false;
     if (_isGraded && _gradeValueCtrl.text.trim().isEmpty) return false;
     return true;
   }
@@ -266,7 +270,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     if (!_canStage) return;
     final card = _selectedCard!;
     final csCard = _selectedCsCard!;
-    final pricePaid = double.parse(_pricePaidCtrl.text);
+    final pricePaid = parseUsdInput(_pricePaidCtrl.text)!;
 
     _staged.add(_StagedCard(
       tempId: '${_tempIdCounter++}',
@@ -293,7 +297,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     // Restore price per card after reset
     final ppc = _pricePerCard;
     if (ppc != null) {
-      _pricePaidCtrl.text = ppc.toStringAsFixed(2);
+      _pricePaidCtrl.text = _pricePaidUsdFmt.formatDouble(ppc);
     }
 
     setState(() {});
@@ -494,12 +498,12 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     Expanded(
                       child: AdaptiveTextField(
                         controller: _boxPriceCtrl,
+                        inputFormatters: [_boxPriceUsdFmt],
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         placeholder: 'Box Price',
                         cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                         decoration: const InputDecoration(
                           labelText: 'Box Price',
-                          prefixText: '\$',
                           isDense: true,
                         ),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -527,7 +531,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '\$${_pricePerCard!.toStringAsFixed(2)} per card',
+                      '${formatUsd(_pricePerCard!)} per card',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
@@ -713,12 +717,12 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     controller: _pricePaidCtrl,
                     enabled: false,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [_pricePaidUsdFmt],
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     placeholder: 'Price Paid',
                     cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, enabled: false),
                     decoration: InputDecoration(
                       labelText: 'Price Paid',
-                      prefixText: '\$',
                       border: const OutlineInputBorder(),
                       filled: true,
                       fillColor: Colors.grey.shade100,
@@ -833,7 +837,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${card.setName ?? '—'} · ${card.parallelName} · \$${card.pricePaid?.toStringAsFixed(2) ?? '—'}',
+                                  '${card.setName ?? '—'} · ${card.parallelName} · ${card.pricePaid != null ? formatUsd(card.pricePaid!) : '—'}',
                                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                                 ),
                                 if (card.isGraded)

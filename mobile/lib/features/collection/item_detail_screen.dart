@@ -13,6 +13,8 @@ import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/utils/currency_format.dart';
+import '../../core/utils/usd_field.dart';
 import 'widgets/full_bleed_card_hero.dart';
 import 'widgets/market_analysis_section.dart';
 
@@ -135,7 +137,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   static const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
   Future<void> _openEditSheet(UserCard card) async {
-    final pricePaidCtrl = TextEditingController(text: card.pricePaid?.toStringAsFixed(2) ?? '');
+    final usdPaidFmt = createUsdCurrencyInputFormatter();
+    final pricePaidCtrl = TextEditingController(
+      text: card.pricePaid != null ? usdPaidFmt.formatDouble(card.pricePaid!) : '',
+    );
     final serialCtrl = TextEditingController(text: card.serialNumber ?? '');
     final graderCtrl = TextEditingController(text: card.grader ?? 'PSA');
     final gradeCtrl = TextEditingController(text: card.grade ?? '');
@@ -177,7 +182,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     ? (otherParallelCtrl.text.trim().isEmpty ? 'Base' : otherParallelCtrl.text.trim())
                     : (selectedParallelId == null ? 'Base' : (selectedParallelName ?? card.parallel));
                 await ref.read(cardsServiceProvider).updateCard(card.id, {
-                  'price_paid': double.tryParse(pricePaidCtrl.text),
+                  'price_paid': parseUsdInput(pricePaidCtrl.text),
                   'serial_number': serialCtrl.text.isEmpty ? null : serialCtrl.text,
                   'is_graded': isGraded,
                   'grader': isGraded ? graderCtrl.text : null,
@@ -264,6 +269,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   AdaptiveTextField(
                     controller: pricePaidCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [usdPaidFmt],
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     placeholder: '\$0.00',
                     cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(sheetContext),
@@ -572,7 +578,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                           Expanded(
                             child: _InfoBox(
                               label: 'Current Value',
-                              value: hasValue ? '\$${card.currentValue!.toStringAsFixed(2)}' : 'N/A',
+                              value: hasValue ? formatUsd(card.currentValue!) : 'N/A',
                               trend: hasValue ? card.valueTrend : 0,
                             ),
                           ),
@@ -636,7 +642,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                       const SizedBox(height: 16),
                       _CopyTile(label: 'Parallel', value: card.parallel),
                       const SizedBox(height: 8),
-                      _CopyTile(label: 'Price paid', value: '\$${(card.pricePaid ?? 0).toStringAsFixed(2)}'),
+                      _CopyTile(label: 'Price paid', value: formatUsd(card.pricePaid ?? 0)),
                       if (card.serialNumber != null || card.serialMax != null) ...[
                         const SizedBox(height: 8),
                         _CopyTile(
@@ -712,7 +718,7 @@ class _PlCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  hasValue ? '${positive ? '+' : ''}\$${pl!.toStringAsFixed(2)}' : 'N/A',
+                  hasValue ? formatUsdSigned(pl!) : 'N/A',
                   style: _detailValueEmphasisStyle(context)?.copyWith(color: accent),
                 ),
                 Text(

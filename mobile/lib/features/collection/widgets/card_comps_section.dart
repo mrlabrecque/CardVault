@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
+import '../../../core/utils/currency_format.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/app_segmented_control.dart';
 import '../../../core/widgets/inline_notice_container.dart';
@@ -616,7 +617,7 @@ class _GradePill extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      price != null ? '\$${price!.toStringAsFixed(2)}' : 'N/A',
+                      price != null ? formatUsd(price!) : 'N/A',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: isSelected
                                 ? colors.primary.withValues(alpha: 0.88)
@@ -689,7 +690,7 @@ class _PriceChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                return Text('\$${value.toStringAsFixed(0)}', style: axisLabelStyle);
+                return Text(formatUsd(value), style: axisLabelStyle);
               },
               reservedSize: 40,
             ),
@@ -731,7 +732,7 @@ class _PriceChart extends StatelessWidget {
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
-                  '\$${spot.y.toStringAsFixed(2)}',
+                  formatUsd(spot.y),
                   TextStyle(
                     color: colors.onSurface,
                     fontWeight: FontWeight.w600,

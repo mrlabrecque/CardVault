@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/utils/currency_format.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/models/wishlist_item.dart';
@@ -455,7 +456,7 @@ class _WishlistCard extends StatelessWidget {
                   Text('Deal Found!', style: TextStyle(color: colors.onPrimary, fontSize: 12, fontWeight: FontWeight.w700, fontFamily: AppFonts.fontFamily)),
                   const Spacer(),
                   if (item.savings > 0)
-                    Text('\$${item.savings.toStringAsFixed(0)} under target',
+                    Text('${formatUsd(item.savings)} under target',
                         style: TextStyle(color: colors.onPrimary, fontSize: 11, fontWeight: FontWeight.w600, fontFamily: AppFonts.fontFamily)),
                 ],
               ),
@@ -516,12 +517,12 @@ class _WishlistCard extends StatelessWidget {
                           alignment: WrapAlignment.end,
                           children: [
                             if (item.targetPrice != null)
-                              _PriceBox(colors: colors, label: 'Target', value: '\$${item.targetPrice!.toStringAsFixed(2)}'),
+                              _PriceBox(colors: colors, label: 'Target', value: formatUsd(item.targetPrice!)),
                             if (triggered && item.lastSeenPrice != null)
                               _PriceBox(
                                 colors: colors,
                                 label: 'Best',
-                                value: '\$${item.lastSeenPrice!.toStringAsFixed(2)}',
+                                value: formatUsd(item.lastSeenPrice!),
                                 highlight: true,
                               ),
                           ],
@@ -654,7 +655,7 @@ class _MatchRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('\$${match.price.toStringAsFixed(2)}',
+              Text(formatUsd(match.price),
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.primary, fontFamily: AppFonts.fontFamily)),
               const SizedBox(height: 6),
               GestureDetector(

@@ -8,6 +8,8 @@ import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
+import '../../core/utils/currency_format.dart';
+import '../../core/widgets/list_item_usd_text.dart';
 import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
@@ -42,7 +44,9 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
   }
 
   List<UserCard> _filtered(List<UserCard> all) {
-    var result = all;
+    var result = all
+        .where((c) => c.currentValue != null && c.currentValue! > 0)
+        .toList();
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
       result = result.where((c) =>
@@ -383,6 +387,23 @@ class _BrowseView extends ConsumerWidget {
                       style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14)),
                 ),
               )
+            else if (cards.isEmpty &&
+                allCards.isNotEmpty &&
+                query.isEmpty &&
+                filters.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'No cards with a market value. Refresh pricing before adding cards to a lot.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                    ),
+                  ),
+                ),
+              )
             else if (cards.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -425,7 +446,6 @@ class _BrowseCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onToggle,
       child: AdaptiveListCard(
@@ -443,21 +463,7 @@ class _BrowseCardRow extends StatelessWidget {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                
-                        child: CardInfoSection(
-                  player: card.player,
-                  cardNumber: card.cardNumber,
-                  year: card.year,
-                  set: card.set,
-                  parallel: card.parallel,
-                  serialMax: card.serialMax,
-                  sport: card.sport,
-                  rookie: card.rookie,
-                  autograph: card.autograph,
-                  memorabilia: card.memorabilia,
-                  ssp: card.ssp,
-                  isGraded: card.isGraded && card.grade != null,
-                  gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
-                ),
+                        child: CardInfoSection.fromUserCard(card),
               ),
               ),
                   Padding(padding: EdgeInsets.all(12),
@@ -465,10 +471,7 @@ class _BrowseCardRow extends StatelessWidget {
                     Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: colors.onSurface),
-                  ),
+                  ListItemUsdText(value: card.currentValue, zeroIsNa: false),
                   const SizedBox(height: 6),
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
@@ -555,12 +558,12 @@ class _BasketView extends StatelessWidget {
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFFCA5A5), letterSpacing: 1.5),
               ),
               Text(
-                '\$${lot.askingPrice.toStringAsFixed(2)}',
+                formatUsd(lot.askingPrice),
                 style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: Colors.white),
               ),
               const SizedBox(height: 2),
               Text(
-                '${lot.pct}% of \$${lot.totalValue.toStringAsFixed(2)}',
+                '${lot.pct}% of ${formatUsd(lot.totalValue)}',
                 style: const TextStyle(fontSize: 12, color: Color(0xFFFCA5A5)),
               ),
             ],
@@ -620,7 +623,7 @@ class _BasketView extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Market total: \$${lot.totalValue.toStringAsFixed(2)}',
+                    'Market total: ${formatUsd(lot.totalValue)}',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                   ),
                 ],
@@ -658,7 +661,6 @@ class _BasketCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return AdaptiveListCard(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -671,21 +673,7 @@ class _BasketCardRow extends StatelessWidget {
              Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                
-                        child: CardInfoSection(
-                player: card.player,
-                cardNumber: card.cardNumber,
-                year: card.year,
-                set: card.set,
-                parallel: card.parallel,
-                serialMax: card.serialMax,
-                sport: card.sport,
-                rookie: card.rookie,
-                autograph: card.autograph,
-                memorabilia: card.memorabilia,
-                ssp: card.ssp,
-                isGraded: card.isGraded && card.grade != null,
-                gradeLabel: card.grade != null ? '${card.grader ?? ''} ${card.grade!}'.trim() : null,
-              ),
+                        child: CardInfoSection.fromUserCard(card),
                       ),
 
             ),
@@ -694,10 +682,7 @@ class _BasketCardRow extends StatelessWidget {
               child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '\$${(card.currentValue ?? 0).toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: colors.onSurface),
-                ),
+                ListItemUsdText(value: card.currentValue),
                 const SizedBox(height: 6),
                 SizedBox(
                   width: 28,

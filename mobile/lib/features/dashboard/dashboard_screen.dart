@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/fonts.dart';
+import '../../core/utils/currency_format.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/models/user_card.dart';
 import '../../core/widgets/adaptive_list_card.dart';
@@ -169,7 +170,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Row(children: [
             _StatTile(
               label: 'Total Value',
-              value: '\$${totalValue.toStringAsFixed(0)}',
+              value: formatUsd(totalValue),
               icon: Icons.account_balance_wallet_outlined,
               iconBg: _burgundy,
               selected: _selectedStat == 'value',
@@ -177,7 +178,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             _StatTile(
               label: 'P / L',
-              value: '${pl >= 0 ? '+' : ''}\$${pl.toStringAsFixed(0)}',
+              value: formatUsdSigned(pl),
               subValue: plPct != null
                   ? '${plPct >= 0 ? '+' : ''}${plPct.toStringAsFixed(1)}%'
                   : null,
@@ -284,7 +285,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               rank: i + 1,
                               title: topCards[i].player,
                               subtitle: '${topCards[i].year ?? ''} ${topCards[i].set ?? ''}'.trim(),
-                              trailing: '\$${(topCards[i].currentValue ?? 0).toStringAsFixed(0)}',
+                              trailing: formatUsd(topCards[i].currentValue ?? 0),
                               onTap: () => context.go('/collection/card', extra: topCards[i]),
                             ),
                         ])
@@ -714,9 +715,7 @@ class _LinePainter extends CustomPainter {
     // Y-axis labels (3 ticks)
     for (int t = 0; t <= 2; t++) {
       final v = effectiveMin + (effectiveRange * 0.85 * t / 2);
-      final label = prefix + (v >= 1000
-          ? '${(v / 1000).toStringAsFixed(0)}k'
-          : v.toStringAsFixed(0));
+      final label = prefix.isEmpty ? v.toStringAsFixed(0) : formatUsdCompact(v);
       tp.text = TextSpan(text: label, style: const TextStyle(fontSize: 9, color: Color(0xFF9CA3AF)));
       tp.layout();
       final y = toY(v);

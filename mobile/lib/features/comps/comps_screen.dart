@@ -1,6 +1,7 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/utils/currency_format.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -340,7 +341,7 @@ class _StatCard extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                '\$${value.toStringAsFixed(0)}',
+                formatUsd(value),
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: colors.onSurface),
               ),
             ],
@@ -387,7 +388,7 @@ class _CompCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  '\$${comp.price.toStringAsFixed(2)}',
+                  formatUsd(comp.price),
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: colors.onSurface),
                 ),
               ],
@@ -453,7 +454,7 @@ class _HistoryTile extends StatelessWidget {
               ),
               if (entry.avgPrice != null) ...[
                 Text(
-                  '\$${entry.avgPrice!.toStringAsFixed(0)}',
+                  formatUsd(entry.avgPrice!),
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.onSurface.withValues(alpha: 0.65)),
                 ),
                 const SizedBox(width: 6),

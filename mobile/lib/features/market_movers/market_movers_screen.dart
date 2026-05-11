@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/adaptive_ui.dart';
+import '../../core/utils/currency_format.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/filter_pill.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
@@ -256,7 +257,7 @@ class _MarketMoversScreenState extends ConsumerState<MarketMoversScreen> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '\$${mover.currentAvg.toStringAsFixed(2)}',
+                          formatUsd(mover.currentAvg),
                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Color(0xFF374151)),
                         ),
                       ),

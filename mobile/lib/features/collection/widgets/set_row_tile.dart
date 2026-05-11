@@ -4,6 +4,7 @@ import 'package:card_vault/core/widgets/adaptive_list_card.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/user_card.dart';
+import '../../../core/utils/currency_format.dart';
 
 class SetRowTile extends StatefulWidget {
   const SetRowTile({super.key, required this.row});
@@ -97,7 +98,7 @@ class _SetRowTileState extends State<SetRowTile> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('\$${row.totalValue.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: colors.onSurface)),
+                  Text(formatUsd(row.totalValue), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: colors.onSurface)),
                   Text('${row.ownedCount}/${row.cardCount}', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
                   if (hasMultipleParallels)
                     Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
@@ -164,7 +165,7 @@ class _ParallelRow extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(parallel.parallelName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-              Text('\$${parallel.totalValue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(formatUsd(parallel.totalValue), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(width: 8),
               Text('${parallel.ownedCount}/${parallel.cardCount}', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
             ],

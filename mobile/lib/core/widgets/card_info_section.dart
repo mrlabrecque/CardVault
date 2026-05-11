@@ -1,8 +1,49 @@
 import 'package:flutter/material.dart';
+import '../models/user_card.dart';
 import '../theme/fonts.dart';
 import 'card_attributes_wrap.dart';
 
 class CardInfoSection extends StatelessWidget {
+  /// List-row metadata from a [UserCard] (set + checklist + grade line).
+  ///
+  /// Use [isGraded] / [gradeLabel] to override display (e.g. grading screen forces raw rows).
+  factory CardInfoSection.fromUserCard(
+    UserCard card, {
+    Key? key,
+    bool? isGraded,
+    String? gradeLabel,
+  }) {
+    final explicit = gradeLabel?.trim();
+    String? effectiveGradeLabel;
+    if (explicit != null && explicit.isNotEmpty) {
+      effectiveGradeLabel = explicit;
+    } else {
+      final graded = isGraded ?? card.isGraded;
+      if (graded && card.isGraded) {
+        final line = '${card.grader ?? 'PSA'} ${card.gradeValue ?? card.grade ?? ''}'.trim();
+        effectiveGradeLabel = line.isEmpty ? null : line;
+      }
+    }
+    final graded = isGraded ?? card.isGraded;
+    return CardInfoSection(
+      key: key,
+      player: card.player,
+      cardNumber: card.cardNumber,
+      year: card.year,
+      set: card.set,
+      checklist: card.checklist,
+      parallel: card.parallel,
+      serialMax: card.serialMax,
+      sport: card.sport,
+      rookie: card.rookie,
+      autograph: card.autograph,
+      memorabilia: card.memorabilia,
+      ssp: card.ssp,
+      isGraded: graded,
+      gradeLabel: effectiveGradeLabel,
+    );
+  }
+
   const CardInfoSection({
     super.key,
     required this.player,
