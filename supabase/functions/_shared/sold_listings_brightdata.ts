@@ -14,7 +14,9 @@ const BRIGHTDATA_REQUEST_URL = 'https://api.brightdata.com/request';
 /** Async Unlocker — submit job then poll (recommended for slow targets like eBay). */
 const BRIGHTDATA_UNBLOCKER_REQ_URL = 'https://api.brightdata.com/unblocker/req';
 const BRIGHTDATA_UNBLOCKER_GET_RESULT_URL = 'https://api.brightdata.com/unblocker/get_result';
-const LOOKBACK_DAYS = 90;
+/** Max age of sold listings to keep. Override via BRIGHTDATA_SOLD_LOOKBACK_DAYS — see soldLookbackDays(). */
+const DEFAULT_SOLD_LOOKBACK_DAYS = 90;
+const MAX_SOLD_LOOKBACK_DAYS = 1095;
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 800;
 /** Hard cap on SERP rows parsed (product requirement). */
@@ -31,7 +33,6 @@ const DEFAULT_LISTING_TIMEOUT_MS = 15_000;
 const DEFAULT_ASYNC_POLL_MAX_MS = 300_000;
 const DEFAULT_ASYNC_POLL_INTERVAL_MS = 2_500;
 const DEFAULT_ASYNC_HTTP_MS = 90_000;
-const DEFAULT_DIRECT_FETCH_TIMEOUT_MS = 8_000;
 
 /** From Unlocker “Access details” proxy user, e.g. `brd-customer-hl_91fe46ae-zone-card_locker_api`. */
 export function parseBrightDataProxyUsername(
@@ -102,6 +103,14 @@ export function resolveBrightDataUnlockerContext(): BrightDataUnlockerCtx {
   }
 
   return { apiKey, zone, customer, ctxSource };
+}
+
+/** Sold listings older than this many days are dropped; default 90. Set BRIGHTDATA_SOLD_LOOKBACK_DAYS (1–1095). */
+export function soldLookbackDays(): number {
+  const raw = Deno.env.get('BRIGHTDATA_SOLD_LOOKBACK_DAYS');
+  const parsed = raw != null && raw.trim() !== '' ? Number(raw.trim()) : DEFAULT_SOLD_LOOKBACK_DAYS;
+  if (!Number.isFinite(parsed)) return DEFAULT_SOLD_LOOKBACK_DAYS;
+  return Math.min(MAX_SOLD_LOOKBACK_DAYS, Math.max(1, Math.floor(parsed)));
 }
 
 export function resolveSaleType(buying_format: string | null): string {
@@ -1136,61 +1145,6 @@ function is130PointTarget(url: string): boolean {
   }
 }
 
-function directFetchEnabledForUrl(url: string): boolean {
-  const enabled = Deno.env.get('SOLD_LISTINGS_DIRECT_FETCH_ENABLED');
-  if (enabled !== 'true' && enabled !== '1') return false;
-  // Start with 130point only; keep eBay on Unlocker path for reliability.
-  return is130PointTarget(url);
-}
-
-function isLikelyBlockedOrUnusableHtml(html: string): boolean {
-  const t = html.toLowerCase();
-  if (!t.trim()) return true;
-  if (t.includes('cf-challenge') || t.includes('cloudflare')) return true;
-  if (t.includes('access denied') || t.includes('forbidden')) return true;
-  if (t.includes('captcha') || t.includes('verify you are human')) return true;
-  if (t.includes('pardon our interruption')) return true;
-  return false;
-}
-
-function looksLike130PointSearchHtml(html: string): boolean {
-  return html.includes('data-search-results-fragment') || html.includes('data-sold-result');
-}
-
-async function directFetchHtml(targetUrl: string, kind: 'search' | 'listing'): Promise<string> {
-  const msRaw = Number(Deno.env.get('SOLD_LISTINGS_DIRECT_FETCH_TIMEOUT_MS') ?? String(DEFAULT_DIRECT_FETCH_TIMEOUT_MS));
-  const timeoutMs = Math.max(1_000, Math.min(20_000, Number.isFinite(msRaw) ? msRaw : DEFAULT_DIRECT_FETCH_TIMEOUT_MS));
-  const res = await fetchWithTimeout(
-    targetUrl,
-    {
-      method: 'GET',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://www.google.com/',
-        DNT: '1',
-      },
-    },
-    timeoutMs,
-  );
-  if (!res.ok) {
-    throw new Error(`direct_fetch_http_${res.status}`);
-  }
-  const html = await res.text();
-  if (!html || html.length < 120) {
-    throw new Error('direct_fetch_empty');
-  }
-  if (isLikelyBlockedOrUnusableHtml(html)) {
-    throw new Error('direct_fetch_blocked');
-  }
-  if (kind === 'search' && is130PointTarget(targetUrl) && !looksLike130PointSearchHtml(html)) {
-    throw new Error('direct_fetch_unexpected_130point_html');
-  }
-  return html;
-}
-
 async function brightDataUnlockHtml(
   targetUrl: string,
   label: string,
@@ -1206,17 +1160,7 @@ async function brightDataUnlockHtml(
   const allow130PointAsync = Deno.env.get('BRIGHTDATA_130POINT_ALLOW_ASYNC') === 'true';
   const preferSyncFor130Point = is130PointTarget(targetUrl) && !allow130PointAsync;
 
-  if (directFetchEnabledForUrl(targetUrl)) {
-    try {
-      const html = await directFetchHtml(targetUrl, kind);
-      console.log(`[sold-listings-brightdata] direct fetch ok label=${label} html_bytes=${html.length}`);
-      return html;
-    } catch (e: unknown) {
-      console.warn(
-        `[sold-listings-brightdata] direct fetch failed; falling back to unlocker (${String((e as Error)?.message ?? e)})`,
-      );
-    }
-  }
+  // Always use Bright Data Unlocker (no direct GET to 130point — matches comps reliability).
 
   // Sync API only needs zone + API key—no customer param.
   // Prefer sync when forced, customer is missing, or for 130point (async queue can add large latency).
@@ -1255,8 +1199,9 @@ async function sleep(ms: number): Promise<void> {
  * BOA listing-page unlocks run only when BRIGHTDATA_MAX_BO_DETAIL_FETCHES is set above 0 (default off).
  */
 export async function fetchSoldListingsBrightData(query: string): Promise<any[]> {
+  const lookbackDays = soldLookbackDays();
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
 
   const ctx = resolveBrightDataUnlockerContext();
   if (!ctx.apiKey || !ctx.zone) throw new Error('brightdata_not_configured');
@@ -1338,8 +1283,18 @@ export async function fetchSoldListingsBrightData(query: string): Promise<any[]>
 
   if (sourceItems.length > 0 && mapped.length === 0) {
     const s0 = sourceItems[0] as any;
+    const rawPrice =
+      s0?.price && typeof s0.price === 'object' && 'value' in s0.price
+        ? (s0.price as { value: unknown }).value
+        : (s0?.price ?? s0?.priceText);
+    const parsedPrice = parsePrice(rawPrice);
+    const soldDate = s0?.itemEndDate ? new Date(String(s0.itemEndDate)) : null;
+    const dateDropped =
+      soldDate != null && Number.isFinite(soldDate.getTime()) && soldDate < cutoff;
     console.warn(
-      `[sold-listings-brightdata] price/date filters dropped all parsed rows (n=${sourceItems.length}); sample title=${String(s0?.title ?? '').slice(0, 90)} price=${s0?.price?.value ?? ''} sold_raw=${s0?.itemEndDate ?? ''}`,
+      `[sold-listings-brightdata] price/date filters dropped all parsed rows (n=${sourceItems.length}); lookback_days=${lookbackDays} cutoff=${cutoff.toISOString().slice(0, 10)} ` +
+        `sample_price_parsed=${parsedPrice} date_before_cutoff=${dateDropped} ` +
+        `title=${String(s0?.title ?? '').slice(0, 80)} sold_raw=${s0?.itemEndDate ?? ''}`,
     );
   }
 

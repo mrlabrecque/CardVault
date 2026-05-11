@@ -59,9 +59,9 @@ class ToolsScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _ToolCard(
             icon: Icons.trending_up,
-            title: 'Market Movers',
-            subtitle: 'Top trending players with biggest price swings',
-            onTap: () => context.push('/market-movers'),
+            title: 'Portfolio Movers',
+            subtitle: 'Players whose avg card value moved most across Vault collections',
+            onTap: () => context.push('/portfolio-movers'),
           ),
           const SizedBox(height: 12),
           _ToolCard(

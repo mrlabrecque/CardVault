@@ -345,7 +345,7 @@ Running list of small things to implement that aren't full features:
 - [ ] Wishlist — price threshold editor; alert status
 - [ ] Auto-fetch pricing on card add — invoke comps edge function after `addCard()` to fetch and store `current_value`
 - [ ] Lot Builder — group cards into lots for bulk eBay listing; lot valuation and P/L
-- [ ] Market Movers — surface cards in the collection with the biggest recent price changes (up or down) using eBay sold comps data
+- [x] **Portfolio Movers** (Tools) — ranks players by aggregate movement across all Vault `user_cards` (`current_value` vs `previous_value` after comps refresh); RPC `portfolio_movers_from_vault`. Legacy `market-movers-refresh` scrape job not used by the app.
 - [ ] Grade Recommendations — analyze raw cards and recommend which are worth grading based on estimated PSA 10 premium vs. raw value
 - [ ] Collection Heat Map — visual breakdown of collection balance (sport, year, player, set) to identify over/under-represented areas
 - [ ] Collection Importer — CSV/spreadsheet import with column mapping UI; maps user's column headers to our schema fields; supports bulk onboarding
@@ -374,3 +374,5 @@ Running list of small things to implement that aren't full features:
 | `20260408000001_user_cards_parallel_name.sql` | Adds `parallel_name` (text, default 'Base') to `user_cards` as denormalized display field |
 | `20260408000002_master_card_cardsight.sql` | Adds `cardsight_card_id` (unique) + `image_url` to `master_card_definitions`; creates `card-images` Storage bucket with RLS |
 | `20260409000001_master_card_unique_per_set.sql` | Partial unique indexes on `master_card_definitions (set_id, player, card_number)` to collapse CardSight duplicates |
+| `20260511120000_market_movers_vault_rpc.sql` | RPC `portfolio_movers_from_vault` — Portfolio Movers from aggregated `user_cards` values |
+| `20260512120000_drop_legacy_market_movers_from_vault.sql` | Drops legacy `market_movers_from_vault` if present |

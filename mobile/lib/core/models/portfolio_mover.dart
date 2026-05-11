@@ -1,4 +1,4 @@
-class MarketMover {
+class PortfolioMover {
   final String topPlayerId;
   final String playerName;
   final String sport;
@@ -6,10 +6,10 @@ class MarketMover {
   final double previousAvg;
   final int currentVolume;
   final int previousVolume;
-  final double priceChangePct; // (current - previous) / previous * 100
+  final double priceChangePct;
   final double volumeChangePct;
 
-  MarketMover({
+  PortfolioMover({
     required this.topPlayerId,
     required this.playerName,
     required this.sport,
@@ -21,17 +21,16 @@ class MarketMover {
     required this.volumeChangePct,
   });
 
-  // Helper to determine if trending up or down
   bool get isTrendingUp => priceChangePct > 0;
   bool get isTrendingDown => priceChangePct < 0;
 }
 
-class MarketMoversData {
-  final List<MarketMover> hot; // sorted priceChangePct DESC
-  final List<MarketMover> cold; // sorted priceChangePct ASC
+class PortfolioMoversData {
+  final List<PortfolioMover> hot;
+  final List<PortfolioMover> cold;
   final DateTime? lastUpdated;
 
-  MarketMoversData({
+  PortfolioMoversData({
     required this.hot,
     required this.cold,
     this.lastUpdated,

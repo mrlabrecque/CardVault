@@ -471,7 +471,7 @@ class _BrowseCardRow extends StatelessWidget {
                     Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  ListItemUsdText(value: card.currentValue, zeroIsNa: false),
+                  ListItemUsdText(value: card.currentValue),
                   const SizedBox(height: 6),
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 150),

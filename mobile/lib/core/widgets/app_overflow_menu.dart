@@ -31,9 +31,9 @@ class AppOverflowMenu extends StatelessWidget {
       value: '/lot-builder',
     ),
     AdaptivePopupMenuItem<String>(
-      label: 'Market Movers',
+      label: 'Portfolio Movers',
       icon: 'chart.line.uptrend.xyaxis',
-      value: '/market-movers',
+      value: '/portfolio-movers',
     ),
     AdaptivePopupMenuItem<String>(
       label: 'Grade Recommendations',

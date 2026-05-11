@@ -1,5 +1,9 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchSoldListingsBrightData, soldRefreshRowsToSearchShape } from '../_shared/sold_listings_brightdata.ts';
+import {
+  fetchSoldListingsBrightData,
+  resolveBrightDataUnlockerContext,
+  soldRefreshRowsToSearchShape,
+} from '../_shared/sold_listings_brightdata.ts';
 const DELAY_MS = 300;
 const BATCH_SIZE = 20;
 
@@ -101,7 +105,7 @@ async function fetchESPNLeaders(
         const athleteRef = leader.athlete?.$ref ?? '';
         if (athleteRef) {
           // Extract ESPN ID from URL like ".../athletes/123456"
-          const match = athleteRef.match(/\/athletes\/(\d+)\?/);
+          const match = athleteRef.match(/\/athletes\/(\d+)/);
           if (match) {
             espnIds.add(match[1]);
           }
@@ -155,10 +159,59 @@ async function fetchESPNLeaders(
   }
 }
 
+/** eBay sold search — player name alone returns junk; scope by card category + sport. */
+function ebayCardSoldQuery(playerName: string, sportLabel: string): string {
+  const sportWord: Record<string, string> = {
+    NBA: 'basketball',
+    NFL: 'football',
+    MLB: 'baseball',
+    NHL: 'hockey',
+  };
+  const w = sportWord[sportLabel] ?? 'sports';
+  return `${playerName} ${w} trading card`;
+}
+
+/** Same resolution as refresh-comps / sold_listings_brightdata: zone + customer from BRIGHTDATA_PROXY_USERNAME when set. */
+function isBrightDataConfigured(): boolean {
+  const ctx = resolveBrightDataUnlockerContext();
+  return ctx.apiKey.length > 0 && ctx.zone.length > 0;
+}
+
+/** Round-robin players so each league gets snapshot attempts before we exhaust the list (DB order is sport,name — MLB-heavy). */
+function interleavePlayersBySport<T extends { sport: string }>(players: T[]): T[] {
+  const order = ['NBA', 'NFL', 'MLB', 'NHL'];
+  const buckets = new Map<string, T[]>();
+  for (const s of order) buckets.set(s, []);
+  for (const p of players) {
+    const list = buckets.get(p.sport);
+    if (list) list.push(p);
+    else buckets.set(p.sport, [p]);
+  }
+  const arrays = order.map((s) => buckets.get(s) ?? []);
+  const out: T[] = [];
+  let round = 0;
+  let added = true;
+  while (added) {
+    added = false;
+    for (const bucket of arrays) {
+      if (round < bucket.length) {
+        out.push(bucket[round]);
+        added = true;
+      }
+    }
+    round++;
+  }
+  return out;
+}
+
 // Fetch sold listings via Bright Data Web Unlocker
-async function fetchSoldListings(query: string): Promise<{ avgPrice: number; compCount: number } | null> {
+async function fetchSoldListings(
+  playerName: string,
+  sportLabel: string,
+): Promise<{ avgPrice: number; compCount: number } | null> {
   try {
-    if (!Deno.env.get('BRIGHTDATA_API_KEY') || !Deno.env.get('BRIGHTDATA_UNLOCKER_ZONE')) return null;
+    if (!isBrightDataConfigured()) return null;
+    const query = ebayCardSoldQuery(playerName, sportLabel);
     const rows = await fetchSoldListingsBrightData(query);
     const products = soldRefreshRowsToSearchShape(rows);
     if (products.length === 0) {
@@ -173,7 +226,7 @@ async function fetchSoldListings(query: string): Promise<{ avgPrice: number; com
 
     return { avgPrice, compCount };
   } catch (e: any) {
-    console.error(`[market-movers] brightdata ${query} error: ${e.message}`);
+    console.error(`[market-movers] brightdata ${playerName} (${sportLabel}) error: ${e.message}`);
     return null;
   }
 }
@@ -202,6 +255,13 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const admin = createClient(supabaseUrl, serviceRoleKey);
+
+  const brightDataConfigured = isBrightDataConfigured();
+  if (!brightDataConfigured) {
+    console.error(
+      '[market-movers] Bright Data not configured (need BRIGHTDATA_API_KEY + zone from BRIGHTDATA_UNLOCKER_ZONE or BRIGHTDATA_PROXY_USERNAME) — snapshot writes will be 0.',
+    );
+  }
 
   const startTime = Date.now();
   const year = new Date().getFullYear();
@@ -300,8 +360,23 @@ Deno.serve(async (req) => {
     });
   }
 
-  const players = topPlayersData ?? [];
-  console.log(`[market-movers] Fetched ${players.length} top players for sold-comps queries`);
+  const rawPlayers = topPlayersData ?? [];
+  const maxPerSport = Math.max(
+    1,
+    Number(Deno.env.get('MARKET_MOVERS_MAX_PLAYERS_PER_SPORT') ?? '75'),
+  );
+  const bySport = new Map<string, typeof rawPlayers>();
+  for (const p of rawPlayers) {
+    const sport = p.sport as string;
+    const list = bySport.get(sport) ?? [];
+    if (list.length < maxPerSport) list.push(p);
+    bySport.set(sport, list);
+  }
+  const capped = Array.from(bySport.values()).flat();
+  const players = interleavePlayersBySport(capped);
+  console.log(
+    `[market-movers] Snapshot queue: ${players.length} players (interleaved, up to ${maxPerSport} per NBA/NFL/MLB/NHL from ${rawPlayers.length} total)`,
+  );
 
   let snapshotsWritten = 0;
   let failed = 0;
@@ -311,9 +386,10 @@ Deno.serve(async (req) => {
     const batch = players.slice(i, i + BATCH_SIZE);
 
     for (const player of batch) {
-      const query = player.name; // e.g. "Caitlin Clark"
+      const sportLabel = player.sport as string;
+      const query = ebayCardSoldQuery(player.name as string, sportLabel);
 
-      const result = await fetchSoldListings(query);
+      const result = await fetchSoldListings(player.name as string, sportLabel);
 
       if (result && result.compCount > 0) {
         const { error: insertError } = await admin.from('market_movers_snapshots').insert({
@@ -361,6 +437,8 @@ Deno.serve(async (req) => {
       snapshotsWritten,
       failed,
       duration,
+      brightDataConfigured,
+      snapshotPlayersProcessed: players.length,
     }),
     { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
   );

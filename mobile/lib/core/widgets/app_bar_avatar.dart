@@ -47,9 +47,9 @@ class AppBarAvatar extends ConsumerWidget {
             value: '/admin/catalog',
           ),
           const AdaptivePopupMenuItem<String>(
-            label: 'Refresh Market Movers',
-            icon: 'arrow.clockwise.circle',
-            value: '/admin/market-movers',
+            label: 'Portfolio Movers (admin)',
+            icon: 'info.circle',
+            value: '/admin/portfolio-movers',
           ),
           AdaptivePopupMenuItem<String>(
             label: pendingCount > 0
@@ -196,9 +196,9 @@ class _AvatarSheet extends ConsumerWidget {
                 onTap: () => onNavigate('/admin/pending-parallels'),
               ),
               _AdminLink(
-                label: 'Refresh Market Movers',
-                icon: Icons.refresh_outlined,
-                onTap: () => onNavigate('/admin/market-movers'),
+                label: 'Portfolio Movers (admin)',
+                icon: Icons.info_outline,
+                onTap: () => onNavigate('/admin/portfolio-movers'),
               ),
               const SizedBox(height: 4),
               Divider(color: Colors.grey.shade100),

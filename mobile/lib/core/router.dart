@@ -16,9 +16,9 @@ import '../features/collection/catalog_screen.dart';
 import '../features/collection/bulk_add_screen.dart';
 import '../features/lot_builder/lot_builder_screen.dart';
 import '../features/grading/grading_screen.dart';
-import '../features/market_movers/market_movers_screen.dart';
+import '../features/portfolio_movers/portfolio_movers_screen.dart';
 import '../features/admin/admin_catalog_screen.dart';
-import '../features/admin/admin_market_movers_screen.dart';
+import '../features/admin/admin_portfolio_movers_screen.dart';
 import '../features/admin/pending_parallels_screen.dart';
 import 'auth/login_screen.dart';
 import 'shell/app_shell.dart';
@@ -102,9 +102,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/grading', pageBuilder: (context, state) => _page(const GradingScreen())),
           GoRoute(path: '/wishlist', pageBuilder: (context, state) => _page(const WishlistScreen())),
           GoRoute(path: '/scan', pageBuilder: (context, state) => _page(const ScanScreen())),
-          GoRoute(path: '/market-movers', pageBuilder: (context, state) => _page(const MarketMoversScreen())),
+          GoRoute(path: '/portfolio-movers', pageBuilder: (context, state) => _page(const PortfolioMoversScreen())),
+          GoRoute(path: '/market-movers', pageBuilder: (context, state) => _page(const PortfolioMoversScreen())),
           GoRoute(path: '/admin/catalog', pageBuilder: (_, _) => _page(const AdminCatalogScreen())),
-          GoRoute(path: '/admin/market-movers', pageBuilder: (_, _) => _page(const AdminMarketMoversScreen())),
+          GoRoute(path: '/admin/portfolio-movers', pageBuilder: (_, _) => _page(const AdminPortfolioMoversScreen())),
+          GoRoute(path: '/admin/market-movers', pageBuilder: (_, _) => _page(const AdminPortfolioMoversScreen())),
           GoRoute(path: '/admin/pending-parallels', pageBuilder: (_, _) => _page(const PendingParallelsScreen())),
         ],
       ),
