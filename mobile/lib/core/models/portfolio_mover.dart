@@ -2,6 +2,8 @@ class PortfolioMover {
   final String topPlayerId;
   final String playerName;
   final String sport;
+  /// Optional second line (e.g. set / parallel from CardHedge top movers).
+  final String? cardDescription;
   final double currentAvg;
   final double previousAvg;
   final int currentVolume;
@@ -13,6 +15,7 @@ class PortfolioMover {
     required this.topPlayerId,
     required this.playerName,
     required this.sport,
+    this.cardDescription,
     required this.currentAvg,
     required this.previousAvg,
     required this.currentVolume,

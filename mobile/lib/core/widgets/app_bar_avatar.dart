@@ -47,7 +47,7 @@ class AppBarAvatar extends ConsumerWidget {
             value: '/admin/catalog',
           ),
           const AdaptivePopupMenuItem<String>(
-            label: 'Portfolio Movers (admin)',
+            label: 'Market Data (admin)',
             icon: 'info.circle',
             value: '/admin/portfolio-movers',
           ),
@@ -196,7 +196,7 @@ class _AvatarSheet extends ConsumerWidget {
                 onTap: () => onNavigate('/admin/pending-parallels'),
               ),
               _AdminLink(
-                label: 'Portfolio Movers (admin)',
+                label: 'Market Data (admin)',
                 icon: Icons.info_outline,
                 onTap: () => onNavigate('/admin/portfolio-movers'),
               ),

@@ -72,3 +72,42 @@ String? cardHedgeCategoryFromSport(String? sport) {
       .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
       .join(' ');
 }
+
+/// CardHedge `category` values we keep for Portfolio Movers (matches catalog sports).
+/// Top-movers only accepts one `category` query string, not an array — we request
+/// uncategorized then drop rows outside this set in one round-trip.
+const Set<String> cardHedgeMoverCategoryAllowlist = {
+  'Baseball',
+  'Basketball',
+  'Football',
+  'Soccer',
+  'Hockey',
+};
+
+/// Returns canonical category label if [category] is in [cardHedgeMoverCategoryAllowlist].
+String? canonicalCardHedgeMoverCategory(String? category) {
+  final c = category?.trim().toLowerCase() ?? '';
+  if (c.isEmpty) return null;
+  for (final a in cardHedgeMoverCategoryAllowlist) {
+    if (a.toLowerCase() == c) return a;
+  }
+  return null;
+}
+
+/// Maps Portfolio Movers sport chips to CardHedge `category` on `/v1/cards/top-movers`.
+String? cardHedgeCategoryForMoversFilter(String? uiSport) {
+  switch (uiSport) {
+    case 'NBA':
+      return 'Basketball';
+    case 'NFL':
+      return 'Football';
+    case 'MLB':
+      return 'Baseball';
+    case 'NHL':
+      return 'Hockey';
+    case 'Soccer':
+      return 'Soccer';
+    default:
+      return null;
+  }
+}

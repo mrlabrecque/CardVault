@@ -15,7 +15,7 @@ class AdminPortfolioMoversScreen extends ConsumerWidget {
       appBar: buildGlassNavBar(
         context,
         centerTitle: false,
-        title: Text('Portfolio Movers (admin)', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
+        title: Text('Market Data (admin)', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         actions: appBarShellTrailingActions(context),
       ),
       body: ListView(
@@ -29,9 +29,29 @@ class AdminPortfolioMoversScreen extends ConsumerWidget {
               border: Border.all(color: const Color(0xFFBFDBFE)),
             ),
             child: const Text(
-              'Portfolio Movers reads from the database only—no batch eBay scrape. '
-              'The Tools screen calls RPC `portfolio_movers_from_vault`, which aggregates '
-              'all users’ `user_cards` (avg current vs previous value per player/sport after comps refresh).',
+              'Tools → Market Data has two tabs. Top movers calls Card Hedge GET `/v1/cards/top-movers` '
+              'via `cardhedge-top-movers` (user JWT). One uncategorized fetch; the app filters to Baseball, '
+              'Basketball, Football, Soccer, and Hockey and applies sport chips client-side. '
+              'Deploy that function and set `CARDHEDGE_API_KEY` in Edge secrets.',
+              style: TextStyle(
+                color: Color(0xFF1E3A8A),
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: const Text(
+              'Portfolio movers uses Postgres RPC `portfolio_movers_from_vault` (authenticated Supabase client, '
+              'no Edge function). It aggregates all users’ `user_cards` (avg current vs previous value per player/sport). '
+              'Apply migrations that define this RPC if the tab errors.',
               style: TextStyle(
                 color: Color(0xFF1E3A8A),
                 fontSize: 13,
@@ -56,12 +76,6 @@ class AdminPortfolioMoversScreen extends ConsumerWidget {
                 height: 1.45,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Apply migration `20260511120000` / `20260512120000` so `portfolio_movers_from_vault` exists. '
-            'If the screen errors with a missing function, run `supabase db push` or apply SQL from migrations.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), height: 1.4),
           ),
         ],
       ),
