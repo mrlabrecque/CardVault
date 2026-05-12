@@ -16,17 +16,19 @@ class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
     super.key,
     required this.masterCardId,
-    required this.parallelName,
     this.initialGrade = 'Raw',
     this.refreshVersion = 0,
     this.externalLoading = false,
+    /// When true (CardHedge grade flow): no duplicate grade pills, no scraper loading
+    /// copy, no auto Bright Data refresh when the table is empty.
+    this.embeddedCardHedgeComps = false,
   });
 
   final String masterCardId;
-  final String parallelName;
   final String initialGrade;
   final int refreshVersion;
   final bool externalLoading;
+  final bool embeddedCardHedgeComps;
 
   @override
   ConsumerState<CardCompsSection> createState() => _CardCompsSectionState();
@@ -45,6 +47,10 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   late String _selectedGrade = widget.initialGrade;
   late int _selectedDays = 0; // 0 = all, 7 = 7 days, 30 = 30 days
   bool _fetchInProgress = false;
+  /// When [refreshVersion] bumps while a fetch is in flight (e.g. CardHedge edge
+  /// finishes after the first empty read), the follow-up [_fetchComps] must not
+  /// be dropped — otherwise the UI stays empty forever.
+  bool _compsFetchQueued = false;
   bool _autoRefreshAttempted = false;
   int _loadingStatusIndex = 0;
   Timer? _loadingStatusTimer;
@@ -59,11 +65,13 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   @override
   void didUpdateWidget(CardCompsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialGrade != widget.initialGrade) {
+      _selectedGrade = widget.initialGrade;
+    }
     if (oldWidget.externalLoading != widget.externalLoading) {
       _syncLoadingTicker();
     }
-    if (oldWidget.masterCardId != widget.masterCardId ||
-        oldWidget.parallelName != widget.parallelName) {
+    if (oldWidget.masterCardId != widget.masterCardId) {
       _selectedGrade = widget.initialGrade;
       _fetchComps();
       return;
@@ -87,7 +95,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   }
 
   void _syncLoadingTicker() {
-    if (!_isRefreshingUi) {
+    if (widget.embeddedCardHedgeComps || !_isRefreshingUi) {
       _loadingStatusTimer?.cancel();
       _loadingStatusTimer = null;
       _loadingStatusIndex = 0;
@@ -104,24 +112,27 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   }
 
   Future<void> _fetchComps() async {
-    if (_fetchInProgress) return;
+    if (_fetchInProgress) {
+      _compsFetchQueued = true;
+      return;
+    }
     _fetchInProgress = true;
     setState(() => _loading = true);
     _syncLoadingTicker();
     try {
       var comps = await ref.read(compsServiceProvider).getMasterCardComps(
             widget.masterCardId,
-            widget.parallelName,
           );
-      if (comps.isEmpty && !_autoRefreshAttempted && !widget.externalLoading) {
+      if (comps.isEmpty &&
+          !_autoRefreshAttempted &&
+          !widget.externalLoading &&
+          !widget.embeddedCardHedgeComps) {
         _autoRefreshAttempted = true;
         await ref.read(compsServiceProvider).refreshMasterCardComps(
               widget.masterCardId,
-              widget.parallelName,
             );
         comps = await ref.read(compsServiceProvider).getMasterCardComps(
               widget.masterCardId,
-              widget.parallelName,
             );
       }
       if (mounted) {
@@ -135,9 +146,14 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       }
     } finally {
       _fetchInProgress = false;
+      final runAgain = _compsFetchQueued;
+      _compsFetchQueued = false;
       if (mounted) {
         setState(() => _loading = false);
         _syncLoadingTicker();
+        if (runAgain) {
+          unawaited(_fetchComps());
+        }
       }
     }
   }
@@ -203,6 +219,21 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     final colors = Theme.of(context).colorScheme;
 
     if (_isRefreshingUi && _allComps.isEmpty) {
+      if (widget.embeddedCardHedgeComps) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 24),
+          child: Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: colors.primary,
+              ),
+            ),
+          ),
+        );
+      }
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Column(
@@ -239,6 +270,31 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
 
     if (_allComps.isEmpty) {
+      if (widget.embeddedCardHedgeComps) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.outline.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.55)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'No CardHedge sales returned for $_selectedGrade.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurface.withValues(alpha: 0.72),
+                        height: 1.35,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
@@ -280,7 +336,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_isRefreshingUi)
+        if (_isRefreshingUi && !widget.embeddedCardHedgeComps)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Center(
@@ -331,34 +387,35 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           ),
         ),
 
-        // Grade pills
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              _GradePill(
-                label: 'Raw',
-                price: _getGradeAverage('Raw'),
-                isSelected: _selectedGrade == 'Raw',
-                onTap: () => setState(() => _selectedGrade = 'Raw'),
-              ),
-              const SizedBox(width: 8),
-              _GradePill(
-                label: 'PSA 10',
-                price: _getGradeAverage('PSA 10'),
-                isSelected: _selectedGrade == 'PSA 10',
-                onTap: () => setState(() => _selectedGrade = 'PSA 10'),
-              ),
-              const SizedBox(width: 8),
-              _GradePill(
-                label: 'PSA 9',
-                price: _getGradeAverage('PSA 9'),
-                isSelected: _selectedGrade == 'PSA 9',
-                onTap: () => setState(() => _selectedGrade = 'PSA 9'),
-              ),
-            ],
+        // Grade pills (hidden when parent owns grade selection, e.g. CardHedge)
+        if (!widget.embeddedCardHedgeComps)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                _GradePill(
+                  label: 'Raw',
+                  price: _getGradeAverage('Raw'),
+                  isSelected: _selectedGrade == 'Raw',
+                  onTap: () => setState(() => _selectedGrade = 'Raw'),
+                ),
+                const SizedBox(width: 8),
+                _GradePill(
+                  label: 'PSA 10',
+                  price: _getGradeAverage('PSA 10'),
+                  isSelected: _selectedGrade == 'PSA 10',
+                  onTap: () => setState(() => _selectedGrade = 'PSA 10'),
+                ),
+                const SizedBox(width: 8),
+                _GradePill(
+                  label: 'PSA 9',
+                  price: _getGradeAverage('PSA 9'),
+                  isSelected: _selectedGrade == 'PSA 9',
+                  onTap: () => setState(() => _selectedGrade = 'PSA 9'),
+                ),
+              ],
+            ),
           ),
-        ),
 
         // Chart (if enough data)
         if (_getChartData().length >= 2) ...[
@@ -404,7 +461,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                       ),
                 ),
                 Text(
-                  'No recent eBay sales found at $_selectedGrade grade.',
+                  widget.embeddedCardHedgeComps
+                      ? 'No CardHedge sales in the selected date range at $_selectedGrade.'
+                      : 'No recent eBay sales found at $_selectedGrade grade.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.onSurface.withValues(alpha: 0.60),
                       ),

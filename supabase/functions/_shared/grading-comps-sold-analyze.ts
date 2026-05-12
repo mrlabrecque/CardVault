@@ -149,10 +149,13 @@ export async function handleGradingCompsSoldAnalyze(req: Request): Promise<Respo
       .select(`
         id,
         price_paid,
-        parallel_name,
         master_card_definitions (
-          player, card_number, is_rookie, is_auto, is_patch, serial_max,
-          sets ( name, releases ( year, sport, name ) )
+          is_auto, is_patch, serial_max,
+          set_parallels!parallel_id ( name ),
+          set_cards (
+            player, card_number, is_rookie,
+            sets ( name, releases ( year, sport, name ) )
+          )
         )
       `)
       .eq('id', userCardId)
@@ -162,19 +165,25 @@ export async function handleGradingCompsSoldAnalyze(req: Request): Promise<Respo
     if (cardErr || !card) return json({ error: 'Card not found' }, 404);
 
     const mcd = (card as any).master_card_definitions ?? {};
-    const setData = mcd.sets ?? {};
+    const sp = mcd.set_parallels as { name?: string } | { name?: string }[] | undefined;
+    const spRow = Array.isArray(sp) ? sp[0] : sp;
+    const parallelFromCatalog =
+      typeof spRow?.name === 'string' && spRow.name.trim().length > 0 ? spRow.name.trim() : 'Base';
+
+    const sc = mcd.set_cards ?? {};
+    const setData = sc.sets ?? {};
     const release = setData.releases ?? {};
 
     const normalized = {
       year: release.year ?? null,
       release_name: release.name ?? '',
       set_name: setData.name ?? '',
-      player: mcd.player ?? '',
-      card_number: mcd.card_number ?? null,
-      parallel_type: (card as any).parallel_name ?? 'Base',
+      player: sc.player ?? '',
+      card_number: sc.card_number ?? null,
+      parallel_type: parallelFromCatalog,
       is_auto: mcd.is_auto ?? false,
       is_patch: mcd.is_patch ?? false,
-      is_rookie: mcd.is_rookie ?? false,
+      is_rookie: sc.is_rookie ?? false,
       serial_max: mcd.serial_max ?? null,
     };
 

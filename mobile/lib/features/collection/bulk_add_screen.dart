@@ -348,14 +348,13 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
           isSSP: staged.isSSP,
         ));
 
-        unawaited(
-          ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {}),
-        );
+        await ref.read(compsServiceProvider).syncMasterCatalogPricingForVariant(created.masterCardId);
+
         unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
       }
 
-      // Invalidate the cards provider to refresh the list
       ref.invalidate(userCardsProvider);
+      await ref.read(userCardsProvider.future);
 
       if (!mounted) return;
       setState(() { _committing = false; _staged.clear(); });

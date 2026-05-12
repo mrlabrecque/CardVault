@@ -116,16 +116,16 @@ class SingleItemCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListItemUsdText(
-            value: card.currentValue,
+            value: card.displayValue,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           ),
           if (card.pricePaid != null && card.pricePaid! > 0) ...[
             const SizedBox(height: 2),
             Text(
-              '${((card.currentValue ?? 0) - (card.pricePaid ?? 0)) >= 0 ? '+' : ''}${(((card.currentValue ?? 0) - (card.pricePaid ?? 0)) / (card.pricePaid ?? 1) * 100).toStringAsFixed(0)}%',
+              '${card.pl >= 0 ? '+' : ''}${card.plPct.toStringAsFixed(0)}%',
               style: TextStyle(
                 fontSize: 12,
-                color: ((card.currentValue ?? 0) - (card.pricePaid ?? 0)) >= 0 ? Colors.green : Colors.red,
+                color: card.pl >= 0 ? Colors.green : Colors.red,
                 fontWeight: FontWeight.w600,
               ),
             ),

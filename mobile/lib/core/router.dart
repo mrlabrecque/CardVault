@@ -81,6 +81,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               }
               return _page(
                 MasterCardDetailScreen(
+                  key: ValueKey(
+                    '${args.masterCard.id}|${args.parallelName}|${args.parallelSerialMax ?? ''}',
+                  ),
                   masterCard: args.masterCard,
                   parallelName: args.parallelName,
                   parallelSerialMax: args.parallelSerialMax,

@@ -122,6 +122,8 @@ class WishlistItem {
     if (imageUrl == null) {
       final masterCard = json['master_card_definitions'] as Map<String, dynamic>?;
       imageUrl = masterCard?['image_url'] as String?;
+      final sc = masterCard?['set_cards'] as Map<String, dynamic>?;
+      imageUrl ??= sc?['image_url'] as String?;
     }
 
     return WishlistItem(

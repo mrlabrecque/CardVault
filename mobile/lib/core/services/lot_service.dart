@@ -7,7 +7,7 @@ class LotState {
 
   const LotState({this.items = const [], this.pct = 100});
 
-  double get totalValue => items.fold(0.0, (s, c) => s + (c.currentValue ?? 0));
+  double get totalValue => items.fold(0.0, (s, c) => s + (c.displayValue ?? 0));
   double get askingPrice => totalValue * pct / 100;
   Set<String> get itemIds => items.map((c) => c.id).toSet();
 

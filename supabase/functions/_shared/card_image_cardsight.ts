@@ -1,5 +1,5 @@
 /**
- * CardSight card image → Supabase Storage (`card-images`) → `master_card_definitions.image_url`.
+ * CardSight card image → Supabase Storage (`card-images`) → `set_cards.image_url`.
  */
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
@@ -21,13 +21,14 @@ export async function fetchCardsightCardImageBytes(cardsightCardId: string): Pro
 }
 
 /**
- * Uploads JPEG bytes, updates `master_card_definitions` for `masterCardId`, returns public URL or null.
+ * Uploads JPEG bytes, updates `set_cards` for `setCardId`, returns public URL or null.
+ * @param setCardId Checklist row id (`set_cards.id`); body field may still be named `masterCardId` for clients.
  */
 export async function uploadCardImageAndUpdateMaster(
   supabase: SupabaseClient,
   params: { masterCardId: string; cardsightCardId: string; imageBuffer: ArrayBuffer },
 ): Promise<string | null> {
-  const { masterCardId, cardsightCardId, imageBuffer } = params;
+  const { masterCardId: setCardId, cardsightCardId, imageBuffer } = params;
   const storagePath = `cards/${cardsightCardId}.jpg`;
 
   const { error: uploadError } = await supabase.storage
@@ -42,9 +43,9 @@ export async function uploadCardImageAndUpdateMaster(
   const { data: { publicUrl } } = supabase.storage.from('card-images').getPublicUrl(storagePath);
 
   const { error: updateError } = await supabase
-    .from('master_card_definitions')
+    .from('set_cards')
     .update({ image_url: publicUrl })
-    .eq('id', masterCardId);
+    .eq('id', setCardId);
 
   if (updateError) {
     console.log('[card-image] update error:', updateError);

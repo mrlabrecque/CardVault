@@ -120,7 +120,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildContent(List<UserCard> cards, double navOffset) {
-    final totalValue = cards.fold(0.0, (s, c) => s + (c.currentValue ?? 0));
+    final totalValue = cards.fold(0.0, (s, c) => s + (c.displayValue ?? 0));
     final totalCost  = cards.fold(0.0, (s, c) => s + (c.pricePaid ?? 0));
     final pl = totalValue - totalCost;
     final plPct = totalCost > 0 ? (pl / totalCost) * 100 : null;
@@ -131,9 +131,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final sportPL = <String, double>{};
     for (final c in cards) {
       final s = c.sport.isEmpty ? 'Other' : c.sport;
-      sportValues[s] = (sportValues[s] ?? 0) + (c.currentValue ?? 0);
+      sportValues[s] = (sportValues[s] ?? 0) + (c.displayValue ?? 0);
       sportCounts[s] = (sportCounts[s] ?? 0) + 1;
-      sportPL[s] = (sportPL[s] ?? 0) + ((c.currentValue ?? 0) - (c.pricePaid ?? 0));
+      sportPL[s] = (sportPL[s] ?? 0) + ((c.displayValue ?? 0) - (c.pricePaid ?? 0));
     }
 
     final breakdownMap = _selectedStat == 'value' ? sportValues
@@ -147,9 +147,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     // Top cards
     final topCards = [...cards]
-        .where((c) => (c.currentValue ?? 0) > 0)
+        .where((c) => (c.displayValue ?? 0) > 0)
         .toList()
-      ..sort((a, b) => (b.currentValue ?? 0).compareTo(a.currentValue ?? 0));
+      ..sort((a, b) => (b.displayValue ?? 0).compareTo(a.displayValue ?? 0));
 
     // Top players
     final playerCounts = <String, int>{};
@@ -278,14 +278,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const SizedBox(height: 4),
                 if (_bottomView == 'top-cards')
                   topCards.isEmpty
-                      ? const _EmptyChart(message: 'No cards with a current value yet.')
+                      ? const _EmptyChart(message: 'No cards with a value yet.')
                       : Column(children: [
                           for (int i = 0; i < topCards.take(5).length; i++)
                             _RankedCardRow(
                               rank: i + 1,
                               title: topCards[i].player,
                               subtitle: '${topCards[i].year ?? ''} ${topCards[i].set ?? ''}'.trim(),
-                              trailing: formatUsd(topCards[i].currentValue ?? 0),
+                              trailing: formatUsd(topCards[i].displayValue ?? 0),
                               onTap: () => context.go('/collection/card', extra: topCards[i]),
                             ),
                         ])
@@ -323,8 +323,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     for (final c in sorted) {
       final date = c.createdAt!.toIso8601String().substring(0, 10);
       final val = stat == 'cards' ? 1.0
-          : stat == 'value' ? (c.currentValue ?? 0)
-          : (c.currentValue ?? 0) - (c.pricePaid ?? 0);
+          : stat == 'value' ? (c.displayValue ?? 0)
+          : (c.displayValue ?? 0) - (c.pricePaid ?? 0);
       byDate[date] = (byDate[date] ?? 0) + val;
     }
 

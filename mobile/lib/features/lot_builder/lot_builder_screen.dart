@@ -45,7 +45,7 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
 
   List<UserCard> _filtered(List<UserCard> all) {
     var result = all
-        .where((c) => c.currentValue != null && c.currentValue! > 0)
+        .where((c) => c.displayValue != null && c.displayValue! > 0)
         .toList();
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
@@ -62,7 +62,7 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
 
     result.sort((a, b) => switch (_sort) {
       _SortOption.playerAz  => a.player.compareTo(b.player),
-      _SortOption.valueDesc => (b.currentValue ?? 0).compareTo(a.currentValue ?? 0),
+      _SortOption.valueDesc => (b.displayValue ?? 0).compareTo(a.displayValue ?? 0),
       _SortOption.dateDesc  => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
     });
 
@@ -471,7 +471,7 @@ class _BrowseCardRow extends StatelessWidget {
                     Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  ListItemUsdText(value: card.currentValue),
+                  ListItemUsdText(value: card.displayValue),
                   const SizedBox(height: 6),
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
@@ -682,7 +682,7 @@ class _BasketCardRow extends StatelessWidget {
               child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                ListItemUsdText(value: card.currentValue),
+                ListItemUsdText(value: card.displayValue),
                 const SizedBox(height: 6),
                 SizedBox(
                   width: 28,

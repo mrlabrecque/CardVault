@@ -114,7 +114,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
 
 
   Widget _buildValue(ColorScheme colors, CardStack stack) {
-    final hasAnyValue = stack.cards.any((c) => c.currentValue != null);
+    final hasAnyValue = stack.cards.any((c) => c.displayValue != null);
     return DefaultTextStyle(
       style: TextStyle(color: colors.onSurface, fontFamily: AppFonts.fontFamily),
       child: Column(
@@ -143,7 +143,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
               Icon(Icons.info_outline, size: 12, color: colors.onSurface.withValues(alpha: 0.55)),
               const SizedBox(width: 4),
               Text(
-                'No recent comps',
+                'No guide price',
                 style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.55)),
               ),
             ],
@@ -185,7 +185,7 @@ class _IndividualCardRow extends StatelessWidget {
               ),
             ),
             Text(
-              card.currentValue != null ? formatUsd(card.currentValue!) : 'N/A',
+              card.displayValue != null ? formatUsd(card.displayValue!) : 'N/A',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             IconButton(

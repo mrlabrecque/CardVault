@@ -11,7 +11,6 @@ import '../../core/widgets/card_attributes_wrap.dart';
 import '../../core/widgets/inline_notice_container.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/utils/currency_format.dart';
 import '../../core/utils/usd_field.dart';
@@ -70,8 +69,6 @@ class ItemDetailScreen extends ConsumerStatefulWidget {
 
 class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   final ScrollController _scrollController = ScrollController();
-  int _marketRefreshVersion = 0;
-  bool _refreshingMarketValue = false;
 
   /// Scroll offset (px) at which the hero gradient is fully behind the AppBar.
   /// Re-measured from the rendered hero on every frame.
@@ -82,6 +79,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    final c = widget.card;
+    if (c.masterCardId != null && (c.displayValue ?? 0) <= 0) {
+      Future.microtask(() {
+        if (mounted) ref.invalidate(userCardsProvider);
+      });
+    }
   }
 
   @override
@@ -99,12 +102,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   }
 
   UserCard _resolvedCard() {
-    final list = ref.watch(userCardsProvider).value;
-    if (list == null) return widget.card;
-    for (final c in list) {
-      if (c.id == widget.card.id) return c;
+    final async = ref.watch(userCardsProvider);
+    final list = async.asData?.value;
+    if (list != null) {
+      for (final c in list) {
+        if (c.id == widget.card.id) return c;
+      }
     }
     return widget.card;
+  }
+
+  String _missingCatalogValueNotice(UserCard card) {
+    if (card.masterCardId == null) {
+      return 'This copy is not linked to the catalog, so no guide price is available.';
+    }
+    final hasCh = card.embeddedMasterCardhedgeId != null && card.embeddedMasterCardhedgeId!.trim().isNotEmpty;
+    if (!hasCh) {
+      return 'CardHedge has not matched this variant yet — no guide price in the app. Try again from the catalog card page.';
+    }
+    return 'No CardHedge guide price for this slab yet. Pull to refresh on Collection or reopen this card in a moment.';
   }
 
   void _close(BuildContext context) {
@@ -391,37 +407,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     otherParallelCtrl.dispose();
   }
 
-  Future<void> _refreshValue(UserCard card) async {
-    if (_refreshingMarketValue) return;
-    setState(() => _refreshingMarketValue = true);
-    try {
-      await ref.read(compsServiceProvider).refreshCardValue(card.id);
-      ref.invalidate(userCardsProvider);
-      if (mounted) {
-        setState(() => _marketRefreshVersion++);
-      }
-      if (!mounted) return;
-      AdaptiveSnackBar.show(
-        context,
-        message: 'Market value updated.',
-        type: AdaptiveSnackBarType.success,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      final raw = e.toString();
-      final message = raw.startsWith('Exception: ') ? raw.substring('Exception: '.length) : raw;
-      AdaptiveSnackBar.show(
-        context,
-        message: 'Refresh failed: $message',
-        type: AdaptiveSnackBarType.error,
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _refreshingMarketValue = false);
-      }
-    }
-  }
-
   Future<void> _delete(UserCard card) async {
     final confirm = await showAdaptiveDialog<bool>(
       context: context,
@@ -442,11 +427,9 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   Widget build(BuildContext context) {
     final card = _resolvedCard();
     final colors = Theme.of(context).colorScheme;
-    final hasValue = card.currentValue != null;
-    final pl = hasValue ? (card.currentValue! - (card.pricePaid ?? 0)) : null;
-    final plPct = (hasValue && card.pricePaid != null && card.pricePaid! > 0)
-        ? (pl! / card.pricePaid!) * 100
-        : null;
+    final hasValue = card.displayValue != null;
+    final pl = hasValue ? card.pl : null;
+    final plPct = (hasValue && card.pricePaid != null && card.pricePaid! > 0) ? card.plPct : null;
 
     final padding = MediaQuery.paddingOf(context);
     final bottomPad = padding.bottom;
@@ -491,11 +474,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 buttonStyle: PopupButtonStyle.glass,
                 items: const [
                   AdaptivePopupMenuItem<String>(
-                    label: 'Refresh value',
-                    icon: 'refresh',
-                    value: 'refresh',
-                  ),
-                  AdaptivePopupMenuItem<String>(
                     label: 'Edit',
                     icon: 'pencil',
                     value: 'edit',
@@ -508,9 +486,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 ],
                 onSelected: (_, entry) {
                   switch (entry.value) {
-                    case 'refresh':
-                      _refreshValue(card);
-                      break;
                     case 'edit':
                       _openEditSheet(card);
                       break;
@@ -578,8 +553,8 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                           Expanded(
                             child: _InfoBox(
                               label: 'Current Value',
-                              value: hasValue ? formatUsd(card.currentValue!) : 'N/A',
-                              trend: hasValue ? card.valueTrend : 0,
+                              value: hasValue ? formatUsd(card.displayValue!) : 'N/A',
+                              trend: hasValue ? card.valueTrendForDisplay : 0,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -594,16 +569,14 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 const SizedBox(height: 8),
                 if (hasValue)
                   _ValueRefreshNotice(
-                    refreshedAt: card.valueRefreshedAt,
+                    refreshedAt: card.displayValueRefreshedAt,
                     relativeRefreshed: _relativeRefreshed,
                   )
                 else
                   InlineNoticeContainer(
                     icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.60)),
                     child: Text(
-                      card.valueRefreshedAt != null
-                          ? 'No recent comps for this card/parallel. Last checked ${_relativeRefreshed(card.valueRefreshedAt!)}.'
-                          : 'No recent comps for this card/parallel yet. Value will appear after a successful refresh.',
+                      _missingCatalogValueNotice(card),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             height: 1.35,
                             color: colors.onSurface.withValues(alpha: 0.75),
@@ -666,11 +639,15 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 if (card.masterCardId != null)
                   MarketAnalysisSection(
                     masterCardId: card.masterCardId!,
-                    parallelName: card.parallel,
                     initialGrade: _resolveDefaultGrade(card),
                     segmentColor: colors.primary,
-                    refreshVersion: _marketRefreshVersion,
-                    externalLoading: _refreshingMarketValue,
+                    titleGain: card.masterDefinitionGain,
+                    cardhedgeId: card.embeddedMasterCardhedgeId,
+                    cardHedgeGradeAverages: card.hasUsableCardHedgeGradePricesForMarket
+                        ? card.cardHedgeGradePricesForMarketSection
+                        : null,
+                    skipScraperSoldComps: card.hasUsableCardHedgeGradePricesForMarket,
+                    showDbSoldCompsWhenAvailable: card.hasUsableCardHedgeGradePricesForMarket,
                   )
                 else
                   Padding(

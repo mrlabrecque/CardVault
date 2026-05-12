@@ -15,6 +15,23 @@ function json(data: unknown, status = 200) {
   });
 }
 
+/** Prefer `Base`, else lowest sort_order / name. */
+function pickBaseParallelId(
+  rows: { id: string; name: string; sort_order: number | null }[],
+): string | null {
+  if (!rows.length) return null;
+  const sorted = [...rows].sort((a, b) => {
+    const ab = a.name.trim().toLowerCase() === 'base' ? 0 : 1;
+    const bb = b.name.trim().toLowerCase() === 'base' ? 0 : 1;
+    if (ab !== bb) return ab - bb;
+    const sa = a.sort_order ?? 999999;
+    const sb = b.sort_order ?? 999999;
+    if (sa !== sb) return sa - sb;
+    return a.name.localeCompare(b.name);
+  });
+  return sorted[0]?.id ?? null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS, status: 200 });
 
@@ -37,8 +54,6 @@ Deno.serve(async (req) => {
       return json({ error: 'cardsightReleaseId and cardsightSetId are required' }, 400);
     }
 
-    // ── Fetch cards from CardSight ────────────────────────────────────────────
-    // Use release endpoint with setId filter; paginate if needed
     let allCards: Array<{
       id: string;
       number: string;
@@ -76,7 +91,6 @@ Deno.serve(async (req) => {
         hasMore = cards.length === 100;
         page++;
       }
-      // Small delay to avoid rate-limiting
       await new Promise(r => setTimeout(r, 250));
     }
 
@@ -84,7 +98,6 @@ Deno.serve(async (req) => {
       return json({ imported: 0, total: 0 });
     }
 
-    // ── Find the set in DB (or use provided setId) ────────────────────────────
     let dbSetId = setId;
     if (!dbSetId) {
       const { data: s } = await supabase
@@ -99,8 +112,18 @@ Deno.serve(async (req) => {
       return json({ error: 'Set not found in DB. Import the set first via catalog-import-sets.' }, 400);
     }
 
-    // ── Deduplicate cards by (player, card_number) ────────────────────────────
-    // Merge attributes with OR logic (never remove a flag)
+    const { data: parallelRows, error: parErr } = await supabase
+      .from('set_parallels')
+      .select('id, name, sort_order')
+      .eq('set_id', dbSetId);
+
+    if (parErr) throw new Error(parErr.message);
+
+    const baseParallelId = pickBaseParallelId(parallelRows ?? []);
+    if (!baseParallelId) {
+      return json({ error: 'No parallels defined for this set; add parallels before importing cards.' }, 400);
+    }
+
     const cardMap = new Map<string, {
       player: string;
       cardNumber: string;
@@ -112,7 +135,6 @@ Deno.serve(async (req) => {
       cardsightCardId: string;
     }>();
 
-    // First pass: deduplicate by name|number
     for (const card of allCards) {
       if (!card.name || card.name.trim() === '') continue;
 
@@ -139,7 +161,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Second pass: fetch images from CardSight, upload to Storage, save URL
     for (const card of cardMap.values()) {
       try {
         const imgUrl = `${CARDSIGHT_BASE}/v1/images/cards/${card.cardsightCardId}`;
@@ -169,33 +190,57 @@ Deno.serve(async (req) => {
       } catch (_e) {
         // Silently skip image fetch errors
       }
-      // Small delay to avoid rate-limiting
       await new Promise(r => setTimeout(r, 100));
     }
 
-    // ── Upsert cards to master_card_definitions ───────────────────────────────
-    const rows = Array.from(cardMap.values()).map(card => ({
-      set_id:            dbSetId,
-      player:            card.player,
-      card_number:       card.cardNumber || null,
-      serial_max:        null,
-      is_rookie:         card.isRookie,
-      is_auto:           card.isAuto,
-      is_patch:          card.isPatch,
-      is_ssp:            card.isSSP,
-      image_url:         card.imageUrl,
+    const setRows = Array.from(cardMap.values()).map(card => ({
+      set_id: dbSetId,
+      player: card.player,
+      card_number: card.cardNumber || null,
+      is_rookie: card.isRookie,
+      image_url: card.imageUrl,
       cardsight_card_id: card.cardsightCardId,
     }));
 
-    const { data: upserted, error: upsertError } = await supabase
-      .from('master_card_definitions')
-      .upsert(rows)
-      .select('id');
+    const { data: upsertedSetCards, error: setErr } = await supabase
+      .from('set_cards')
+      .upsert(setRows, { onConflict: 'cardsight_card_id' })
+      .select('id, cardsight_card_id');
 
-    if (upsertError) throw new Error(upsertError.message);
+    if (setErr) throw new Error(setErr.message);
+
+    const byCsId = new Map((upsertedSetCards ?? []).map((r: { id: string; cardsight_card_id: string }) =>
+      [r.cardsight_card_id, r.id] as const
+    ));
+
+    const variantRows = Array.from(cardMap.values()).map(card => {
+      const setCardId = byCsId.get(card.cardsightCardId);
+      if (!setCardId) return null;
+      return {
+        set_card_id: setCardId,
+        parallel_id: baseParallelId,
+        is_auto: card.isAuto,
+        is_patch: card.isPatch,
+        is_ssp: card.isSSP,
+        serial_max: null as number | null,
+      };
+    }).filter(Boolean) as {
+      set_card_id: string;
+      parallel_id: string;
+      is_auto: boolean;
+      is_patch: boolean;
+      is_ssp: boolean;
+      serial_max: number | null;
+    }[];
+
+    const { error: varErr } = await supabase
+      .from('master_card_definitions')
+      .upsert(variantRows, { onConflict: 'set_card_id,parallel_id' });
+
+    if (varErr) throw new Error(varErr.message);
 
     return json({
-      imported: upserted?.length ?? 0,
+      imported: upsertedSetCards?.length ?? 0,
       total: cardMap.size,
     });
   } catch (e: unknown) {

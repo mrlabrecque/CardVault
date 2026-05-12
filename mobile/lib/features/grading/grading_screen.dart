@@ -134,7 +134,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
           final pb = sb?.result != null ? _psa9Profit(b, sb!.result!, _gradingFee) : double.negativeInfinity;
           return pb.compareTo(pa);
         default: // value-desc
-          return (b.currentValue ?? 0).compareTo(a.currentValue ?? 0);
+          return (b.displayValue ?? 0).compareTo(a.displayValue ?? 0);
       }
     });
 
@@ -433,7 +433,7 @@ class _CardRow extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '${formatUsdOrNa(card.pricePaid, zeroIsNa: false)} paid · ${formatUsdOrNa(card.currentValue)} raw',
+          '${formatUsdOrNa(card.pricePaid, zeroIsNa: false)} paid · ${formatUsdOrNa(card.displayValue)} raw',
           style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
         ),
       ],

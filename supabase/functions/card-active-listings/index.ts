@@ -193,6 +193,14 @@ async function fetchActiveWithFallbackQueries(queries: string[]) {
   return merged;
 }
 
+function parallelNameFromMaster(master: Record<string, unknown>): string {
+  const sp = master.set_parallels as Record<string, unknown> | Record<string, unknown>[] | null | undefined;
+  if (!sp) return 'Base';
+  const row = Array.isArray(sp) ? (sp[0] as Record<string, unknown> | undefined) : (sp as Record<string, unknown>);
+  const n = typeof row?.name === 'string' ? row.name.trim() : '';
+  return n.length > 0 ? n : 'Base';
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -265,7 +273,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { masterCardId?: string; parallelName?: string };
+  let body: { masterCardId?: string };
   try {
     body = await req.json();
   } catch {
@@ -276,9 +284,8 @@ Deno.serve(async (req) => {
   }
 
   const masterCardId = body.masterCardId;
-  const parallelName = body.parallelName;
-  if (!masterCardId || parallelName === undefined || parallelName === null) {
-    return new Response(JSON.stringify({ error: 'masterCardId and parallelName required' }), {
+  if (!masterCardId || typeof masterCardId !== 'string' || !masterCardId.trim()) {
+    return new Response(JSON.stringify({ error: 'masterCardId required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
@@ -289,8 +296,12 @@ Deno.serve(async (req) => {
   const { data: masterCard, error: mcError } = await admin
     .from('master_card_definitions')
     .select(`
-      id, player, card_number, is_rookie, is_auto, is_patch, serial_max,
-      sets ( id, name, releases ( year, name, sport ) )
+      id, is_auto, is_patch, serial_max,
+      set_parallels!parallel_id ( name ),
+      set_cards (
+        player, card_number, is_rookie, set_id,
+        sets ( id, name, releases ( year, name, sport ) )
+      )
     `)
     .eq('id', masterCardId)
     .single();
@@ -302,27 +313,30 @@ Deno.serve(async (req) => {
     });
   }
 
+  const sc = (masterCard as any).set_cards ?? {};
+  const setData = sc.sets ?? {};
+  const setIdForParallels = setData.id as string | undefined;
+
   const { data: allParallels } = await admin
     .from('set_parallels')
     .select('name')
-    .eq('set_id', (masterCard as any).sets.id);
-
+    .eq('set_id', setIdForParallels ?? sc.set_id);
   const allParallelNames = (allParallels as any[])?.map((p: any) => p.name) ?? [];
 
   const mcd = masterCard as any;
-  const setData = mcd.sets ?? {};
+  const parallelName = parallelNameFromMaster(mcd as Record<string, unknown>);
   const release = setData.releases ?? {};
 
   const cardRow = {
     year: release.year,
     release_name: release.name,
     set_name: setData.name,
-    player: mcd.player,
-    card_number: mcd.card_number,
+    player: sc.player,
+    card_number: sc.card_number,
     parallel_type: parallelName,
     is_auto: mcd.is_auto,
     is_patch: mcd.is_patch,
-    is_rookie: mcd.is_rookie,
+    is_rookie: sc.is_rookie,
     serial_max: mcd.serial_max,
     is_graded: false,
     grader: null,
@@ -334,8 +348,8 @@ Deno.serve(async (req) => {
   const queryVariants = buildFallbackQueries({
     releaseName: release.name ?? undefined,
     setName: setData.name ?? undefined,
-    player: mcd.player ?? undefined,
-    cardNumber: mcd.card_number ?? undefined,
+    player: sc.player ?? undefined,
+    cardNumber: sc.card_number ?? undefined,
     parallelName,
     year: release.year ?? undefined,
   });
@@ -344,7 +358,7 @@ Deno.serve(async (req) => {
   }
   const browseRows = await fetchActiveWithFallbackQueries(queryVariants);
   const raw = browseRows.map(browseRowToFilterShape);
-  const filtered = parseAndFilter(raw, query, parallelName, allParallelNames, mcd.card_number ?? undefined, setData.name ?? undefined);
+  const filtered = parseAndFilter(raw, query, parallelName, allParallelNames, sc.card_number ?? undefined, setData.name ?? undefined);
   console.log('[card-active-listings] counts:', { raw: raw.length, filtered: filtered.length });
 
   const items = filtered.map((row: any) => ({

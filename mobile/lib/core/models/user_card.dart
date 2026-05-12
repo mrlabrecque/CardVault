@@ -1,3 +1,5 @@
+import '../utils/cardhedge_grade_prices.dart';
+
 int? _tryParseInt(dynamic value) {
   if (value == null) return null;
   if (value is int) return value;
@@ -48,6 +50,8 @@ class UserCard {
   final String? serialNumber;
   final int? serialMax;
   final double? pricePaid;
+  /// Optional column populated by legacy refresh flows; UI value uses [displayValue]
+  /// (from `current_prices` + slab on the linked master).
   final double? currentValue;
   final double? previousValue;
   final bool rookie;
@@ -59,6 +63,16 @@ class UserCard {
   final int? setCardCount;
   final bool weeklyPriceCheck;
   final DateTime? valueRefreshedAt;
+
+  /// From `current_prices` for [masterCardId], row whose `grade` matches this copy.
+  final double? catalogPriceFromCurrentPrices;
+
+  /// From `master_card_definitions` embed (CardHedge grade rows).
+  final Map<String, double?>? embeddedCardHedgeGradePrices;
+  final DateTime? embeddedCardHedgePricesMaxFetchedAt;
+  final double? masterDefinitionGain;
+  final String? embeddedMasterCardhedgeId;
+  final DateTime? embeddedMasterCardhedgeFetchedAt;
 
   const UserCard({
     required this.id,
@@ -90,23 +104,74 @@ class UserCard {
     this.setCardCount,
     this.weeklyPriceCheck = false,
     this.valueRefreshedAt,
+    this.catalogPriceFromCurrentPrices,
+    this.embeddedCardHedgeGradePrices,
+    this.embeddedCardHedgePricesMaxFetchedAt,
+    this.masterDefinitionGain,
+    this.embeddedMasterCardhedgeId,
+    this.embeddedMasterCardhedgeFetchedAt,
   });
 
   factory UserCard.fromJson(Map<String, dynamic> json) {
-    final master = json['master_card_definitions'] as Map<String, dynamic>?;
-    final setData = master?['sets'] as Map<String, dynamic>?;
-    final release = setData?['releases'] as Map<String, dynamic>?;
+    Map<String, dynamic>? master;
+    final rawMaster = json['master_card_definitions'];
+    if (rawMaster is Map<String, dynamic>) {
+      master = rawMaster;
+    } else if (rawMaster is Map) {
+      master = Map<String, dynamic>.from(rawMaster);
+    } else if (rawMaster is List) {
+      for (final el in rawMaster) {
+        if (el is Map<String, dynamic>) {
+          master = el;
+          break;
+        }
+        if (el is Map) {
+          master = Map<String, dynamic>.from(el);
+          break;
+        }
+      }
+    }
+    final setData = master?['set_cards'] as Map<String, dynamic>?;
+    final release = setData?['sets']?['releases'] as Map<String, dynamic>?;
     final parallel = json['set_parallels'] as Map<String, dynamic>?;
     final attrs = master?['attributes'];
     final parallelName = _tryParseString(json['parallel_name']) ??
         _tryParseString(parallel?['name']) ??
         'Base';
 
+    final gradeValueRaw = json['grade_value']?.toString().trim();
+    final gradeStr = (gradeValueRaw == null || gradeValueRaw.isEmpty) ? null : gradeValueRaw;
+
+    Map<String, double?>? chPrices;
+    DateTime? chMaxFetched;
+    double? catalogSpot;
+    double? masterGain;
+    String? cardhedgeId;
+    DateTime? cardhedgeFetchedAt;
+    if (master != null) {
+      final cpList = master['current_prices'];
+      if (cpList is List) {
+        chPrices = parseEmbeddedCurrentPrices(cpList);
+        chMaxFetched = maxFetchedAtFromCurrentPriceRows(cpList);
+        catalogSpot = priceFromCurrentPricesRowsForUserCopy(
+          cpList,
+          isGraded: json['is_graded'] as bool? ?? false,
+          grader: _tryParseString(json['grader']),
+          gradeValueRaw: gradeStr,
+        );
+      }
+      masterGain = _tryParseDouble(master['gain']);
+      cardhedgeId = _tryParseString(master['cardhedge_id']);
+      if (master['cardhedge_fetched_at'] != null) {
+        cardhedgeFetchedAt = DateTime.tryParse(master['cardhedge_fetched_at'].toString());
+      }
+    }
+
     return UserCard(
       id: json['id'] as String,
       masterCardId: json['master_card_id'] as String?,
-      player: master?['player'] as String? ?? '',
-      cardNumber: master?['card_number'] as String?,
+      player: setData?['player'] as String? ?? json['player'] as String? ?? '',
+      cardNumber: setData?['card_number'] as String?,
       sport: release?['sport'] as String? ?? '',
       set: release?['name'] as String?,        // release name e.g. "Topps Chrome"
       checklist: setData?['name'] as String?,  // set name e.g. "Base Set"
@@ -115,7 +180,7 @@ class UserCard {
       setCardCount: _tryParseInt(setData?['card_count']),
       parallel: parallelName,
       parallelId: json['parallel_id'] as String?,
-      grade: json['grade_value'] as String?,
+      grade: gradeStr,
       isGraded: json['is_graded'] as bool? ?? false,
       grader: json['grader'] as String?,
       gradeValue: _tryParseDouble(json['grade_value']),
@@ -124,20 +189,87 @@ class UserCard {
       pricePaid: _tryParseDouble(json['price_paid']),
       currentValue: _tryParseDouble(json['current_value']),
       previousValue: _tryParseDouble(json['previous_value']),
-      rookie: (master?['is_rookie'] as bool? ?? false) || _hasAttribute(attrs, 'RC'),
+      rookie: (setData?['is_rookie'] as bool? ?? false) || _hasAttribute(attrs, 'RC'),
       autograph: (master?['is_auto'] as bool? ?? false) ||
           (parallel?['is_auto'] as bool? ?? false) ||
           _hasAttribute(attrs, 'AU'),
       memorabilia: (master?['is_patch'] as bool? ?? false) || _hasAttribute(attrs, 'GU'),
       ssp: (master?['is_ssp'] as bool? ?? false) || _hasAttribute(attrs, 'SSP'),
-      imageUrl: master?['image_url'] as String?,
+      imageUrl: (master?['image_url'] as String?)?.trim().isNotEmpty == true
+          ? master!['image_url'] as String?
+          : setData?['image_url'] as String?,
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
       weeklyPriceCheck: json['weekly_price_check'] as bool? ?? false,
       valueRefreshedAt: json['value_refreshed_at'] != null ? DateTime.tryParse(json['value_refreshed_at'] as String) : null,
+      catalogPriceFromCurrentPrices: catalogSpot,
+      embeddedCardHedgeGradePrices: chPrices,
+      embeddedCardHedgePricesMaxFetchedAt: chMaxFetched,
+      masterDefinitionGain: masterGain,
+      embeddedMasterCardhedgeId: cardhedgeId,
+      embeddedMasterCardhedgeFetchedAt: cardhedgeFetchedAt,
     );
   }
 
-  double get pl => (currentValue ?? 0) - (pricePaid ?? 0);
+  /// Overrides catalog pricing fields after a dedicated `current_prices` query (see [CardsService.loadUserCards]).
+  factory UserCard.withResolvedCatalogTablePricing(
+    UserCard base, {
+    required double? catalogPriceFromCurrentPrices,
+    required Map<String, double?>? embeddedCardHedgeGradePrices,
+    required DateTime? embeddedCardHedgePricesMaxFetchedAt,
+  }) {
+    return UserCard(
+      id: base.id,
+      masterCardId: base.masterCardId,
+      player: base.player,
+      cardNumber: base.cardNumber,
+      sport: base.sport,
+      set: base.set,
+      checklist: base.checklist,
+      year: base.year,
+      setId: base.setId,
+      parallel: base.parallel,
+      parallelId: base.parallelId,
+      grade: base.grade,
+      isGraded: base.isGraded,
+      grader: base.grader,
+      gradeValue: base.gradeValue,
+      serialNumber: base.serialNumber,
+      serialMax: base.serialMax,
+      pricePaid: base.pricePaid,
+      currentValue: base.currentValue,
+      previousValue: base.previousValue,
+      rookie: base.rookie,
+      autograph: base.autograph,
+      memorabilia: base.memorabilia,
+      ssp: base.ssp,
+      imageUrl: base.imageUrl,
+      createdAt: base.createdAt,
+      setCardCount: base.setCardCount,
+      weeklyPriceCheck: base.weeklyPriceCheck,
+      valueRefreshedAt: base.valueRefreshedAt,
+      catalogPriceFromCurrentPrices: catalogPriceFromCurrentPrices,
+      embeddedCardHedgeGradePrices: embeddedCardHedgeGradePrices,
+      embeddedCardHedgePricesMaxFetchedAt: embeddedCardHedgePricesMaxFetchedAt,
+      masterDefinitionGain: base.masterDefinitionGain,
+      embeddedMasterCardhedgeId: base.embeddedMasterCardhedgeId,
+      embeddedMasterCardhedgeFetchedAt: base.embeddedMasterCardhedgeFetchedAt,
+    );
+  }
+
+  Map<String, double?> get _gradePriceMapForDisplay =>
+      embeddedCardHedgeGradePrices ?? emptyCardHedgeGradePriceMap();
+
+  /// True when the headline value comes from `current_prices` for this master + grade.
+  bool get headlineValueUsesCardHedge =>
+      catalogPriceFromCurrentPrices != null && catalogPriceFromCurrentPrices! > 0;
+
+  /// `current_prices` for [masterCardId] + this copy's grade, else [currentValue].
+  double? get displayValue =>
+      (catalogPriceFromCurrentPrices != null && catalogPriceFromCurrentPrices! > 0)
+          ? catalogPriceFromCurrentPrices
+          : currentValue;
+
+  double get pl => (displayValue ?? 0) - (pricePaid ?? 0);
   double get plPct => pricePaid != null && pricePaid! > 0 ? (pl / pricePaid!) * 100 : 0;
 
   /// 1 = up, -1 = down, 0 = flat/unknown
@@ -145,6 +277,23 @@ class UserCard {
     if (previousValue == null || previousValue == currentValue) return 0;
     return (currentValue ?? 0) > previousValue! ? 1 : -1;
   }
+
+  /// For the Value row: neutral when headline uses `current_prices` (snapshot mismatch).
+  int get valueTrendForDisplay => headlineValueUsesCardHedge ? 0 : valueTrend;
+
+  DateTime? get displayValueRefreshedAt {
+    if (headlineValueUsesCardHedge) {
+      return embeddedCardHedgePricesMaxFetchedAt ??
+          embeddedMasterCardhedgeFetchedAt ??
+          valueRefreshedAt;
+    }
+    return valueRefreshedAt;
+  }
+
+  Map<String, double?> get cardHedgeGradePricesForMarketSection => _gradePriceMapForDisplay;
+
+  bool get hasUsableCardHedgeGradePricesForMarket =>
+      cardHedgeGradeMapHasAnyPrice(cardHedgeGradePricesForMarketSection);
 }
 
 class CardStack {
@@ -233,9 +382,9 @@ class CardStack {
         parallelId: first.parallelId,
         qty: group.length,
         totalCost: group.fold(0, (s, c) => s + (c.pricePaid ?? 0)),
-        totalValue: group.fold(0, (s, c) => s + (c.currentValue ?? 0)),
+        totalValue: group.fold(0, (s, c) => s + (c.displayValue ?? 0)),
         totalPreviousValue: group.any((c) => c.previousValue != null)
-            ? group.fold<double>(0.0, (s, c) => s + (c.previousValue ?? c.currentValue ?? 0))
+            ? group.fold<double>(0.0, (s, c) => s + (c.previousValue ?? c.displayValue ?? c.currentValue ?? 0))
             : null,
         rookie: first.rookie,
         autograph: first.autograph,
@@ -321,12 +470,12 @@ class SetRow {
       // Track distinct masterCardIds per parallel
       final parallel = c.parallel;
       row.parallelMasters.putIfAbsent(parallel, () => <String?>{}).add(c.masterCardId);
-      row.parallelValues[parallel] = (row.parallelValues[parallel] ?? 0) + (c.currentValue ?? 0);
+      row.parallelValues[parallel] = (row.parallelValues[parallel] ?? 0) + (c.displayValue ?? 0);
 
       // Track overall distinct masterCardIds (across all parallels)
       row.allMasters.add(c.masterCardId);
 
-      row.totalValue += c.currentValue ?? 0;
+      row.totalValue += c.displayValue ?? 0;
       row.totalCost  += c.pricePaid ?? 0;
       if (row.imageUrl == null && c.imageUrl != null) row.imageUrl = c.imageUrl;
     }

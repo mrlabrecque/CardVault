@@ -8,16 +8,14 @@ import '../../../core/services/comps_service.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import 'market_listing_row.dart';
 
-/// Active eBay listings for a master card + parallel (from Edge Function).
+/// Active eBay listings for a catalog variant (`master_card_definitions.id`).
 class CardActiveListingsSection extends ConsumerStatefulWidget {
   const CardActiveListingsSection({
     super.key,
     required this.masterCardId,
-    required this.parallelName,
   });
 
   final String masterCardId;
-  final String parallelName;
 
   @override
   ConsumerState<CardActiveListingsSection> createState() => _CardActiveListingsSectionState();
@@ -52,8 +50,7 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
   @override
   void didUpdateWidget(CardActiveListingsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.masterCardId != widget.masterCardId ||
-        oldWidget.parallelName != widget.parallelName) {
+    if (oldWidget.masterCardId != widget.masterCardId) {
       _load();
     }
   }
@@ -67,7 +64,6 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
     try {
       final list = await ref.read(compsServiceProvider).getActiveListings(
             widget.masterCardId,
-            widget.parallelName,
           );
       if (mounted) {
         setState(() {

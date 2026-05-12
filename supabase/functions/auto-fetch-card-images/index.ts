@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
 
     // Find cards with cardsight_card_id but no image_url
     const { data: cards, error: queryError } = await supabase
-      .from('master_card_definitions')
+      .from('set_cards')
       .select('id, cardsight_card_id')
       .not('cardsight_card_id', 'is', null)
       .is('image_url', null)

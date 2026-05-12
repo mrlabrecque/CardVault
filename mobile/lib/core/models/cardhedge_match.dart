@@ -14,6 +14,7 @@ class CardHedgeMatchPayload {
     this.alternateMatches,
     this.match,
     this.errorMessage,
+    this.persistedMaster,
   });
 
   final bool matched;
@@ -30,6 +31,10 @@ class CardHedgeMatchPayload {
   final List<CardHedgeMatchedCard>? alternateMatches;
   final CardHedgeMatchedCard? match;
   final String? errorMessage;
+
+  /// Present when catalog search was invoked with persist id: Edge wrote CardHedge
+  /// to Postgres and returned this row (keys match `MasterCard.fromJson` in `cards_service`).
+  final Map<String, dynamic>? persistedMaster;
 
   bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
 
@@ -49,6 +54,9 @@ class CardHedgeMatchPayload {
           .map((e) => CardHedgeMatchedCard.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     }
+    Map<String, dynamic>? persisted;
+    final pm = json['persisted_master'];
+    if (pm is Map) persisted = Map<String, dynamic>.from(pm);
 
     return CardHedgeMatchPayload(
       matched: matched,
@@ -67,6 +75,7 @@ class CardHedgeMatchPayload {
       alternateMatches: alternates,
       match: matchMap != null ? CardHedgeMatchedCard.fromJson(matchMap) : null,
       errorMessage: json['error'] as String?,
+      persistedMaster: persisted,
     );
   }
 
@@ -91,6 +100,9 @@ class CardHedgeMatchedCard {
     this.image,
     this.prices,
     this.reasoning,
+    this.sales7d,
+    this.sales30d,
+    this.gain,
   });
 
   final String? cardId;
@@ -103,6 +115,33 @@ class CardHedgeMatchedCard {
   final String? image;
   final List<Map<String, dynamic>>? prices;
   final String? reasoning;
+  /// CardHedge market fields (from card-search row; may be null if API omits).
+  final int? sales7d;
+  final int? sales30d;
+  final double? gain;
+
+  static double? _parseGain(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    if (v is String) {
+      final cleaned = v.replaceAll(RegExp(r'[^0-9.-]'), '');
+      if (cleaned.isEmpty) return null;
+      return double.tryParse(cleaned);
+    }
+    return null;
+  }
+
+  static int? _parseCount(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.round();
+    if (v is String) {
+      final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
+      if (cleaned.isEmpty) return null;
+      return int.tryParse(cleaned);
+    }
+    return null;
+  }
 
   factory CardHedgeMatchedCard.fromJson(Map<String, dynamic> json) {
     List<Map<String, dynamic>>? prices;
@@ -124,6 +163,9 @@ class CardHedgeMatchedCard {
       image: json['image'] as String?,
       prices: prices,
       reasoning: json['reasoning'] as String?,
+      sales7d: _parseCount(json['sales_7d'] ?? json['7 Day Sales'] ?? json['7_Day_Sales']),
+      sales30d: _parseCount(json['sales_30d'] ?? json['30 Day Sales'] ?? json['30_Day_Sales']),
+      gain: _parseGain(json['gain'] ?? json['Gain']),
     );
   }
 }

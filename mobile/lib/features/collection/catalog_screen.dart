@@ -95,6 +95,31 @@ class _CatalogNavState {
 
 const _addCardNavStateKey = 'add_card_nav_state';
 
+/// Resolves a [set_card_base_variants] row id + optional [set_parallels] id to the
+/// per-parallel `master_card_definitions` id (same as [CardsService.ensureCatalogVariant]).
+class CatalogBrowseVariantKey {
+  const CatalogBrowseVariantKey({required this.baseMasterId, required this.parallelId});
+  final String baseMasterId;
+  final String? parallelId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CatalogBrowseVariantKey &&
+      other.baseMasterId == baseMasterId &&
+      other.parallelId == parallelId;
+
+  @override
+  int get hashCode => Object.hash(baseMasterId, parallelId);
+}
+
+final catalogBrowseResolvedMasterIdProvider =
+    FutureProvider.family<String, CatalogBrowseVariantKey>((ref, key) async {
+  return ref.watch(cardsServiceProvider).ensureCatalogVariant(
+        catalogVariantId: key.baseMasterId,
+        parallelId: key.parallelId,
+      );
+    });
+
 const _graders = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG'];
 
 const _catalogYears = [
@@ -626,9 +651,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   /// sections.
   ///
   /// The catalog's selected-card/parallel state must already reflect [card]
-  /// and [parallelName] so the existing [_showAddCopySheet] / [_addToWishlist]
-  /// handlers (which read from [_mode]-scoped state) work when the buttons
-  /// fire from the pushed screen.
+  /// and [parallelName]. [onAddToCollection] / [onAddToWishlist] close over the
+  /// resolved `master_card_definitions` id so add / wishlist use the variant row
+  /// (parallel FK, CardHedge, `current_prices`), not the base-only list id.
   Future<void> _openMasterCardDetail({
     required MasterCard card,
     required String parallelName,
@@ -636,7 +661,27 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     ReleaseRecord? release,
     SetRecord? set,
   }) async {
-    // Goes through go_router (`context.push`) rather than an imperative
+    final resolvedId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+      catalogVariantId: card.id,
+      parallelId: parallel?.id,
+    );
+    if (!mounted) return;
+    final resolvedMaster =
+        await ref.read(cardsServiceProvider).fetchMasterCardById(resolvedId);
+    if (!mounted) return;
+    final displayCard = resolvedMaster ??
+        MasterCard(
+          id: resolvedId,
+          player: card.player,
+          cardNumber: card.cardNumber,
+          isRookie: card.isRookie,
+          isAuto: card.isAuto || (parallel?.isAuto ?? false),
+          isPatch: card.isPatch,
+          isSSP: card.isSSP,
+          serialMax: parallel?.serialMax ?? card.serialMax,
+          imageUrl: card.imageUrl,
+          gain: card.gain,
+        );
     // `Navigator.push(MaterialPageRoute(...))`. The latter pushes onto the
     // inner Navigator below the shell but stays opaque to go_router, so when
     // the user taps a tab, `context.go(...)` updates the router's stack
@@ -647,16 +692,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     await context.push<void>(
       '/catalog/master',
       extra: MasterCardDetailArgs(
-        masterCard: MasterCard(
-          id: card.id,
-          player: card.player,
-          cardNumber: card.cardNumber,
-          isRookie: card.isRookie,
-          isAuto: card.isAuto || (parallel?.isAuto ?? false),
-          isPatch: card.isPatch,
-          isSSP: card.isSSP,
-          serialMax: parallel?.serialMax ?? card.serialMax,
-          imageUrl: card.imageUrl,
+        masterCard:         MasterCard(
+          id: displayCard.id,
+          player: displayCard.player,
+          cardNumber: displayCard.cardNumber,
+          isRookie: displayCard.isRookie,
+          isAuto: displayCard.isAuto || (parallel?.isAuto ?? false),
+          isPatch: displayCard.isPatch,
+          isSSP: displayCard.isSSP,
+          serialMax: parallel?.serialMax ?? displayCard.serialMax,
+          imageUrl: displayCard.imageUrl,
+          cardhedgeId: displayCard.cardhedgeId,
+          gain: displayCard.gain,
         ),
         parallelName: parallelName,
         parallelSerialMax: parallel?.serialMax,
@@ -665,8 +712,14 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         setName: set?.name,
         year: release?.year,
         sport: release?.sport,
-        onAddToCollection: _showAddCopySheet,
-        onAddToWishlist: _addToWishlist,
+        onAddToCollection: () => _showAddCopySheet(
+              catalogMasterIdOverride: resolvedId,
+              catalogParallelOverride: parallel,
+            ),
+        onAddToWishlist: () => _addToWishlist(
+              catalogMasterIdOverride: resolvedId,
+              catalogParallelOverride: parallel,
+            ),
       ),
     );
   }
@@ -682,8 +735,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     if (!_canSave) return;
     setState(() => _saving = true);
     try {
+      String? resolvedMasterId;
+      if (_selectedCard != null) {
+        resolvedMasterId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+          catalogVariantId: _selectedCard!.id,
+          parallelId: _selectedParallel?.id,
+        );
+      }
       final form = AddCardFormData(
-        masterCardId: _selectedCard?.id,
+        masterCardId: resolvedMasterId,
         setId: _selectedSet?.id,
         player: _isNewCard ? _newPlayerCtrl.text.trim() : (_selectedCard?.player ?? ''),
         cardNumber: _isNewCard ? (_newCardNumberCtrl.text.trim().isEmpty ? null : _newCardNumberCtrl.text.trim()) : null,
@@ -701,10 +761,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
       );
       final created = await ref.read(cardsServiceProvider).addCard(form);
+      await ref.read(compsServiceProvider).syncMasterCatalogPricingForVariant(created.masterCardId);
       ref.invalidate(userCardsProvider);
-      unawaited(
-        ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {}),
-      );
+      await ref.read(userCardsProvider.future);
       unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
       if (mounted) {
         AdaptiveSnackBar.show(context, message: 'Card added!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
@@ -743,11 +802,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-  void _showAddCopySheet() {
+  void _showAddCopySheet({
+    String? catalogMasterIdOverride,
+    SetParallel? catalogParallelOverride,
+  }) {
     final card = _mode == _CatalogMode.search ? _searchSelectedCard : _selectedCard;
     final set = _mode == _CatalogMode.search ? _searchSelectedSet : _selectedSet;
     final release = _mode == _CatalogMode.search ? _searchSelectedRelease : _selectedRelease;
     final selectedParallel = _mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel;
+    final effectiveParallel = catalogParallelOverride ?? selectedParallel;
+    final parallelLabel = (effectiveParallel?.name.trim().isNotEmpty ?? false)
+        ? effectiveParallel!.name.trim()
+        : (_mode == _CatalogMode.search ? _searchParallelName : _parallelName);
 
     showAdaptiveSheet(
       context: context,
@@ -756,12 +822,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         card: card,
         setName: set?.name,
         releaseName: release?.displayName,
-        previewParallelName: _mode == _CatalogMode.search ? _searchParallelName : _parallelName,
-        previewParallelSerialMax: selectedParallel?.serialMax,
-        previewParallelIsAuto: selectedParallel?.isAuto ?? false,
+        previewParallelName: parallelLabel,
+        previewParallelSerialMax: effectiveParallel?.serialMax,
+        previewParallelIsAuto: effectiveParallel?.isAuto ?? false,
         showPricePaid: true,
         pricePaidCtrl: _pricePaidCtrl,
-        showSerialNumber: selectedParallel?.serialMax != null,
+        showSerialNumber: effectiveParallel?.serialMax != null,
         serialNumberCtrl: _serialNumberCtrl,
         showGraded: true,
         isGraded: _isGraded,
@@ -772,9 +838,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         onSave: (data) async {
           setState(() => _saving = true);
           try {
-            final parallelName = _mode == _CatalogMode.search ? _searchParallelName : _parallelName;
+            final baseMasterId = catalogMasterIdOverride ?? card?.id;
+            if (baseMasterId == null) {
+              return 'No catalog card selected.';
+            }
+            final variantId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+              catalogVariantId: baseMasterId,
+              parallelId: effectiveParallel?.id,
+            );
             final form = AddCardFormData(
-              masterCardId: card?.id,
+              masterCardId: variantId,
               setId: set?.id,
               player: card?.player ?? '',
               cardNumber: card?.cardNumber,
@@ -783,8 +856,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               isAuto: card?.isAuto ?? false,
               isPatch: card?.isPatch ?? false,
               isSSP: card?.isSSP ?? false,
-              parallelId: selectedParallel?.id,
-              parallelName: parallelName,
+              parallelId: effectiveParallel?.id,
+              parallelName: parallelLabel,
               pricePaid: parseUsdInput(_pricePaidCtrl.text),
               serialNumber: _serialNumberCtrl.text.trim().isEmpty ? null : _serialNumberCtrl.text.trim(),
               isGraded: _isGraded,
@@ -792,10 +865,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               gradeValue: _isGraded && _gradeValueCtrl.text.trim().isNotEmpty ? _gradeValueCtrl.text.trim() : null,
             );
             final created = await ref.read(cardsServiceProvider).addCard(form);
+            await ref.read(compsServiceProvider).syncMasterCatalogPricingForVariant(created.masterCardId);
             ref.invalidate(userCardsProvider);
-            unawaited(
-              ref.read(compsServiceProvider).refreshCardValue(created.userCardId).catchError((_) {}),
-            );
+            await ref.read(userCardsProvider.future);
             unawaited(ref.read(compsServiceProvider).fetchCardImage(created.masterCardId));
             if (mounted) {
               _pricePaidCtrl.clear();
@@ -818,11 +890,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     );
   }
 
-  Future<void> _addToWishlist() async {
+  Future<void> _addToWishlist({
+    String? catalogMasterIdOverride,
+    SetParallel? catalogParallelOverride,
+  }) async {
     final card = _mode == _CatalogMode.search ? _searchSelectedCard : _selectedCard;
     final set = _mode == _CatalogMode.search ? _searchSelectedSet : _selectedSet;
     final release = _mode == _CatalogMode.search ? _searchSelectedRelease : _selectedRelease;
-    final parallelName = _mode == _CatalogMode.search ? _searchParallelName : (_selectedParallel?.name ?? 'Base');
+    final selectedParallel = _mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel;
+    final effectiveParallel = catalogParallelOverride ?? selectedParallel;
+    final parallelLabel = (effectiveParallel?.name.trim().isNotEmpty ?? false)
+        ? effectiveParallel!.name.trim()
+        : (_mode == _CatalogMode.search ? _searchParallelName : (_selectedParallel?.name ?? 'Base'));
 
     showAdaptiveSheet(
       context: context,
@@ -831,20 +910,28 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         card: card,
         setName: set?.name,
         releaseName: release?.displayName,
-        previewParallelName: parallelName,
-        previewParallelSerialMax: (_mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel)?.serialMax,
-        previewParallelIsAuto: (_mode == _CatalogMode.search ? _searchSelectedParallel : _selectedParallel)?.isAuto ?? false,
+        previewParallelName: parallelLabel,
+        previewParallelSerialMax: effectiveParallel?.serialMax,
+        previewParallelIsAuto: effectiveParallel?.isAuto ?? false,
         showTargetPrice: true,
         targetPriceCtrl: _targetPriceCtrl,
         showGraded: false,
         onSave: (_) async {
           try {
+            final baseMasterId = catalogMasterIdOverride ?? card?.id;
+            if (baseMasterId == null) {
+              return 'No catalog card selected.';
+            }
+            final variantId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+              catalogVariantId: baseMasterId,
+              parallelId: effectiveParallel?.id,
+            );
             await ref.read(wishlistProvider.notifier).add({
               'player': (card?.player ?? '').trim(),
               'year': release?.year,
               'set_name': release?.name,
               'card_number': (card?.cardNumber ?? '').trim(),
-              'parallel': parallelName,
+              'parallel': parallelLabel,
               'is_rookie': card?.isRookie ?? false,
               'is_auto': card?.isAuto ?? false,
               'is_patch': card?.isPatch ?? false,
@@ -853,7 +940,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               'ebay_query': null,
               'exclude_terms': [],
               'target_price': parseUsdInput(_targetPriceCtrl.text),
-              'master_card_id': card?.id,
+              'master_card_id': variantId,
               'release_id': release?.id,
               'set_id': set?.id,
               'sport': release?.sport,
@@ -1523,96 +1610,135 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                 sections: const [CardDetailSection.hero],
               ),
               const SizedBox(height: 16),
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: Consumer(
-                      builder: (context, ref, child) {
-                        final userCardsAsync = ref.watch(userCardsProvider);
-                        final copyCount = userCardsAsync.whenData((allCards) {
-                          if (_selectedCard == null) return 0;
-                          final selectedParallelName = _selectedParallel?.name ?? 'Base';
-                          return allCards.where((card) {
-                            final cardMatch = card.masterCardId == _selectedCard!.id;
-                            final cardNumberMatch = (card.cardNumber?.trim() ?? '') ==
-                                (_selectedCard!.cardNumber?.trim() ?? '');
-                            final parallelMatch = card.parallel.trim() == selectedParallelName.trim();
-                            return cardMatch && cardNumberMatch && parallelMatch;
-                          }).length;
-                        }).value ?? 0;
+              if (_selectedCard != null)
+                Consumer(
+                  builder: (context, ref, _) {
+                    final vKey = CatalogBrowseVariantKey(
+                      baseMasterId: _selectedCard!.id,
+                      parallelId: _selectedParallel?.id,
+                    );
+                    final resolved = ref.watch(catalogBrowseResolvedMasterIdProvider(vKey));
+                    return resolved.when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+                      ),
+                      error: (e, s) => const SizedBox.shrink(),
+                      data: (variantId) {
+                        final selectedParallelName = _selectedParallel?.name ?? 'Base';
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Consumer(
+                                    builder: (context, ref, child) {
+                                      final userCardsAsync = ref.watch(userCardsProvider);
+                                      final copyCount = userCardsAsync.whenData((allCards) {
+                                        return allCards.where((card) {
+                                          if (card.masterCardId == variantId) return true;
+                                          return card.masterCardId == _selectedCard!.id &&
+                                              (card.cardNumber?.trim() ?? '') ==
+                                                  (_selectedCard!.cardNumber?.trim() ?? '') &&
+                                              card.parallel.trim() == selectedParallelName.trim();
+                                        }).length;
+                                      }).value ??
+                                          0;
 
-                        return copyCount > 0
-                            ? ActiveStateIndicator(
-                                icon: Icons.check_circle,
-                                label: 'In Collection ($copyCount)',
-                                animateIcon: true,
-                              )
-                            : AdaptiveButton.child(
-                                onPressed: _showAddCopySheet,
-                                style: AdaptiveButtonStyle.filled,
-                                color: AppTheme.primary,
-                                child: const Text(
-                                  'Add to Collection',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                ),
-                              );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Consumer(
-                      builder: (context, ref, child) {
-                        final wishlistAsync = ref.watch(wishlistProvider);
-                        final isInWishlist = wishlistAsync.whenData((wishlist) {
-                          if (_selectedCard == null) return false;
-                          final selectedParallelName = _selectedParallel?.name ?? 'Base';
-                          return wishlist.any((item) {
-                            final playerMatch = (item.player?.trim().toLowerCase() ?? '') ==
-                                (_selectedCard!.player.trim().toLowerCase());
-                            final cardNumberMatch = (item.cardNumber?.trim() ?? '') ==
-                                (_selectedCard!.cardNumber?.trim() ?? '');
-                            final parallelMatch = (item.parallel?.trim() ?? 'Base') ==
-                                selectedParallelName.trim();
-                            return playerMatch && cardNumberMatch && parallelMatch;
-                          });
-                        }).value ?? false;
-
-                        return isInWishlist
-                            ? const ActiveStateIndicator(
-                                icon: Icons.favorite,
-                                label: 'In Wishlist',
-                                animateIcon: true,
-                              )
-                            : AdaptiveButton.child(
-                                onPressed: _addToWishlist,
-                                style: AdaptiveButtonStyle.bordered,
-                                color: AppTheme.primary,
-                                child: DefaultTextStyle.merge(
-                                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.favorite_border, size: 18, color: AppTheme.primary),
-                                      SizedBox(width: 8),
-                                      Text('Add to Wishlist'),
-                                    ],
+                                      return copyCount > 0
+                                          ? ActiveStateIndicator(
+                                              icon: Icons.check_circle,
+                                              label: 'In Collection ($copyCount)',
+                                              animateIcon: true,
+                                            )
+                                          : AdaptiveButton.child(
+                                              onPressed: () => _showAddCopySheet(),
+                                              style: AdaptiveButtonStyle.filled,
+                                              color: AppTheme.primary,
+                                              child: const Text(
+                                                'Add to Collection',
+                                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                              ),
+                                            );
+                                    },
                                   ),
                                 ),
-                              );
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Consumer(
+                                    builder: (context, ref, child) {
+                                      final wishlistAsync = ref.watch(wishlistProvider);
+                                      final isInWishlist = wishlistAsync.whenData((wishlist) {
+                                        return wishlist.any((item) {
+                                          final mid = item.masterCardId?.trim();
+                                          if (mid != null && mid.isNotEmpty && mid == variantId) {
+                                            return true;
+                                          }
+                                          final playerMatch = (item.player?.trim().toLowerCase() ?? '') ==
+                                              (_selectedCard!.player.trim().toLowerCase());
+                                          final cardNumberMatch = (item.cardNumber?.trim() ?? '') ==
+                                              (_selectedCard!.cardNumber?.trim() ?? '');
+                                          final parallelMatch = (item.parallel?.trim() ?? 'Base') ==
+                                              selectedParallelName.trim();
+                                          return playerMatch && cardNumberMatch && parallelMatch;
+                                        });
+                                      }).value ??
+                                          false;
+
+                                      return isInWishlist
+                                          ? const ActiveStateIndicator(
+                                              icon: Icons.favorite,
+                                              label: 'In Wishlist',
+                                              animateIcon: true,
+                                            )
+                                          : AdaptiveButton.child(
+                                              onPressed: () => _addToWishlist(),
+                                              style: AdaptiveButtonStyle.bordered,
+                                              color: AppTheme.primary,
+                                              child: DefaultTextStyle.merge(
+                                                style: const TextStyle(
+                                                    color: AppTheme.primary, fontWeight: FontWeight.w600),
+                                                child: const Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.favorite_border, size: 18, color: AppTheme.primary),
+                                                    SizedBox(width: 8),
+                                                    Text('Add to Wishlist'),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ref
+                                .watch(
+                                  soldCompsExistForGradeProvider(
+                                    SoldCompsGradeKey(
+                                      masterCardId: variantId,
+                                      grade: 'Raw',
+                                    ),
+                                  ),
+                                )
+                                .when(
+                                  data: (has) => has
+                                      ? CardCompsSection(
+                                          masterCardId: variantId,
+                                          initialGrade: 'Raw',
+                                        )
+                                      : const SizedBox.shrink(),
+                                  loading: () => const SizedBox.shrink(),
+                                  error: (e, s) => const SizedBox.shrink(),
+                                ),
+                          ],
+                        );
                       },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Comps section
-              if (_selectedCard != null)
-                CardCompsSection(
-                  masterCardId: _selectedCard!.id,
-                  parallelName: _selectedParallel?.name ?? 'Base',
-                  initialGrade: 'Raw',
+                    );
+                  },
                 ),
             ],
           ),

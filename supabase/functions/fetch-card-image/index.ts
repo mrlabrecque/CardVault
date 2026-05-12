@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const masterCardId = body?.masterCardId;
+    const masterCardId = body?.masterCardId as string | undefined;
     console.log('[fetch-card-image] masterCardId:', masterCardId);
 
     if (!masterCardId) {
@@ -27,30 +27,42 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
     );
 
-    console.log('[fetch-card-image] querying card');
-    const { data: card, error: queryError } = await supabase
+    let setCardId = masterCardId;
+    let cardsightCardId: string | null = null;
+    let existingImageUrl: string | null = null;
+
+    const { data: variantRow, error: vErr } = await supabase
       .from('master_card_definitions')
-      .select('cardsight_card_id, image_url')
+      .select('set_card_id, set_cards ( cardsight_card_id, image_url )')
       .eq('id', masterCardId)
-      .single();
+      .maybeSingle();
 
-    if (queryError) {
-      console.log('[fetch-card-image] query error:', queryError);
-      return new Response(JSON.stringify({ image_url: null }), { status: 200 });
+    if (!vErr && variantRow) {
+      const sc = variantRow.set_cards as { cardsight_card_id: string | null; image_url: string | null } | null;
+      setCardId = variantRow.set_card_id as string;
+      cardsightCardId = sc?.cardsight_card_id ?? null;
+      existingImageUrl = sc?.image_url ?? null;
+    } else {
+      const { data: sc, error: scErr } = await supabase
+        .from('set_cards')
+        .select('cardsight_card_id, image_url')
+        .eq('id', masterCardId)
+        .maybeSingle();
+      if (scErr || !sc) {
+        console.log('[fetch-card-image] not found as variant or set_card');
+        return new Response(JSON.stringify({ image_url: null }), { status: 200 });
+      }
+      cardsightCardId = sc.cardsight_card_id;
+      existingImageUrl = sc.image_url;
     }
 
-    if (!card) {
-      console.log('[fetch-card-image] card not found');
-      return new Response(JSON.stringify({ image_url: null }), { status: 200 });
+    console.log('[fetch-card-image] set_card_id:', setCardId, 'image_url:', existingImageUrl);
+
+    if (existingImageUrl) {
+      return new Response(JSON.stringify({ image_url: existingImageUrl }), { status: 200 });
     }
 
-    console.log('[fetch-card-image] card found, image_url:', card.image_url);
-
-    if (card.image_url) {
-      return new Response(JSON.stringify({ image_url: card.image_url }), { status: 200 });
-    }
-
-    if (!card.cardsight_card_id) {
+    if (!cardsightCardId) {
       console.log('[fetch-card-image] no cardsight_card_id, returning null');
       return new Response(JSON.stringify({ image_url: null }), { status: 200 });
     }
@@ -60,11 +72,11 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ image_url: null }), { status: 200 });
     }
 
-    console.log('[fetch-card-image] fetching from CardSight, id:', card.cardsight_card_id);
+    console.log('[fetch-card-image] fetching from CardSight, id:', cardsightCardId);
 
     const publicUrl = await fetchUploadAndSetMasterImage(supabase, {
-      masterCardId,
-      cardsightCardId: card.cardsight_card_id,
+      masterCardId: setCardId,
+      cardsightCardId,
     });
 
     console.log(publicUrl ? '[fetch-card-image] success' : '[fetch-card-image] failed after fetch/upload');

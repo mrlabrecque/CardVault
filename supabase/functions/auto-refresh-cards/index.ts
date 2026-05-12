@@ -160,8 +160,12 @@ Deno.serve(async (req) => {
     .from('user_cards')
     .select(`
       id, user_id, current_value, is_graded, grader, grade_value, parallel_name,
-      master_card_definitions ( player, card_number, is_rookie, is_auto, is_patch, serial_max,
-        sets ( name, releases ( year, name ) )
+      master_card_definitions (
+        is_auto, is_patch, serial_max,
+        set_cards (
+          player, card_number, is_rookie,
+          sets ( name, releases ( year, name ) )
+        )
       )
     `)
     .or('value_refreshed_at.is.null,value_refreshed_at.lt.' + new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString())
@@ -176,8 +180,12 @@ Deno.serve(async (req) => {
     .from('user_cards')
     .select(`
       id, user_id, current_value, is_graded, grader, grade_value, parallel_name,
-      master_card_definitions ( player, card_number, is_rookie, is_auto, is_patch, serial_max,
-        sets ( name, releases ( year, name ) )
+      master_card_definitions (
+        is_auto, is_patch, serial_max,
+        set_cards (
+          player, card_number, is_rookie,
+          sets ( name, releases ( year, name ) )
+        )
       )
     `)
     .eq('weekly_price_check', true)
@@ -210,19 +218,20 @@ Deno.serve(async (req) => {
 
   for (const card of batch) {
     const mcd     = (card as any).master_card_definitions ?? {};
-    const setData = mcd.sets ?? {};
+    const sc      = mcd.set_cards ?? {};
+    const setData = sc.sets ?? {};
     const release = setData.releases ?? {};
 
     const cardRow = {
       year:          release.year,
       release_name:  release.name,
       set_name:      setData.name,
-      player:        mcd.player,
-      card_number:   mcd.card_number,
+      player:        sc.player,
+      card_number:   sc.card_number,
       parallel_name: (card as any).parallel_name,
       is_auto:       mcd.is_auto,
       is_patch:      mcd.is_patch,
-      is_rookie:     mcd.is_rookie,
+      is_rookie:     sc.is_rookie,
       serial_max:    mcd.serial_max,
       is_graded:     (card as any).is_graded,
       grader:        (card as any).grader,
@@ -261,10 +270,10 @@ Deno.serve(async (req) => {
         })));
       }
 
-      console.log(`[auto-refresh] ✓ ${mcd.player} — $${avgValue.toFixed(2)} (${prices.length} comps)`);
+      console.log(`[auto-refresh] ✓ ${sc.player} — $${avgValue.toFixed(2)} (${prices.length} comps)`);
       refreshed++;
     } catch (e: any) {
-      console.error(`[auto-refresh] ✗ ${mcd.player}: ${e.message}`);
+      console.error(`[auto-refresh] ✗ ${sc.player}: ${e.message}`);
       errors++;
     }
 

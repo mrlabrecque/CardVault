@@ -471,6 +471,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
               loading: () => const Center(child: CardFanLoader()),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (allCards) {
+                // [UserCard.displayValue] = `current_prices` for master + slab (see CardsService.loadUserCards).
                 final stacks = CardStack.fromCards(allCards);
                 if (_showSets) {
                   return _buildSetsView(allCards, colors, navOffset);

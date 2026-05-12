@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
 import '../models/user_card.dart';
+import '../utils/cardhedge_grade_prices.dart';
 
 int? _tryParseInt(dynamic value) {
   if (value == null) return null;
@@ -10,6 +11,53 @@ int? _tryParseInt(dynamic value) {
   if (value is String) return int.tryParse(value);
   if (value is num) return value.toInt();
   return null;
+}
+
+double? _tryParseDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  if (value is num) return value.toDouble();
+  return null;
+}
+
+/// Injects batched `current_prices` rows under `master_card_definitions` for [UserCard.fromJson].
+Map<String, dynamic> _mergeCurrentPricesIntoUserCardRow(
+  Map<String, dynamic> row,
+  Map<String, List<Map<String, dynamic>>> pricesByMaster,
+) {
+  final out = Map<String, dynamic>.from(row);
+  final mid = row['master_card_id'] as String?;
+  if (mid == null) return out;
+
+  final masterRaw = out['master_card_definitions'];
+  Map<String, dynamic>? masterMap;
+  if (masterRaw is Map<String, dynamic>) {
+    masterMap = Map<String, dynamic>.from(masterRaw);
+  } else if (masterRaw is Map) {
+    masterMap = Map<String, dynamic>.from(masterRaw);
+  } else if (masterRaw is List && masterRaw.isNotEmpty) {
+    final e = masterRaw.first;
+    if (e is Map<String, dynamic>) {
+      masterMap = Map<String, dynamic>.from(e);
+    } else if (e is Map) {
+      masterMap = Map<String, dynamic>.from(e);
+    }
+  }
+  if (masterMap != null) {
+    final batch = pricesByMaster[mid];
+    if (batch != null && batch.isNotEmpty) {
+      masterMap['current_prices'] = batch;
+    } else {
+      final embedded = masterMap['current_prices'];
+      if (embedded is! List || embedded.isEmpty) {
+        masterMap['current_prices'] = const <Map<String, dynamic>>[];
+      }
+    }
+    out['master_card_definitions'] = masterMap;
+  }
+  return out;
 }
 
 class SetParallel {
@@ -41,7 +89,7 @@ class ReleaseRecord {
     final setsRaw = (j['sets'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     int imported = 0;
     for (final s in setsRaw) {
-      final defs = s['master_card_definitions'] as List?;
+      final defs = s['set_cards'] as List?;
       if (defs != null && defs.isNotEmpty && (_tryParseInt(defs[0]['count']) ?? 0) > 0) imported++;
     }
     return ReleaseRecord(
@@ -67,7 +115,7 @@ class SetRecord {
   final int importedCount;
 
   factory SetRecord.fromJson(Map<String, dynamic> j) {
-    final defsRaw = j['master_card_definitions'] as List?;
+    final defsRaw = j['set_cards'] as List?;
     return SetRecord(
       id:            j['id'] as String,
       name:          j['name'] as String,
@@ -89,6 +137,8 @@ class MasterCard {
     this.isSSP = false,
     this.serialMax,
     this.imageUrl,
+    this.cardhedgeId,
+    this.gain,
   });
   final String id;
   final String player;
@@ -99,6 +149,10 @@ class MasterCard {
   final bool isSSP;
   final int? serialMax;
   final String? imageUrl;
+  /// CardHedge catalog id when matched / persisted on this variant.
+  final String? cardhedgeId;
+  /// CardHedge market change (typically percent); persisted on `master_card_definitions`.
+  final double? gain;
 
   factory MasterCard.fromJson(Map<String, dynamic> j) => MasterCard(
     id: j['id'] as String,
@@ -110,6 +164,8 @@ class MasterCard {
     isSSP: j['is_ssp'] as bool? ?? false,
     serialMax: _tryParseInt(j['serial_max']),
     imageUrl: j['image_url'] as String?,
+    cardhedgeId: (j['cardhedge_id'] as String?)?.trim().isNotEmpty == true ? j['cardhedge_id'] as String : null,
+    gain: _tryParseDouble(j['gain']),
   );
 
   String get displayName => cardNumber != null ? '$player  #$cardNumber' : player;
@@ -244,55 +300,68 @@ class AddCardFormData {
 class CardsService {
   CardsService(this._supabase);
   final SupabaseClient _supabase;
-  static const Duration _compsRefreshCooldown = Duration(hours: 24);
 
-  String? _normalizeGradeValue(String? value) {
-    if (value == null) return null;
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
+  /// Batch-load `current_prices` rows keyed by `master_card_id` (UUID-safe strings).
+  Future<Map<String, List<Map<String, dynamic>>>> _fetchCurrentPricesGrouped(Set<String> masterIds) async {
+    final out = <String, List<Map<String, dynamic>>>{};
+    if (masterIds.isEmpty) return out;
+    final cp = await _supabase
+        .from('current_prices')
+        .select('master_card_id, grade, price, fetched_at')
+        .inFilter('master_card_id', masterIds.toList());
+    for (final raw in cp as List) {
+      if (raw is! Map) continue;
+      final m = Map<String, dynamic>.from(raw);
+      final mid = m['master_card_id']?.toString().trim();
+      if (mid == null || mid.isEmpty) continue;
+      out.putIfAbsent(mid, () => []).add({
+        'grade': m['grade'],
+        'price': m['price'],
+        'fetched_at': m['fetched_at'],
+      });
+    }
+    return out;
   }
 
-  double _averageForGrade(List<Map<String, dynamic>> comps, String grade) {
-    final filtered = comps.where((c) {
-      final compGrade = ((c['grade'] as String?)?.trim().isNotEmpty ?? false)
-          ? (c['grade'] as String).trim()
-          : 'Raw';
-      return compGrade == grade;
+  /// Authoritative: pick `current_prices.price` for each copy’s slab (`is_graded`, `grader`, `grade` / `grade_value`).
+  List<UserCard> _resolveCatalogPricesFromCurrentPricesTable(
+    List<UserCard> cards,
+    Map<String, List<Map<String, dynamic>>> byMaster,
+  ) {
+    return cards.map((c) {
+      final mid = c.masterCardId?.trim();
+      if (mid == null || mid.isEmpty) return c;
+      final rows = byMaster[mid];
+      if (rows == null || rows.isEmpty) return c;
+
+      final gradeStr = c.grade?.trim();
+      final gradeLabel = (gradeStr != null && gradeStr.isNotEmpty)
+          ? gradeStr
+          : c.gradeValue?.toString().trim();
+      final gradeValueRaw = (gradeLabel == null || gradeLabel.isEmpty) ? null : gradeLabel;
+
+      final spot = priceFromCurrentPricesRowsForUserCopy(
+        rows,
+        isGraded: c.isGraded,
+        grader: c.grader,
+        gradeValueRaw: gradeValueRaw,
+      );
+
+      final ch = parseEmbeddedCurrentPrices(rows);
+      final maxFt = maxFetchedAtFromCurrentPriceRows(rows);
+
+      final useSpot = spot != null && spot > 0;
+      final useCh = cardHedgeGradeMapHasAnyPrice(ch);
+
+      if (!useSpot && !useCh) return c;
+
+      return UserCard.withResolvedCatalogTablePricing(
+        c,
+        catalogPriceFromCurrentPrices: useSpot ? spot : c.catalogPriceFromCurrentPrices,
+        embeddedCardHedgeGradePrices: useCh ? ch : c.embeddedCardHedgeGradePrices,
+        embeddedCardHedgePricesMaxFetchedAt: maxFt ?? c.embeddedCardHedgePricesMaxFetchedAt,
+      );
     }).toList();
-    if (filtered.isEmpty) return 0;
-    final total = filtered.fold<double>(0, (sum, c) {
-      final price = c['price'];
-      if (price is num) return sum + price.toDouble();
-      return sum;
-    });
-    return total / filtered.length;
-  }
-
-  Future<double?> _seedCurrentValueFromCachedComps({
-    required String masterCardId,
-    required String parallelName,
-    required bool isGraded,
-    required String? gradeValue,
-  }) async {
-    final cutoff = DateTime.now().subtract(_compsRefreshCooldown).toIso8601String();
-    final rows = await _supabase
-        .from('card_sold_comps')
-        .select('price, grade')
-        .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName)
-        .gte('fetched_at', cutoff);
-    final comps = (rows as List).cast<Map<String, dynamic>>();
-    if (comps.isEmpty) return null;
-
-    final rawAvg = _averageForGrade(comps, 'Raw');
-    final psa10Avg = _averageForGrade(comps, 'PSA 10');
-    final psa9Avg = _averageForGrade(comps, 'PSA 9');
-    final normalizedGrade = _normalizeGradeValue(gradeValue);
-
-    if (!isGraded) return rawAvg;
-    if (normalizedGrade == '10' || normalizedGrade == '10.0') return psa10Avg;
-    if (normalizedGrade == '9' || normalizedGrade == '9.0') return psa9Avg;
-    return rawAvg;
   }
 
   Future<List<UserCard>> loadUserCards() async {
@@ -300,21 +369,42 @@ class CardsService {
       final data = await _supabase
           .from('user_cards')
           .select('''
-      id, master_card_id, parallel_id, parallel_name,
-      price_paid, current_value, previous_value, serial_number,
-      is_graded, grader, grade_value, created_at,
-      weekly_price_check, value_refreshed_at,
-      master_card_definitions (
-        player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url,
-        sets ( id, name, card_count, releases ( year, sport, name ) )
-      ),
-      set_parallels!parallel_id ( name, serial_max, is_auto, color_hex )
-    ''')
+              id, master_card_id, parallel_id, parallel_name,
+              price_paid, current_value, previous_value, serial_number,
+              is_graded, grader, grade_value, created_at,
+              weekly_price_check, value_refreshed_at,
+              master_card_definitions (
+                id, image_url, is_auto, is_patch, is_ssp, serial_max,
+                gain, cardhedge_id, cardhedge_fetched_at,
+                current_prices ( grade, price, fetched_at ),
+                set_cards (
+                  player, card_number, is_rookie, image_url,
+                  sets ( id, name, card_count, releases ( year, sport, name ) )
+                )
+              ),
+              set_parallels!parallel_id ( name, serial_max, is_auto, color_hex )
+            ''')
           .order('created_at', ascending: false)
           .timeout(const Duration(seconds: 20));
-      return (data as List)
-          .map((r) => UserCard.fromJson(r as Map<String, dynamic>))
+
+      final rows = (data as List)
+          .map((r) => Map<String, dynamic>.from(r as Map<String, dynamic>))
           .toList();
+      final masterIds = <String>{};
+      for (final r in rows) {
+        final rawId = r['master_card_id'];
+        if (rawId == null) continue;
+        final id = rawId.toString().trim();
+        if (id.isEmpty) continue;
+        masterIds.add(id);
+      }
+
+      final pricesByMaster = await _fetchCurrentPricesGrouped(masterIds);
+
+      final merged = rows
+          .map((r) => UserCard.fromJson(_mergeCurrentPricesIntoUserCardRow(r, pricesByMaster)))
+          .toList();
+      return _resolveCatalogPricesFromCurrentPricesTable(merged, pricesByMaster);
     } on TimeoutException {
       throw Exception(
         'Loading cards timed out. Check your network connection and Supabase settings.',
@@ -340,7 +430,7 @@ class CardsService {
   }
 
   Future<List<ReleaseRecord>> searchReleases(String query) async {
-    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))');
+    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id, sets(id, set_cards(count))');
     if (query.trim().isNotEmpty) {
       q = q.ilike('name', '%${query.trim()}%');
     }
@@ -350,7 +440,7 @@ class CardsService {
 
   /// Browses releases from our DB — no API call. Paginated.
   Future<List<ReleaseRecord>> browseReleases({int? year, String? sport, int offset = 0, int limit = 30}) async {
-    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))');
+    var q = _supabase.from('releases').select('id, name, year, sport, cardsight_id, sets(id, set_cards(count))');
     if (year != null) q = q.eq('year', year);
     if (sport != null && sport.isNotEmpty) q = q.eq('sport', sport);
     final data = await q
@@ -389,7 +479,7 @@ class CardsService {
   Future<List<SetRecord>> getSetsForRelease(String releaseId) async {
     final data = await _supabase
         .from('sets')
-        .select('id, name, card_count, cardsight_id, master_card_definitions(count)')
+        .select('id, name, card_count, cardsight_id, set_cards(count)')
         .eq('release_id', releaseId)
         .order('name', ascending: true);
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
@@ -414,7 +504,7 @@ class CardsService {
 
   Future<List<MasterCard>> searchMasterCards(String setId, String query, {int offset = 0, int limit = 50}) async {
     var q = _supabase
-        .from('master_card_definitions')
+        .from('set_card_base_variants')
         .select('id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url')
         .eq('set_id', setId);
     if (query.trim().isNotEmpty) {
@@ -424,27 +514,93 @@ class CardsService {
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  /// Loads any catalog variant by `master_card_definitions.id` (not limited to Base —
+  /// unlike [set_card_base_variants], which exposes one row per checklist line).
   Future<MasterCard?> fetchMasterCardById(String id) async {
     final data = await _supabase
         .from('master_card_definitions')
-        .select('id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url')
+        .select(
+          'id, is_auto, is_patch, is_ssp, serial_max, image_url, cardhedge_id, gain, '
+          'set_cards(player, card_number, is_rookie, image_url)',
+        )
         .eq('id', id)
         .maybeSingle();
     if (data == null) return null;
-    return MasterCard.fromJson(Map<String, dynamic>.from(data));
+    final map = Map<String, dynamic>.from(data);
+    final scRaw = map['set_cards'];
+    Map<String, dynamic>? sc;
+    if (scRaw is Map) sc = Map<String, dynamic>.from(scRaw);
+    final masterImg = (map['image_url'] as String?)?.trim();
+    final checklistImg = (sc?['image_url'] as String?)?.trim();
+    final coalesced = (masterImg != null && masterImg.isNotEmpty) ? masterImg : checklistImg;
+    final ch = (map['cardhedge_id'] as String?)?.trim();
+    return MasterCard(
+      id: map['id'] as String,
+      player: sc?['player'] as String? ?? '',
+      cardNumber: sc?['card_number'] as String?,
+      isRookie: sc?['is_rookie'] as bool? ?? false,
+      isAuto: map['is_auto'] as bool? ?? false,
+      isPatch: map['is_patch'] as bool? ?? false,
+      isSSP: map['is_ssp'] as bool? ?? false,
+      serialMax: _tryParseInt(map['serial_max']),
+      imageUrl: (coalesced != null && coalesced.isNotEmpty) ? coalesced : null,
+      cardhedgeId: (ch != null && ch.isNotEmpty) ? ch : null,
+      gain: _tryParseDouble(map['gain']),
+    );
+  }
+
+  /// Resolves [catalogVariantId] (any variant of a checklist line) to the row for [parallelId],
+  /// inserting a new `master_card_definitions` row when needed.
+  Future<String> ensureCatalogVariant({
+    required String catalogVariantId,
+    required String? parallelId,
+  }) async {
+    final cur = await _supabase
+        .from('master_card_definitions')
+        .select('set_card_id, parallel_id')
+        .eq('id', catalogVariantId)
+        .single();
+    final setCardId = cur['set_card_id'] as String;
+    final currentParallel = cur['parallel_id'] as String;
+    final targetParallel = parallelId ?? currentParallel;
+    if (targetParallel == currentParallel) return catalogVariantId;
+
+    final existing = await _supabase
+        .from('master_card_definitions')
+        .select('id')
+        .eq('set_card_id', setCardId)
+        .eq('parallel_id', targetParallel)
+        .maybeSingle();
+    if (existing != null) return existing['id'] as String;
+
+    final flags = await _supabase
+        .from('master_card_definitions')
+        .select('is_auto, is_patch, is_ssp, serial_max')
+        .eq('id', catalogVariantId)
+        .single();
+
+    final inserted = await _supabase.from('master_card_definitions').insert({
+      'set_card_id': setCardId,
+      'parallel_id': targetParallel,
+      'is_auto': flags['is_auto'] as bool? ?? false,
+      'is_patch': flags['is_patch'] as bool? ?? false,
+      'is_ssp': flags['is_ssp'] as bool? ?? false,
+      'serial_max': flags['serial_max'],
+    }).select('id').single();
+    return inserted['id'] as String;
   }
 
   Future<({ReleaseRecord release, SetRecord set})> getReleaseAndSetForSetId(String setId) async {
     final setData = await _supabase
         .from('sets')
-        .select('id, name, card_count, cardsight_id, master_card_definitions(count), release_id')
+        .select('id, name, card_count, cardsight_id, set_cards(count), release_id')
         .eq('id', setId)
         .single();
     final releaseId = setData['release_id'] as String;
     final setRecord = SetRecord.fromJson(Map<String, dynamic>.from(setData));
     final releaseData = await _supabase
         .from('releases')
-        .select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))')
+        .select('id, name, year, sport, cardsight_id, sets(id, set_cards(count))')
         .eq('id', releaseId)
         .single();
     final release = ReleaseRecord.fromJson(Map<String, dynamic>.from(releaseData));
@@ -528,15 +684,22 @@ class CardsService {
     final setId = importResult.setId;
     final parallels = importResult.parallels;
 
-    // Step 2: Check if card already exists in DB
-    final existing = await _supabase
-        .from('master_card_definitions')
+    // Step 2: Check if card already exists in DB (set_cards by CardSight id)
+    final existingSc = await _supabase
+        .from('set_cards')
         .select('id')
         .eq('cardsight_card_id', card.id)
         .maybeSingle();
 
-    if (existing != null) {
-      return (masterCardId: existing['id'] as String, setId: setId, parallels: parallels);
+    if (existingSc != null) {
+      final v = await _supabase
+          .from('set_card_base_variants')
+          .select('id')
+          .eq('set_card_id', existingSc['id'] as String)
+          .maybeSingle();
+      if (v != null) {
+        return (masterCardId: v['id'] as String, setId: setId, parallels: parallels);
+      }
     }
 
     // Step 3: Import all cards for this set, then look up the card
@@ -546,13 +709,23 @@ class CardsService {
       setId: setId,
     );
 
-    final found = await _supabase
-        .from('master_card_definitions')
+    final foundSc = await _supabase
+        .from('set_cards')
         .select('id')
         .eq('cardsight_card_id', card.id)
+        .maybeSingle();
+
+    if (foundSc == null) {
+      throw Exception('Card not found in catalog after import');
+    }
+
+    final v = await _supabase
+        .from('set_card_base_variants')
+        .select('id')
+        .eq('set_card_id', foundSc['id'] as String)
         .single();
 
-    return (masterCardId: found['id'] as String, setId: setId, parallels: parallels);
+    return (masterCardId: v['id'] as String, setId: setId, parallels: parallels);
   }
 
   Future<LazyImportResult> lazyImportCatalog({
@@ -634,29 +807,58 @@ class CardsService {
   }
 
   Future<({String userCardId, String masterCardId})> addCard(AddCardFormData form) async {
-    String? masterCardId = form.masterCardId;
+    String? formMasterId = form.masterCardId;
     String normalizedParallelName = form.parallelName.trim().isEmpty ? 'Base' : form.parallelName.trim();
 
-    if (masterCardId == null) {
-      final result = await _supabase
-          .from('master_card_definitions')
+    late String catalogVariantId;
+    if (formMasterId == null) {
+      if (form.setId == null) {
+        throw Exception('setId is required when creating a checklist card');
+      }
+      final parallels = await getParallels(form.setId!);
+      if (parallels.isEmpty) {
+        throw Exception('Add at least one parallel to this set before adding a card');
+      }
+      SetParallel baseParallel = parallels.first;
+      for (final p in parallels) {
+        if (p.name.trim().toLowerCase() == 'base') {
+          baseParallel = p;
+          break;
+        }
+      }
+      final scRow = await _supabase
+          .from('set_cards')
           .insert({
             'set_id': form.setId,
             'player': form.player,
             'card_number': form.cardNumber,
-            'serial_max': form.serialMax,
             'is_rookie': form.isRookie,
-            'is_auto': form.isAuto,
-            'is_patch': form.isPatch,
-            'is_ssp': form.isSSP,
           })
           .select('id')
           .single();
-      masterCardId = result['id'] as String;
+      final ins = await _supabase
+          .from('master_card_definitions')
+          .insert({
+            'set_card_id': scRow['id'] as String,
+            'parallel_id': baseParallel.id,
+            'is_auto': form.isAuto,
+            'is_patch': form.isPatch,
+            'is_ssp': form.isSSP,
+            'serial_max': form.serialMax,
+          })
+          .select('id')
+          .single();
+      catalogVariantId = ins['id'] as String;
+    } else {
+      catalogVariantId = formMasterId;
     }
 
-    // Canonicalize parallel_name from the selected parallel row whenever possible
-    // so downstream comps/value refresh always uses the intended parallel.
+    catalogVariantId = await ensureCatalogVariant(
+      catalogVariantId: catalogVariantId,
+      parallelId: form.parallelId,
+    );
+
+    // Canonicalize parallel_name from the selected parallel row whenever possible.
     if (form.parallelId != null && form.parallelId!.isNotEmpty) {
       final parallelRow = await _supabase
           .from('set_parallels')
@@ -671,23 +873,11 @@ class CardsService {
       }
     }
 
-    double? seededCurrentValue;
-    try {
-      seededCurrentValue = await _seedCurrentValueFromCachedComps(
-        masterCardId: masterCardId,
-        parallelName: normalizedParallelName,
-        isGraded: form.isGraded,
-        gradeValue: form.gradeValue,
-      );
-    } catch (_) {
-      // If cache read fails, card creation should still succeed.
-    }
-
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
     final result = await _supabase.from('user_cards').insert({
-      'master_card_id': masterCardId,
+      'master_card_id': catalogVariantId,
       'user_id': userId,
       'parallel_id': form.parallelId,
       'parallel_name': normalizedParallelName,
@@ -696,13 +886,11 @@ class CardsService {
       'is_graded': form.isGraded,
       'grader': form.isGraded ? form.grader : null,
       'grade_value': form.isGraded && form.gradeValue?.isNotEmpty == true ? form.gradeValue : null,
-      if (seededCurrentValue != null) 'current_value': seededCurrentValue,
-      if (seededCurrentValue != null) 'value_refreshed_at': DateTime.now().toIso8601String(),
     }).select('id').single();
 
     return (
       userCardId: result['id'] as String,
-      masterCardId: masterCardId,
+      masterCardId: catalogVariantId,
     );
   }
 
@@ -726,7 +914,7 @@ class CardsService {
       // Search releases by name or sport
       final releaseData = await _supabase
           .from('releases')
-          .select('id, name, year, sport, cardsight_id, sets(id, master_card_definitions(count))')
+          .select('id, name, year, sport, cardsight_id, sets(id, set_cards(count))')
           .ilike('name', '%$queryTrim%')
           .order('year', ascending: false)
           .limit(20);
@@ -776,7 +964,7 @@ class CardsService {
     try {
       // Search cards by player name (without nested joins)
       final cardData = await _supabase
-          .from('master_card_definitions')
+          .from('set_card_base_variants')
           .select('id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url, set_id')
           .ilike('player', '%$queryTrim%')
           .limit(50);
@@ -896,9 +1084,9 @@ final cardStacksProvider = Provider<AsyncValue<List<CardStack>>>((ref) {
   return ref.watch(userCardsProvider).whenData(CardStack.fromCards);
 });
 
-/// IDs of the top 50 cards by current value — these are auto-refreshed daily.
+/// IDs of the top 50 cards by derived display value — auto-refreshed daily uses these.
 final dailyTierCardIdsProvider = Provider<Set<String>>((ref) {
   final cards = ref.watch(userCardsProvider).value ?? [];
-  final sorted = [...cards]..sort((a, b) => (b.currentValue ?? 0).compareTo(a.currentValue ?? 0));
+  final sorted = [...cards]..sort((a, b) => (b.displayValue ?? 0).compareTo(a.displayValue ?? 0));
   return sorted.take(50).map((c) => c.id).toSet();
 });

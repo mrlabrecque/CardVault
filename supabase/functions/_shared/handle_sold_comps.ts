@@ -73,14 +73,20 @@ async function fetchSoldListingsProvider(query: string, path: 'refresh' | 'searc
   }
 }
 
+function parallelNameFromMasterEmbed(master: Record<string, unknown>): string {
+  const sp = master.set_parallels as Record<string, unknown> | Record<string, unknown>[] | null | undefined;
+  if (!sp) return 'Base';
+  const row = Array.isArray(sp) ? (sp[0] as Record<string, unknown> | undefined) : (sp as Record<string, unknown>);
+  const n = typeof row?.name === 'string' ? row.name.trim() : '';
+  return n.length > 0 ? n : 'Base';
+}
+
 /**
  * Sold comps via Bright Data Web Unlocker (`sold_listings_brightdata.ts`).
  *
  * Handles both:
- * - refresh path: { masterCardId, parallelName }
+ * - refresh path: { masterCardId } — parallel comes from `master_card_definitions.parallel_id` → `set_parallels`
  * - search path: { query }
- *
- * Refresh takes precedence when both `masterCardId` and `parallelName` are non-empty.
  */
 export async function handleSoldCompsUnified(req: Request): Promise<Response> {
   console.log('[sold-comps] method:', req.method);
@@ -98,10 +104,9 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
     const body = await req.json() as Record<string, unknown>;
     const masterCardId = body.masterCardId as string | undefined;
-    const parallelName = body.parallelName as string | undefined;
     const queryRaw = body.query as string | undefined;
 
-    const doRefresh = !!(masterCardId && parallelName);
+    const doRefresh = typeof masterCardId === 'string' && masterCardId.trim().length > 0;
 
     if (doRefresh) {
       const admin = createClient(supabaseUrl, serviceRoleKey);
@@ -109,8 +114,12 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
       const { data: masterCard, error: mcError } = await admin
         .from('master_card_definitions')
         .select(`
-      id, player, card_number, is_rookie, is_auto, is_patch, serial_max,
-      sets ( id, name, releases ( year, name, sport ) )
+      id, is_auto, is_patch, serial_max,
+      set_parallels!parallel_id ( name ),
+      set_cards (
+        player, card_number, is_rookie, set_id,
+        sets ( id, name, releases ( year, name, sport ) )
+      )
     `)
         .eq('id', masterCardId)
         .single();
@@ -119,27 +128,30 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         return json({ error: 'Master card not found' }, 404);
       }
 
+      const sc = (masterCard as any).set_cards ?? {};
+      const setData = sc.sets ?? {};
+      const setIdForParallels = setData.id as string | undefined;
+
       const { data: allParallels } = await admin
         .from('set_parallels')
         .select('name')
-        .eq('set_id', (masterCard as any).sets.id);
-
+        .eq('set_id', setIdForParallels ?? sc.set_id);
       const allParallelNames = (allParallels as any[])?.map((p: any) => p.name) ?? [];
 
       const mcd = masterCard as any;
-      const setData = mcd.sets ?? {};
       const release = setData.releases ?? {};
+      const pn = parallelNameFromMasterEmbed(mcd as Record<string, unknown>);
 
       const cardRow = {
         year: release.year,
         release_name: release.name,
         set_name: setData.name,
-        player: mcd.player,
-        card_number: mcd.card_number,
-        parallel_type: parallelName as string,
+        player: sc.player,
+        card_number: sc.card_number,
+        parallel_type: pn,
         is_auto: mcd.is_auto,
         is_patch: mcd.is_patch,
-        is_rookie: mcd.is_rookie,
+        is_rookie: sc.is_rookie,
         serial_max: mcd.serial_max,
         is_graded: false,
         grader: null,
@@ -147,16 +159,15 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
       };
 
       const query = buildCardEbayQuery(cardRow);
-      console.log(`[sold-comps/refresh] query: "${query}", parallel: "${parallelName}"`);
+      console.log(`[sold-comps/refresh] query: "${query}", parallel: "${pn}"`);
 
-      // Cooldown: if we fetched this master+parallel recently, return cached rows
+      // Cooldown: if we fetched this variant recently, return cached rows
       // and avoid another provider call.
       const cooldownCutoffIso = new Date(Date.now() - REFRESH_COOLDOWN_HOURS * 60 * 60 * 1000).toISOString();
       const { data: recentCompsData } = await admin
         .from('card_sold_comps')
         .select('price, grade, title, fetched_at')
         .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName)
         .gte('fetched_at', cooldownCutoffIso)
         .limit(1);
 
@@ -166,12 +177,11 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
       );
 
       if (recentRowCount > 0) {
-        console.log(`[sold-comps/refresh] cooldown hit for ${masterCardId} ${parallelName}; skipping Bright Data`);
+        console.log(`[sold-comps/refresh] cooldown hit for ${masterCardId} ${pn}; skipping Bright Data`);
         const { data: allCompsData } = await admin
           .from('card_sold_comps')
           .select('price, grade')
-          .eq('master_card_id', masterCardId)
-          .eq('parallel_name', parallelName);
+          .eq('master_card_id', masterCardId);
 
         const { rawAvg, psa10Avg, psa9Avg } = averagesFromCompsRows(allCompsData as any[]);
         return json({
@@ -191,17 +201,15 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         .from('card_comps_refresh_log')
         .select('last_refreshed_at, last_result_count')
         .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName)
         .gte('last_refreshed_at', cooldownCutoffIso)
         .maybeSingle();
 
       if (recentRefreshMarker && Number(recentRefreshMarker.last_result_count ?? 0) <= 0) {
-        console.log(`[sold-comps/refresh] cooldown hit (zero-result marker) for ${masterCardId} ${parallelName}`);
+        console.log(`[sold-comps/refresh] cooldown hit (zero-result marker) for ${masterCardId} ${pn}`);
         const { data: allCompsData } = await admin
           .from('card_sold_comps')
           .select('price, grade')
-          .eq('master_card_id', masterCardId)
-          .eq('parallel_name', parallelName);
+          .eq('master_card_id', masterCardId);
 
         const { rawAvg, psa10Avg, psa9Avg } = averagesFromCompsRows(allCompsData as any[]);
         return json({
@@ -228,8 +236,7 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         const { data: staleCompsData } = await admin
           .from('card_sold_comps')
           .select('price, grade')
-          .eq('master_card_id', masterCardId)
-          .eq('parallel_name', parallelName);
+          .eq('master_card_id', masterCardId);
         const staleCount = (staleCompsData as any[] | null)?.length ?? 0;
         if (staleCount > 0) {
           const { rawAvg, psa10Avg, psa9Avg } = averagesFromCompsRows(staleCompsData as any[]);
@@ -261,9 +268,9 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
       const items = parseAndFilterSoldComps(
         raw,
         query,
-        parallelName as string,
+        pn,
         allParallelNames,
-        mcd.card_number ?? undefined,
+        sc.card_number ?? undefined,
         setData.name ?? undefined,
         rejectDebug,
       );
@@ -288,15 +295,14 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
       await admin.from('card_sold_comps')
         .delete()
-        .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName);
+        .eq('master_card_id', masterCardId);
 
       if (items.length > 0) {
         const rows = items.map((item: any) => {
           const grade = parseGrade(item.title);
           return {
             master_card_id: masterCardId,
-            parallel_name: parallelName,
+            parallel_name: pn,
             grade,
             ebay_item_id: item.itemId ?? null,
             title: item.title ?? '',
@@ -316,18 +322,17 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         .upsert(
           {
             master_card_id: masterCardId,
-            parallel_name: parallelName,
+            parallel_name: pn,
             last_refreshed_at: new Date().toISOString(),
             last_result_count: items.length,
           },
-          { onConflict: 'master_card_id,parallel_name' },
+          { onConflict: 'master_card_id' },
         );
 
       const { data: allCompsData } = await admin
         .from('card_sold_comps')
         .select('price, grade')
-        .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName);
+        .eq('master_card_id', masterCardId);
 
       const { rawAvg, psa10Avg, psa9Avg } = averagesFromCompsRows(allCompsData as any[]);
 
@@ -343,7 +348,7 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
 
     const queryText = typeof queryRaw === 'string' ? queryRaw.trim() : '';
     if (!queryText) {
-      return json({ error: 'Provide { masterCardId, parallelName } or { query }' }, 400);
+      return json({ error: 'Provide { masterCardId } or { query }' }, 400);
     }
 
     let rawRows: any[];

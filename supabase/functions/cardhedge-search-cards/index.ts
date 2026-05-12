@@ -18,7 +18,13 @@ import {
   parallelScore,
   stripSerialSuffix,
 } from '../_shared/cardhedge_text.ts';
+import {
+  type CatalogMasterSnapshot,
+  fetchCatalogMasterSnapshot,
+  persistCardHedgeOntoMaster,
+} from '../_shared/cardhedge_persist_master.ts';
 import { verifyUserJwt } from '../_shared/supabase_user_jwt.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CARD_SEARCH_URL = 'https://api.cardhedger.com/v1/cards/card-search';
 
@@ -96,7 +102,38 @@ function strField(body: Record<string, unknown>, ...keys: string[]): string {
   return '';
 }
 
+/** CardHedge rows may use spaced keys; expose stable names for clients + persist. */
+function extractCardHedgeSales(row: Record<string, unknown>): {
+  sales_7d: number | null;
+  sales_30d: number | null;
+  gain: number | null;
+} {
+  const toNum = (v: unknown): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+      const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const pick = (...keys: string[]): number | null => {
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(row, k)) {
+        const n = toNum(row[k]);
+        if (n !== null) return n;
+      }
+    }
+    return null;
+  };
+  return {
+    sales_7d: pick('7 Day Sales', '7_Day_Sales', 'sales_7d', 'seven_day_sales', 'sevenDaySales'),
+    sales_30d: pick('30 Day Sales', '30_Day_Sales', 'sales_30d', 'thirty_day_sales', 'thirtyDaySales'),
+    gain: pick('gain', 'Gain'),
+  };
+}
+
 function searchRowToMatch(row: Record<string, unknown>) {
+  const sales = extractCardHedgeSales(row);
   return {
     card_id: row.card_id,
     description: row.description,
@@ -108,6 +145,9 @@ function searchRowToMatch(row: Record<string, unknown>) {
     image: row.image,
     prices: row.prices,
     reasoning: row.reasoning ?? null,
+    sales_7d: sales.sales_7d,
+    sales_30d: sales.sales_30d,
+    gain: sales.gain,
   };
 }
 
@@ -174,6 +214,7 @@ Deno.serve(async (req) => {
     const setName = strField(body, 'setName', 'set_name');
     const cardNumber = strField(body, 'cardNumber', 'card_number', 'number');
     const parallelName = strField(body, 'parallelName', 'parallel_name', 'parallel');
+    const persistMasterVariantId = strField(body, 'persistMasterVariantId', 'persist_master_variant_id');
 
     const psRaw = body.page_size ?? body.pageSize;
     const pageSize = typeof psRaw === 'number' && Number.isInteger(psRaw)
@@ -489,8 +530,34 @@ Deno.serve(async (req) => {
           ? parallelScore(parallelName, chosen)
           : null,
         alternate_count: alternate_matches.length,
+        persist_master_variant_id: persistMasterVariantId || null,
       }),
     );
+
+    let persisted_master: CatalogMasterSnapshot | null = null;
+    if (persistMasterVariantId) {
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
+      if (serviceKey) {
+        try {
+          const admin = createClient(supabaseUrl, serviceKey);
+          const matchOut = searchRowToMatch(chosen);
+          await persistCardHedgeOntoMaster(admin, {
+            masterVariantId: persistMasterVariantId,
+            cardhedgeId: typeof matchOut.card_id === 'string' ? matchOut.card_id : undefined,
+            imageUrl: typeof matchOut.image === 'string' ? matchOut.image : null,
+            prices: Array.isArray(matchOut.prices) ? (matchOut.prices as unknown[]) : undefined,
+            sales7d: matchOut.sales_7d,
+            sales30d: matchOut.sales_30d,
+            gain: matchOut.gain,
+          });
+          persisted_master = await fetchCatalogMasterSnapshot(admin, persistMasterVariantId);
+        } catch (e) {
+          console.error(
+            JSON.stringify({ tag: LOG_TAG, event: 'persist_inline_failed', message: String(e) }),
+          );
+        }
+      }
+    }
 
     return json({
       matched: true,
@@ -513,6 +580,7 @@ Deno.serve(async (req) => {
       },
       match: searchRowToMatch(chosen),
       alternate_matches,
+      ...(persistMasterVariantId ? { persisted_master } : {}),
     });
   } catch (e) {
     console.error(JSON.stringify({ tag: LOG_TAG, event: 'exception', message: String(e) }));

@@ -3,26 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
 import '../models/cardhedge_match.dart';
 import '../models/comp.dart';
+import '../utils/cardhedge_grade_prices.dart';
+import 'cards_service.dart' show MasterCard;
 
 class CompsService {
   CompsService(this._supabase);
   final SupabaseClient _supabase;
   static const Duration _compsRefreshCooldown = Duration(hours: 24);
-
-  String _effectiveParallelName(Map<String, dynamic> row) {
-    final rawParallelName = (row['parallel_name'] as String?)?.trim();
-    if (rawParallelName != null && rawParallelName.isNotEmpty) {
-      return rawParallelName;
-    }
-    final linkedParallel = row['set_parallels'];
-    if (linkedParallel is Map) {
-      final linkedName = (Map<String, dynamic>.from(linkedParallel)['name'] as String?)?.trim();
-      if (linkedName != null && linkedName.isNotEmpty) {
-        return linkedName;
-      }
-    }
-    return 'Base';
-  }
 
   String _extractErrorMessage(dynamic raw) {
     if (raw == null) return '';
@@ -94,38 +81,175 @@ class CompsService {
   }
 
   Future<List<Comp>> getCardComps(String cardId) async {
-    // Resolve master_card_id + parallel_name from user_card, then fetch comps
     final cardData = await _supabase
         .from('user_cards')
-        .select('master_card_id, parallel_name, set_parallels!parallel_id(name)')
+        .select('master_card_id')
         .eq('id', cardId)
         .single();
 
     final masterId = (cardData as Map)['master_card_id'] as String?;
-    final parallelName = _effectiveParallelName(Map<String, dynamic>.from(cardData));
 
     if (masterId == null) {
       return [];
     }
 
-    return getMasterCardComps(masterId, parallelName);
+    return getMasterCardComps(masterId);
   }
 
-  Future<List<Comp>> getMasterCardComps(String masterCardId, String parallelName) async {
+  Future<List<Comp>> getMasterCardComps(String masterCardId) async {
     final data = await _supabase
         .from('card_sold_comps')
         .select('title, price, currency, sale_type, sold_at, url, image_url, grade')
         .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName)
         .order('sold_at', ascending: false, nullsFirst: false);
     return (data as List).map((r) => Comp.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  Future<List<ActiveListing>> getActiveListings(String masterCardId, String parallelName) async {
+  /// True when [card_sold_comps] has at least one row for this variant + [grade] (`Raw`, `PSA 10`, …).
+  Future<bool> hasSoldCompsForGrade(String masterCardId, String grade) async {
+    final norm = grade.trim().isEmpty ? 'Raw' : grade.trim();
+    var data = await _supabase
+        .from('card_sold_comps')
+        .select('id')
+        .eq('master_card_id', masterCardId.trim())
+        .eq('grade', norm)
+        .limit(1);
+    if ((data as List).isNotEmpty) return true;
+    if (norm == 'Raw') {
+      data = await _supabase
+          .from('card_sold_comps')
+          .select('id')
+          .eq('master_card_id', masterCardId.trim())
+          .ilike('grade', 'raw')
+          .limit(1);
+      return (data as List).isNotEmpty;
+    }
+    return false;
+  }
+
+  /// Grade averages from `current_prices` (written when CardHedge is linked).
+  Future<Map<String, double?>> getMasterCardCurrentPrices(String masterCardId) async {
+    final out = emptyCardHedgeGradePriceMap();
+    final data = await _supabase
+        .from('current_prices')
+        .select('grade, price')
+        .eq('master_card_id', masterCardId);
+    for (final row in data as List) {
+      final m = Map<String, dynamic>.from(row as Map);
+      final key = normalizeCardHedgeDisplayGrade(m['grade']?.toString() ?? '');
+      if (key == null) continue;
+      final p = parsePostgresNumeric(m['price']);
+      if (p == null || p <= 0) continue;
+      out[key] = p;
+    }
+    return out;
+  }
+
+  /// Same CardHedge hydration path as [MasterCardDetailScreen._syncCardHedgeForMaster]:
+  /// when `cardhedge_id` is set and `current_prices` has rows, no network call;
+  /// otherwise invokes `cardhedge-search-cards` with persist for this variant.
+  ///
+  /// Call after adding to collection or when opening item detail so `current_prices`
+  /// and `master_card_definitions` match what the catalog detail screen would load.
+  Future<void> syncMasterCatalogPricingForVariant(String masterVariantId) async {
+    final trimId = masterVariantId.trim();
+    if (trimId.isEmpty) return;
+
+    final raw = await _supabase.from('master_card_definitions').select('''
+      cardhedge_id,
+      set_cards ( player, card_number, sets ( name, releases ( year, sport, name ) ) ),
+      set_parallels ( name )
+    ''').eq('id', trimId).maybeSingle();
+    if (raw == null) return;
+    final row = Map<String, dynamic>.from(raw as Map);
+
+    final hedgeRaw = row['cardhedge_id']?.toString().trim();
+    if (hedgeRaw != null && hedgeRaw.isNotEmpty) {
+      final dbPrices = await getMasterCardCurrentPrices(trimId);
+      if (dbPrices.values.any((v) => v != null && v > 0)) return;
+    }
+
+    Map<String, dynamic>? asMap(dynamic v) {
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      return null;
+    }
+
+    final sc = asMap(row['set_cards']);
+    final player = sc?['player']?.toString().trim() ?? '';
+    if (player.isEmpty) return;
+    final cardNumber = sc?['card_number']?.toString();
+    final sets = asMap(sc?['sets']);
+    final checklistName = sets?['name']?.toString();
+    final rel = asMap(sets?['releases']);
+    int? yearVal;
+    final y = rel?['year'];
+    if (y is int) {
+      yearVal = y;
+    } else if (y is num) {
+      yearVal = y.toInt();
+    } else if (y != null) {
+      yearVal = int.tryParse(y.toString());
+    }
+    final releaseName = rel?['name']?.toString();
+    final sport = rel?['sport']?.toString();
+    final par = asMap(row['set_parallels']);
+    final parallelName = par?['name']?.toString();
+
+    await searchCardHedgeCatalog(
+      player: player,
+      year: yearVal,
+      releaseName: releaseName,
+      setName: checklistName,
+      sport: sport,
+      cardNumber: cardNumber,
+      parallelName: parallelName,
+      persistMasterVariantId: trimId,
+    );
+  }
+
+  /// True when any comps exist for this catalog variant + grade within the last 24h.
+  Future<bool> hasFreshCardHedgeGradeComps(
+    String masterCardId,
+    String grade,
+  ) async {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
+    final g = grade.trim().isEmpty ? 'Raw' : grade.trim();
+    final rows = await _supabase
+        .from('card_sold_comps')
+        .select('id')
+        .eq('master_card_id', masterCardId)
+        .eq('grade', g)
+        .gte('fetched_at', cutoff)
+        .limit(1);
+    return (rows as List).isNotEmpty;
+  }
+
+  /// Loads CardHedge `/v1/cards/comps` unless [hasFreshCardHedgeGradeComps] is true.
+  /// Returns `null` on failure, `-1` when the 24h cache was used (no network call),
+  /// otherwise the number of sale rows stored.
+  Future<int?> ensureCardHedgeGradeComps({
+    required String masterVariantId,
+    required String cardhedgeId,
+    required String grade,
+    int count = 40,
+  }) async {
+    if (await hasFreshCardHedgeGradeComps(masterVariantId, grade)) {
+      return -1;
+    }
+    return fetchCardHedgeGradeComps(
+      masterVariantId: masterVariantId,
+      cardhedgeId: cardhedgeId,
+      grade: grade,
+      count: count,
+    );
+  }
+
+  Future<List<ActiveListing>> getActiveListings(String masterCardId) async {
     try {
       final res = await _supabase.functions.invoke(
         'card-active-listings',
-        body: {'masterCardId': masterCardId, 'parallelName': parallelName},
+        body: {'masterCardId': masterCardId},
       );
       if (res.status != 200) {
         final err = (res.data is Map ? (res.data as Map)['error'] : null) ?? 'Request failed';
@@ -159,11 +283,11 @@ class CompsService {
     }
   }
 
-  Future<void> refreshMasterCardComps(String masterCardId, String parallelName) async {
+  Future<void> refreshMasterCardComps(String masterCardId) async {
     try {
       final res = await _supabase.functions.invoke(
         'refresh-comps',
-        body: {'masterCardId': masterCardId, 'parallelName': parallelName},
+        body: {'masterCardId': masterCardId},
       );
       if (res.status != 200) {
         throw _friendlyRefreshException(status: res.status, payload: res.data);
@@ -197,13 +321,38 @@ class CompsService {
     return total / filtered.length;
   }
 
-  Future<bool> _hasFreshCachedComps(String masterCardId, String parallelName) async {
+  Future<void> _writeUserCardValuesFromAverages({
+    required List<Map<String, dynamic>> matchingRows,
+    required double rawAvg,
+    required double psa10Avg,
+    required double psa9Avg,
+  }) async {
+    final refreshedAt = DateTime.now().toIso8601String();
+    for (final card in matchingRows) {
+      final id = card['id'] as String?;
+      if (id == null) continue;
+      final isGraded = card['is_graded'] as bool? ?? false;
+      final gradeValue = _normalizeGradeValue(card['grade_value']);
+      final currentValue = _valueForGrade(
+        isGraded: isGraded,
+        gradeValue: gradeValue,
+        rawAvg: rawAvg,
+        psa9Avg: psa9Avg,
+        psa10Avg: psa10Avg,
+      );
+      await _supabase.from('user_cards').update({
+        'current_value': currentValue,
+        'value_refreshed_at': refreshedAt,
+      }).eq('id', id);
+    }
+  }
+
+  Future<bool> _hasFreshCachedComps(String masterCardId) async {
     final cutoff = DateTime.now().subtract(_compsRefreshCooldown).toIso8601String();
     final rows = await _supabase
         .from('card_sold_comps')
         .select('id')
         .eq('master_card_id', masterCardId)
-        .eq('parallel_name', parallelName)
         .gte('fetched_at', cutoff)
         .limit(1);
     return (rows as List).isNotEmpty;
@@ -222,7 +371,7 @@ class CompsService {
     for (final cardId in cardIds) {
       final cardData = await _supabase
           .from('user_cards')
-          .select('id, master_card_id, parallel_name, is_graded, grade_value, set_parallels!parallel_id(name)')
+          .select('id, master_card_id, is_graded, grade_value')
           .eq('id', cardId)
           .maybeSingle();
       if (cardData == null) continue;
@@ -235,8 +384,7 @@ class CompsService {
       final id = row['id'] as String?;
       final masterId = row['master_card_id'] as String?;
       if (id == null || masterId == null) continue;
-      final parallelName = _effectiveParallelName(row);
-      final key = '$masterId|$parallelName';
+      final key = masterId;
       byCompsKey.putIfAbsent(key, () => []).add(row);
     }
     if (byCompsKey.isEmpty) {
@@ -246,15 +394,46 @@ class CompsService {
     for (final entry in byCompsKey.entries) {
       final first = entry.value.first;
       final masterId = first['master_card_id'] as String;
-      final parallelName = _effectiveParallelName(first);
 
-      final hasFreshCachedComps = await _hasFreshCachedComps(masterId, parallelName);
+      final matchingRowsRaw = await _supabase
+          .from('user_cards')
+          .select('id, master_card_id, is_graded, grade_value')
+          .eq('master_card_id', masterId);
+      final matchingRows = (matchingRowsRaw as List)
+          .map((r) => Map<String, dynamic>.from(r as Map))
+          .toList();
+
+      final masterRow = await _supabase
+          .from('master_card_definitions')
+          .select('cardhedge_id')
+          .eq('id', masterId)
+          .maybeSingle();
+      final hedgeId = (masterRow?['cardhedge_id'] as String?)?.trim();
+
+      if (hedgeId != null && hedgeId.isNotEmpty) {
+        final prices = await getMasterCardCurrentPrices(masterId);
+        final hasCardHedgePrices = prices.values.any((v) => v != null && v > 0);
+        if (hasCardHedgePrices) {
+          final rawAvg = prices['Raw'] ?? 0;
+          final psa10Avg = prices['PSA 10'] ?? 0;
+          final psa9Avg = prices['PSA 9'] ?? 0;
+          await _writeUserCardValuesFromAverages(
+            matchingRows: matchingRows,
+            rawAvg: rawAvg,
+            psa10Avg: psa10Avg,
+            psa9Avg: psa9Avg,
+          );
+          continue;
+        }
+      }
+
+      final hasFreshCachedComps = await _hasFreshCachedComps(masterId);
       if (!hasFreshCachedComps) {
         late final FunctionResponse res;
         try {
           res = await _supabase.functions.invoke(
             'refresh-comps',
-            body: {'masterCardId': masterId, 'parallelName': parallelName},
+            body: {'masterCardId': masterId},
           );
         } on FunctionException catch (e) {
           throw _friendlyRefreshException(status: e.status, source: e, payload: e.details);
@@ -266,7 +445,7 @@ class CompsService {
 
       // Re-read the same DB rows the UI uses so `current_value` and
       // displayed Sold Comps averages always stay in sync.
-      final comps = await getMasterCardComps(masterId, parallelName);
+      final comps = await getMasterCardComps(masterId);
       if (comps.isEmpty) {
         for (final card in entry.value) {
           final id = card['id'] as String?;
@@ -281,36 +460,13 @@ class CompsService {
       final rawAvg = _averageForGrade(comps, 'Raw');
       final psa10Avg = _averageForGrade(comps, 'PSA 10');
       final psa9Avg = _averageForGrade(comps, 'PSA 9');
-      final refreshedAt = DateTime.now().toIso8601String();
 
-      // Fan-out reconciliation: once comps for this master+parallel are ready,
-      // apply value updates to all matching user_cards, not just the caller card.
-      final matchingRowsRaw = await _supabase
-          .from('user_cards')
-          .select('id, master_card_id, parallel_name, is_graded, grade_value, set_parallels!parallel_id(name)')
-          .eq('master_card_id', masterId);
-      final matchingRows = (matchingRowsRaw as List)
-          .map((r) => Map<String, dynamic>.from(r as Map))
-          .where((row) => _effectiveParallelName(row) == parallelName)
-          .toList();
-
-      for (final card in matchingRows) {
-        final id = card['id'] as String?;
-        if (id == null) continue;
-        final isGraded = card['is_graded'] as bool? ?? false;
-        final gradeValue = _normalizeGradeValue(card['grade_value']);
-        final currentValue = _valueForGrade(
-          isGraded: isGraded,
-          gradeValue: gradeValue,
-          rawAvg: rawAvg,
-          psa9Avg: psa9Avg,
-          psa10Avg: psa10Avg,
-        );
-        await _supabase.from('user_cards').update({
-          'current_value': currentValue,
-          'value_refreshed_at': refreshedAt,
-        }).eq('id', id);
-      }
+      await _writeUserCardValuesFromAverages(
+        matchingRows: matchingRows,
+        rawAvg: rawAvg,
+        psa10Avg: psa10Avg,
+        psa9Avg: psa9Avg,
+      );
     }
   }
 
@@ -341,10 +497,110 @@ class CompsService {
     }
   }
 
+  /// Normalizes CardHedge `prices[]` entries (mixed key casing) for Edge insert into `current_prices`.
+  static List<Map<String, dynamic>>? _normalizeCardHedgePricesForPersist(
+    List<Map<String, dynamic>>? raw,
+  ) {
+    if (raw == null || raw.isEmpty) return null;
+    double? parsePrice(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toDouble();
+      if (v is String) {
+        final cleaned = v.replaceAll(RegExp(r'[^0-9.-]'), '');
+        if (cleaned.isEmpty) return null;
+        return double.tryParse(cleaned);
+      }
+      return null;
+    }
+
+    final out = <Map<String, dynamic>>[];
+    for (final row in raw) {
+      final grade = (row['grade'] ?? row['Grade'] ?? row['label'] ?? row['Label'] ?? row['name'] ?? row['Name'])
+          ?.toString()
+          .trim();
+      if (grade == null || grade.isEmpty) continue;
+      final price = parsePrice(row['price'] ?? row['Price'] ?? row['value'] ?? row['Value'] ?? row['avg'] ?? row['Avg']);
+      if (price == null || price <= 0) continue;
+      out.add({'grade': grade, 'price': price});
+    }
+    return out.isEmpty ? null : out;
+  }
+
+  /// Persists CardHedge match onto the catalog variant via Edge `cardhedge-persist-variant`.
+  /// Returns the updated row from the response (`persisted_master`), or null on failure.
+  Future<MasterCard?> persistCardHedgeCatalogMatch({
+    required String masterVariantId,
+    required String? cardhedgeId,
+    required String? imageUrl,
+    List<Map<String, dynamic>>? prices,
+    int? sales7d,
+    int? sales30d,
+    double? gain,
+  }) async {
+    try {
+      final normalizedPrices = _normalizeCardHedgePricesForPersist(prices);
+      final res = await _supabase.functions.invoke(
+        'cardhedge-persist-variant',
+        body: {
+          'masterVariantId': masterVariantId,
+          if (cardhedgeId != null && cardhedgeId.isNotEmpty) 'cardhedgeId': cardhedgeId,
+          if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+          if (normalizedPrices != null && normalizedPrices.isNotEmpty) 'prices': normalizedPrices,
+          'sales7d': ?sales7d,
+          'sales30d': ?sales30d,
+          'gain': ?gain,
+        },
+      );
+      if (res.status != 200) return null;
+      final raw = res.data;
+      if (raw is! Map) return null;
+      final map = Map<String, dynamic>.from(raw);
+      final pm = map['persisted_master'];
+      if (pm is! Map) return null;
+      return MasterCard.fromJson(Map<String, dynamic>.from(pm));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// CardHedge POST `/v1/cards/comps` for [grade], upserts `comps_cache`, replaces
+  /// `card_sold_comps` rows for that catalog variant + grade. Returns row count or null on failure.
+  Future<int?> fetchCardHedgeGradeComps({
+    required String masterVariantId,
+    required String cardhedgeId,
+    required String grade,
+    int count = 40,
+  }) async {
+    try {
+      final res = await _supabase.functions.invoke(
+        'cardhedge-grade-comps',
+        body: {
+          'masterVariantId': masterVariantId,
+          'cardhedgeId': cardhedgeId,
+          'grade': grade,
+          'count': count,
+        },
+      );
+      if (res.status != 200) return null;
+      final raw = res.data;
+      if (raw is! Map) return null;
+      final map = Map<String, dynamic>.from(raw);
+      if (map['ok'] != true) return null;
+      return (map['count'] as num?)?.toInt();
+    } on FunctionException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// CardHedge **card-search** via Edge `cardhedge-search-cards`. Upstream `set` is
   /// [year] (if not already leading [releaseName]) + [releaseName] + category;
   /// [setName] filters on API `description`; [parallelName] on `variant`.
   /// Edge scans multiple pages, then card # + insert + parallel scoring.
+  ///
+  /// When [persistMasterVariantId] is set and a match is found, the same request
+  /// writes CardHedge fields + `current_prices` and returns `persisted_master`.
   Future<CardHedgeMatchPayload> searchCardHedgeCatalog({
     required String player,
     int? year,
@@ -354,6 +610,7 @@ class CompsService {
     String? category,
     String? cardNumber,
     String? parallelName,
+    String? persistMasterVariantId,
     int pageSize = 100,
   }) async {
     final body = <String, dynamic>{
@@ -373,6 +630,8 @@ class CompsService {
     if (cn != null && cn.isNotEmpty) body['cardNumber'] = cn;
     final p = parallelName?.trim();
     if (p != null && p.isNotEmpty) body['parallelName'] = p;
+    final pid = persistMasterVariantId?.trim();
+    if (pid != null && pid.isNotEmpty) body['persistMasterVariantId'] = pid;
 
     try {
       final res = await _supabase.functions.invoke(
@@ -412,6 +671,25 @@ class CompsService {
     }
   }
 }
+
+/// Key for [soldCompsExistForGradeProvider].
+class SoldCompsGradeKey {
+  const SoldCompsGradeKey({required this.masterCardId, required this.grade});
+  final String masterCardId;
+  final String grade;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SoldCompsGradeKey && other.masterCardId == masterCardId && other.grade == grade;
+
+  @override
+  int get hashCode => Object.hash(masterCardId, grade);
+}
+
+/// Whether `card_sold_comps` has rows for this master + grade (catalog browse UI).
+final soldCompsExistForGradeProvider = FutureProvider.family<bool, SoldCompsGradeKey>((ref, key) async {
+  return ref.watch(compsServiceProvider).hasSoldCompsForGrade(key.masterCardId, key.grade);
+});
 
 final compsServiceProvider = Provider<CompsService>((ref) {
   return CompsService(ref.watch(supabaseProvider));

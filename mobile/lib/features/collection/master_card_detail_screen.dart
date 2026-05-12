@@ -7,8 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/cardhedge_match.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
+import '../../core/utils/cardhedge_grade_prices.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/inline_notice_container.dart';
+import '../../core/widgets/card_fan_loader.dart';
 import '../wishlist/wishlist_screen.dart';
 import 'widgets/active_state_indicator.dart';
 import 'widgets/full_bleed_card_hero.dart';
@@ -89,10 +90,13 @@ class _MasterCardDetailScreenState
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _heroKey = GlobalKey();
 
-  /// CardHedge `cardhedge-search-cards` — structured search once when this screen
-  /// opens (catalog detail only). Filters by card # + parallel on the server.
+  /// CardHedge: load linked `current_prices` from DB, or run `cardhedge-search-cards`
+  /// when `cardhedge_id` is missing or prices are not yet materialized.
   bool _cardHedgeLoading = true;
   CardHedgeMatchPayload? _cardHedgeResult;
+
+  /// Grade prices from `current_prices` when the variant is already linked (no search).
+  Map<String, double?>? _linkedGradePricesFromDb;
 
   /// When CardHedge search returns multiple rows for the same card #, user can
   /// pick the correct parallel (e.g. White Sparkle) here.
@@ -103,16 +107,68 @@ class _MasterCardDetailScreenState
   double _heroSwitchThreshold = 320;
   bool _scrolledPastHero = false;
 
+  /// When CardHedge persist writes `image_url`, refetch so the hero updates.
+  MasterCard? _refreshedMaster;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_loadCardHedgeSearch());
+      if (mounted) unawaited(_syncCardHedgeForMaster());
     });
   }
 
-  Future<void> _loadCardHedgeSearch() async {
+  @override
+  void didUpdateWidget(covariant MasterCardDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.masterCard.id != widget.masterCard.id ||
+        oldWidget.parallelName != widget.parallelName ||
+        oldWidget.parallelSerialMax != widget.parallelSerialMax ||
+        oldWidget.parallelIsAuto != widget.parallelIsAuto ||
+        oldWidget.releaseName != widget.releaseName ||
+        oldWidget.setName != widget.setName ||
+        oldWidget.year != widget.year ||
+        oldWidget.sport != widget.sport) {
+      setState(() {
+        _cardHedgeLoading = true;
+        _cardHedgeResult = null;
+        _linkedGradePricesFromDb = null;
+        _cardHedgeRowPick = null;
+        _refreshedMaster = null;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_syncCardHedgeForMaster());
+      });
+    }
+  }
+
+  Future<void> _syncCardHedgeForMaster() async {
+    final baseId = widget.masterCard.id;
+    final working = _refreshedMaster ?? widget.masterCard;
+    final existingCh = working.cardhedgeId?.trim();
+
+    if (existingCh != null && existingCh.isNotEmpty) {
+      final dbPrices = await ref.read(compsServiceProvider).getMasterCardCurrentPrices(baseId);
+      if (!mounted) return;
+      final hasPrices = dbPrices.values.any((v) => v != null && v > 0);
+      if (hasPrices) {
+        setState(() {
+          _cardHedgeLoading = false;
+          _linkedGradePricesFromDb = dbPrices;
+          _cardHedgeResult = null;
+          _cardHedgeRowPick = null;
+        });
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _cardHedgeLoading = true;
+      _linkedGradePricesFromDb = null;
+    });
+
     final payload = await ref.read(compsServiceProvider).searchCardHedgeCatalog(
           player: widget.masterCard.player,
           year: widget.year,
@@ -121,13 +177,43 @@ class _MasterCardDetailScreenState
           sport: widget.sport,
           cardNumber: widget.masterCard.cardNumber,
           parallelName: widget.parallelName,
+          persistMasterVariantId: baseId,
         );
+
+    if (!mounted) return;
+
+    MasterCard? refreshed;
+    final pm = payload.persistedMaster;
+    if (pm != null) {
+      refreshed = MasterCard.fromJson(pm);
+    }
 
     if (!mounted) return;
     setState(() {
       _cardHedgeLoading = false;
+      _linkedGradePricesFromDb = null;
       _cardHedgeResult = payload;
       _cardHedgeRowPick = null;
+      if (refreshed != null) _refreshedMaster = refreshed;
+    });
+  }
+
+  Future<void> _persistCardHedgeRow(CardHedgeMatchedCard m) async {
+    final fresh = await ref.read(compsServiceProvider).persistCardHedgeCatalogMatch(
+          masterVariantId: widget.masterCard.id,
+          cardhedgeId: m.cardId,
+          imageUrl: m.image,
+          prices: m.prices,
+          sales7d: m.sales7d,
+          sales30d: m.sales30d,
+          gain: m.gain,
+        );
+    if (!mounted || fresh == null) return;
+    final dbPrices = await ref.read(compsServiceProvider).getMasterCardCurrentPrices(fresh.id);
+    if (!mounted) return;
+    setState(() {
+      _refreshedMaster = fresh;
+      _linkedGradePricesFromDb = dbPrices;
     });
   }
 
@@ -154,38 +240,22 @@ class _MasterCardDetailScreenState
     return out.length > 1 ? out : const [];
   }
 
-  double? _parseCardHedgePrice(dynamic raw) {
-    if (raw == null) return null;
-    if (raw is num) return raw.toDouble();
-    if (raw is! String) return null;
-    final cleaned = raw.replaceAll(RegExp(r'[^0-9.-]'), '');
-    if (cleaned.isEmpty) return null;
-    return double.tryParse(cleaned);
-  }
-
-  static const List<String> _cardHedgeGradeKeys = ['Raw', 'PSA 10', 'PSA 9'];
-
-  /// Maps CardHedge `prices[]` into the same three grades as sold-comps pills.
-  String? _normalizeCardHedgeGradeKey(String grade) {
-    final g = grade.trim();
-    if (g.isEmpty) return null;
-    final lower = g.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-    if (lower == 'raw' || lower == 'ungraded') return 'Raw';
-    if (lower == 'psa 10' || lower == 'psa10') return 'PSA 10';
-    if (lower == 'psa 9' || lower == 'psa9') return 'PSA 9';
-    if (_cardHedgeGradeKeys.contains(g)) return g;
-    return null;
-  }
+  double? _parseCardHedgePrice(dynamic raw) => parseCardHedgePriceField(raw);
 
   Map<String, double?> _gradeAveragesFromCard(CardHedgeMatchedCard? match) {
-    final out = <String, double?>{for (final k in _cardHedgeGradeKeys) k: null};
+    final out = emptyCardHedgeGradePriceMap();
     if (match == null) return out;
     final prices = match.prices;
     if (prices == null || prices.isEmpty) return out;
     for (final row in prices) {
-      final key = _normalizeCardHedgeGradeKey(row['grade']?.toString() ?? '');
+      final gradeRaw = (row['grade'] ?? row['Grade'] ?? row['label'] ?? row['Label'] ?? row['name'] ?? row['Name'])
+              ?.toString() ??
+          '';
+      final key = normalizeCardHedgeDisplayGrade(gradeRaw);
       if (key == null) continue;
-      final parsed = _parseCardHedgePrice(row['price']);
+      final parsed = _parseCardHedgePrice(
+        row['price'] ?? row['Price'] ?? row['value'] ?? row['Value'] ?? row['avg'] ?? row['Avg'],
+      );
       if (parsed == null || parsed <= 0) continue;
       out[key] = parsed;
     }
@@ -233,11 +303,16 @@ class _MasterCardDetailScreenState
     final onLight = _scrolledPastHero;
     final iconTint = onLight ? colors.onSurface : Colors.white;
 
-    final masterCard = widget.masterCard;
+    final masterCard = _refreshedMaster ?? widget.masterCard;
     final parallel = widget.parallelName;
-    final cardHedgeGradeAverages = _gradeAveragesFromCard(
-      _cardHedgeResult?.matched == true ? _effectiveCardHedgeRow : null,
-    );
+    final hedgeRow = _cardHedgeResult?.matched == true ? _effectiveCardHedgeRow : null;
+    // Hero uses DB/Storage URLs only — CardHedge CDN URLs were causing an extra
+    // swap (CDN → Storage) after persist.
+    final heroTrimmed = masterCard.imageUrl?.trim();
+    final heroImageUrl =
+        (heroTrimmed != null && heroTrimmed.isNotEmpty) ? heroTrimmed : null;
+
+    final cardHedgeGradeAverages = _linkedGradePricesFromDb ?? _gradeAveragesFromCard(hedgeRow);
 
     final userCardsAsync = ref.watch(userCardsProvider);
     final copyCount = userCardsAsync.whenData((all) {
@@ -262,6 +337,9 @@ class _MasterCardDetailScreenState
         return playerMatch && cardNumberMatch && parallelMatch;
       });
     }).value ?? false;
+
+    final overlayLoading =
+        _cardHedgeLoading || userCardsAsync.isLoading || wishlistAsync.isLoading;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -289,235 +367,147 @@ class _MasterCardDetailScreenState
           ),
         ),
       ),
-      body: ListView(
-        controller: _scrollController,
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.zero,
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          FullBleedHero(
-            key: _heroKey,
-            topInset: topInset,
-            details: HeroDetails(
-              player: masterCard.player,
-              sport: widget.sport ?? '',
-              cardNumber: masterCard.cardNumber,
-              imageUrl: masterCard.imageUrl,
-              parallel: parallel,
-              year: widget.year,
-              releaseName: widget.releaseName,
-              setName: widget.setName,
-              serialMax: widget.parallelSerialMax ?? masterCard.serialMax,
-              rookie: masterCard.isRookie,
-              autograph: masterCard.isAuto || widget.parallelIsAuto,
-              memorabilia: masterCard.isPatch,
-              ssp: masterCard.isSSP,
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              24,
-              16,
-              _kShellTabBarScrollInset + bottomPad,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: copyCount > 0
-                          ? ActiveStateIndicator(
-                              icon: Icons.check_circle,
-                              label: 'In Collection ($copyCount)',
-                            )
-                          : AdaptiveButton.child(
-                              onPressed: widget.onAddToCollection,
-                              style: AdaptiveButtonStyle.filled,
-                              color: AppTheme.primary,
-                              child: const Text(
-                                'Add to Collection',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: inWishlist
-                          ? const ActiveStateIndicator(
-                              icon: Icons.favorite,
-                              label: 'In Wishlist',
-                            )
-                          : AdaptiveButton.child(
-                              onPressed: widget.onAddToWishlist,
-                              style: AdaptiveButtonStyle.bordered,
-                              color: AppTheme.primary,
-                              child: DefaultTextStyle.merge(
-                                style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.favorite_border, size: 18, color: AppTheme.primary),
-                                    SizedBox(width: 8),
-                                    Text('Add to Wishlist'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
+          ListView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              FullBleedHero(
+                key: _heroKey,
+                topInset: topInset,
+                details: HeroDetails(
+                  player: masterCard.player,
+                  sport: widget.sport ?? '',
+                  cardNumber: masterCard.cardNumber,
+                  imageUrl: heroImageUrl,
+                  parallel: parallel,
+                  year: widget.year,
+                  releaseName: widget.releaseName,
+                  setName: widget.setName,
+                  serialMax: widget.parallelSerialMax ?? masterCard.serialMax,
+                  rookie: masterCard.isRookie,
+                  autograph: masterCard.isAuto || widget.parallelIsAuto,
+                  memorabilia: masterCard.isPatch,
+                  ssp: masterCard.isSSP,
                 ),
-                const SizedBox(height: 24),
-                if (_cardHedgeLoading)
-                  InlineNoticeContainer(
-                    icon: Icon(
-                      Icons.hourglass_top,
-                      size: 20,
-                      color: colors.primary,
-                    ),
-                    highlightBorderColor: colors.primary.withValues(alpha: 0.35),
-                    child: Text(
-                      'Searching CardHedge…',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  )
-                else if (_cardHedgeResult != null) ...[
-                  InlineNoticeContainer(
-                    icon: Icon(
-                      _cardHedgeResult!.hasError
-                          ? Icons.warning_amber_rounded
-                          : (_cardHedgeResult!.matched
-                              ? Icons.verified_outlined
-                              : Icons.search_off_outlined),
-                      size: 20,
-                      color: _cardHedgeResult!.hasError
-                          ? colors.error
-                          : (_cardHedgeResult!.matched
-                              ? colors.primary
-                              : colors.onSurface.withValues(alpha: 0.55)),
-                    ),
-                    highlightBorderColor: _cardHedgeResult!.hasError
-                        ? colors.error.withValues(alpha: 0.35)
-                        : (_cardHedgeResult!.matched
-                            ? colors.primary.withValues(alpha: 0.35)
-                            : colors.outline.withValues(alpha: 0.5)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  24,
+                  16,
+                  _kShellTabBarScrollInset + bottomPad,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          _cardHedgeResult!.hasError
-                              ? 'CardHedge'
-                              : (_cardHedgeResult!.matched
-                                  ? 'CardHedge (search)'
-                                  : 'CardHedge'),
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                        Expanded(
+                          child: copyCount > 0
+                              ? ActiveStateIndicator(
+                                  icon: Icons.check_circle,
+                                  label: 'In Collection ($copyCount)',
+                                )
+                              : AdaptiveButton.child(
+                                  onPressed: widget.onAddToCollection,
+                                  style: AdaptiveButtonStyle.filled,
+                                  color: AppTheme.primary,
+                                  child: const Text(
+                                    'Add to Collection',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
                         ),
-                        const SizedBox(height: 4),
-                        if (_cardHedgeResult!.hasError)
-                          Text(
-                            _cardHedgeResult!.errorMessage ?? 'Unknown error',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: colors.error,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: inWishlist
+                              ? const ActiveStateIndicator(
+                                  icon: Icons.favorite,
+                                  label: 'In Wishlist',
+                                )
+                              : AdaptiveButton.child(
+                                  onPressed: widget.onAddToWishlist,
+                                  style: AdaptiveButtonStyle.bordered,
+                                  color: AppTheme.primary,
+                                  child: DefaultTextStyle.merge(
+                                    style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                                    child: const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.favorite_border, size: 18, color: AppTheme.primary),
+                                        SizedBox(width: 8),
+                                        Text('Add to Wishlist'),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                          )
-                        else if (_cardHedgeResult!.matched &&
-                            _cardHedgeResult!.match != null)
-                          Text(
-                            () {
-                              final r = _cardHedgeResult!;
-                              final m = r.match!;
-                              final via = r.resolvedVia == 'card_search'
-                                  ? ' (via CardHedge search)'
-                                  : '';
-                              final setLine = (r.searchSet != null && r.searchSet!.isNotEmpty)
-                                  ? '\nSet filter: ${r.searchSet}'
-                                  : '';
-                              return '${((r.confidence ?? 0) * 100).toStringAsFixed(0)}% confidence (min ${(r.minConfidence * 100).round()}%). ${m.description ?? 'Matched'}$via$setLine';
-                            }(),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          )
-                        else
-                          Text(
-                            () {
-                              final r = _cardHedgeResult!;
-                              if (r.reason == 'below_confidence_threshold') {
-                                return 'No match at ≥${(r.minConfidence * 100).round()}% confidence${r.confidence != null ? ' (best ${((r.confidence ?? 0) * 100).toStringAsFixed(0)}%)' : ''}. Sold comps below still use the standard refresh.';
-                              }
-                              if (r.reason == 'variant_mismatch') {
-                                final exp = r.expectedParallel ?? parallel;
-                                final got = r.gotVariant ?? '—';
-                                final confPct = r.confidence != null
-                                    ? '${((r.confidence ?? 0) * 100).toStringAsFixed(0)}%'
-                                    : 'high';
-                                return 'CardHedge reported $confPct confidence, but the parallel does not line up.\n'
-                                    'Yours: $exp\n'
-                                    'CardHedge variant: $got\n'
-                                    'Sold comps below will use the standard refresh.';
-                              }
-                              if (r.reason == 'search_no_row_after_filter') {
-                                final setL = r.searchSet != null && r.searchSet!.isNotEmpty
-                                    ? '\nSet filter: ${r.searchSet}'
-                                    : '';
-                                return 'CardHedge returned search results, but none matched your card # and parallel after filtering.$setL\n'
-                                    'Sold comps below will use the standard refresh.';
-                              }
-                              return 'No CardHedge match for this card. Sold comps below still use the standard refresh.';
-                            }(),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: colors.onSurface.withValues(alpha: 0.75),
-                                ),
-                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  if (_cardHedgeResult != null &&
-                      _cardHedgeResult!.matched &&
-                      _cardHedgeRowsToPick().length > 1) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Parallel (from CardHedge search)',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _cardHedgeRowsToPick().map((c) {
-                        final selected = _effectiveCardHedgeRow?.cardId == c.cardId;
-                        final raw = (c.variant ?? c.description ?? 'Card').trim();
-                        final short =
-                            raw.length > 44 ? '${raw.substring(0, 44)}…' : raw;
-                        return FilterChip(
-                          label: Text(short),
-                          selected: selected,
-                          onSelected: (_) {
-                            setState(() => _cardHedgeRowPick = c);
-                          },
-                        );
-                      }).toList(),
+                    const SizedBox(height: 24),
+                    if (!_cardHedgeLoading &&
+                        _cardHedgeResult != null &&
+                        _cardHedgeResult!.matched &&
+                        _cardHedgeRowsToPick().length > 1) ...[
+                      Text(
+                        'Parallel (from CardHedge search)',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _cardHedgeRowsToPick().map((c) {
+                          final selected = _effectiveCardHedgeRow?.cardId == c.cardId;
+                          final raw = (c.variant ?? c.description ?? 'Card').trim();
+                          final short =
+                              raw.length > 44 ? '${raw.substring(0, 44)}…' : raw;
+                          return FilterChip(
+                            label: Text(short),
+                            selected: selected,
+                            onSelected: (_) {
+                              setState(() => _cardHedgeRowPick = c);
+                              _persistCardHedgeRow(c);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    MarketAnalysisSection(
+                      masterCardId: masterCard.id,
+                      initialGrade: 'Raw',
+                      segmentColor: colors.primary,
+                      cardhedgeId: masterCard.cardhedgeId ?? _effectiveCardHedgeRow?.cardId,
+                      cardHedgeGradeAverages: cardHedgeGradeAverages,
+                      skipScraperSoldComps: true,
+                      showDbSoldCompsWhenAvailable: true,
+                      titleGain: masterCard.gain,
                     ),
                   ],
-                  const SizedBox(height: 16),
-                ],
-                MarketAnalysisSection(
-                  masterCardId: masterCard.id,
-                  parallelName: parallel,
-                  initialGrade: 'Raw',
-                  segmentColor: colors.primary,
-                  cardHedgeGradeAverages: cardHedgeGradeAverages,
-                  soldCompsSourceLabel: _cardHedgeResult?.matched == true
-                      ? 'CardHedge'
-                      : null,
-                  skipScraperSoldComps:
-                      _cardHedgeResult?.matched == true && _effectiveCardHedgeRow != null,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          if (overlayLoading)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                  ),
+                  child: const Center(
+                    child: CardFanLoader(size: 72),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
