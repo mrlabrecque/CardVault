@@ -25,6 +25,7 @@ export type CatalogMasterSnapshot = {
   serial_max: number | null;
   image_url: string | null;
   cardhedge_id: string | null;
+  gain: number | null;
 };
 
 function toFiniteNumber(v: unknown): number | null {
@@ -36,7 +37,8 @@ function toFiniteNumber(v: unknown): number | null {
   return null;
 }
 
-function normalizePriceEntry(p: unknown): { grade: string; price: number } | null {
+/** Exported for card-search: detect whether upstream already sent persistable rows. */
+export function normalizePriceEntry(p: unknown): { grade: string; price: number } | null {
   if (!p || typeof p !== 'object') return null;
   const o = p as Record<string, unknown>;
   const gradeRaw =
@@ -134,7 +136,7 @@ export async function fetchCatalogMasterSnapshot(
   const { data, error } = await admin
     .from('master_card_definitions')
     .select(
-      'id, is_auto, is_patch, is_ssp, serial_max, image_url, cardhedge_id, set_cards(player, card_number, is_rookie, image_url)',
+      'id, is_auto, is_patch, is_ssp, serial_max, image_url, cardhedge_id, gain, set_cards(player, card_number, is_rookie, image_url)',
     )
     .eq('id', masterVariantId.trim())
     .maybeSingle();
@@ -149,6 +151,16 @@ export async function fetchCatalogMasterSnapshot(
     masterImg.length > 0 ? masterImg : checklistImg.length > 0 ? checklistImg : null;
 
   const chId = typeof map['cardhedge_id'] === 'string' ? (map['cardhedge_id'] as string).trim() : '';
+  const gainRaw = map['gain'];
+  const gain =
+    typeof gainRaw === 'number' && Number.isFinite(gainRaw)
+      ? gainRaw
+      : typeof gainRaw === 'string'
+      ? (() => {
+          const n = parseFloat((gainRaw as string).replace(/[^0-9.-]/g, ''));
+          return Number.isFinite(n) ? n : null;
+        })()
+      : null;
   return {
     id: String(map['id']),
     player: typeof sc?.['player'] === 'string' ? sc['player'] : '',
@@ -160,5 +172,6 @@ export async function fetchCatalogMasterSnapshot(
     serial_max: typeof map['serial_max'] === 'number' ? map['serial_max'] as number : null,
     image_url: coalesced,
     cardhedge_id: chId.length > 0 ? chId : null,
+    gain,
   };
 }

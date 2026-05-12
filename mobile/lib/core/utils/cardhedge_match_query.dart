@@ -1,3 +1,9 @@
+/// Trailing print-run suffix on parallel labels (e.g. `Red /149` → `Red`).
+/// Matches [stripSerialSuffix] in `supabase/functions/_shared/cardhedge_text.ts`.
+String stripCatalogParallelSerialSuffix(String raw) {
+  return raw.replaceAll(RegExp(r'\s*/\d+$'), '').trim();
+}
+
 /// Builds a single natural-language line for CardHedge `match_card`, aligned
 /// with the sold-comps eBay query shape in `comps_master_refresh.ts`
 /// (`buildCardEbayQuery`).
@@ -37,7 +43,7 @@ String buildCardHedgeMatchQuery({
   }
 
   final attrs = <String>[];
-  final parallelLabel = parallelName.replaceAll(RegExp(r'\s*/\d+$'), '').trim();
+  final parallelLabel = stripCatalogParallelSerialSuffix(parallelName);
   if (parallelLabel.isNotEmpty && parallelLabel.toLowerCase() != 'base') {
     attrs.add(parallelLabel);
   }

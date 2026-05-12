@@ -4,6 +4,7 @@ import '../auth/auth_service.dart';
 import '../models/cardhedge_match.dart';
 import '../models/comp.dart';
 import '../utils/cardhedge_grade_prices.dart';
+import '../utils/cardhedge_match_query.dart';
 import 'cards_service.dart' show MasterCard;
 
 class CompsService {
@@ -597,6 +598,8 @@ class CompsService {
   /// CardHedge **card-search** via Edge `cardhedge-search-cards`. Upstream `set` is
   /// [year] (if not already leading [releaseName]) + [releaseName] + category;
   /// [setName] filters on API `description`; [parallelName] on `variant`.
+  /// Trailing print-run suffixes on [parallelName] (e.g. ` /149`) are stripped in
+  /// the client before the request, aligned with [stripSerialSuffix] on the edge.
   /// Edge scans multiple pages, then card # + insert + parallel scoring.
   ///
   /// When [persistMasterVariantId] is set and a match is found, the same request
@@ -628,8 +631,11 @@ class CompsService {
     if (c != null && c.isNotEmpty) body['category'] = c;
     final cn = cardNumber?.trim();
     if (cn != null && cn.isNotEmpty) body['cardNumber'] = cn;
-    final p = parallelName?.trim();
-    if (p != null && p.isNotEmpty) body['parallelName'] = p;
+    final pRaw = parallelName?.trim();
+    if (pRaw != null && pRaw.isNotEmpty) {
+      final p = stripCatalogParallelSerialSuffix(pRaw);
+      if (p.isNotEmpty) body['parallelName'] = p;
+    }
     final pid = persistMasterVariantId?.trim();
     if (pid != null && pid.isNotEmpty) body['persistMasterVariantId'] = pid;
 

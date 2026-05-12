@@ -8,6 +8,7 @@ import '../../../core/models/comp.dart';
 import '../../../core/utils/currency_format.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/app_segmented_control.dart';
+import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
 import 'market_listing_row.dart';
@@ -214,24 +215,34 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     return result;
   }
 
+  /// Mean sold price for every listing in the current grade + date filter
+  /// (same rows as the list under the chart).
+  double? _listingsAverageInFilter() {
+    final list = _filteredComps;
+    if (list.isEmpty) return null;
+    var sum = 0.0;
+    for (final c in list) {
+      sum += c.price;
+    }
+    return sum / list.length;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
+    if (widget.embeddedCardHedgeComps && _loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 24),
+        child: Center(child: CardFanLoader(size: 72)),
+      );
+    }
+
     if (_isRefreshingUi && _allComps.isEmpty) {
       if (widget.embeddedCardHedgeComps) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 24),
-          child: Center(
-            child: SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: colors.primary,
-              ),
-            ),
-          ),
+        return const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 24),
+          child: Center(child: CardFanLoader(size: 72)),
         );
       }
       return Padding(
@@ -333,6 +344,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       );
     }
 
+    final chartData = _getChartData();
+    final periodAvg = _listingsAverageInFilter();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -417,8 +431,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           ),
 
-        // Chart (if enough data)
-        if (_getChartData().length >= 2) ...[
+        if (chartData.length >= 2) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
             child: AdaptiveListCard(
@@ -427,7 +440,10 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
                 child: SizedBox(
                   height: 120,
-                  child: _PriceChart(data: _getChartData()),
+                  child: _PriceChart(
+                    data: chartData,
+                    listingsAverage: periodAvg,
+                  ),
                 ),
               ),
             ),
@@ -696,10 +712,106 @@ class _GradePill extends StatelessWidget {
 
 // ── Price chart ────────────────────────────────────────────────────────────
 
+/// Pill badge drawn at the period-average point (right end of the avg segment).
+class _AvgPillDotPainter extends FlDotPainter {
+  const _AvgPillDotPainter({
+    required this.fillColor,
+    required this.textColor,
+    required this.label,
+  });
+
+  final Color fillColor;
+  final Color textColor;
+  final String label;
+
+  static const double _height = 22;
+  static const double _padH = 10;
+
+  Size _pillSizeFor(TextPainter tp) {
+    final w = (tp.width + _padH * 2).clamp(44.0, 120.0);
+    return Size(w, _height);
+  }
+
+  @override
+  void draw(Canvas canvas, FlSpot spot, Offset c) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final sz = _pillSizeFor(tp);
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: c, width: sz.width, height: sz.height),
+      Radius.circular(sz.height / 2),
+    );
+    canvas.drawRRect(rrect, Paint()..color = fillColor);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = textColor.withValues(alpha: 0.2)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    tp.paint(canvas, Offset(c.dx - tp.width / 2, c.dy - tp.height / 2));
+  }
+
+  @override
+  Size getSize(FlSpot spot) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return _pillSizeFor(tp);
+  }
+
+  @override
+  Color get mainColor => fillColor;
+
+  @override
+  FlDotPainter lerp(FlDotPainter a, FlDotPainter b, double t) {
+    if (a is _AvgPillDotPainter && b is _AvgPillDotPainter) {
+      return t < 0.5 ? a : b;
+    }
+    return b;
+  }
+
+  @override
+  List<Object?> get props => [fillColor, textColor, label];
+
+  @override
+  bool hitTest(FlSpot spot, Offset touched, Offset center, double extraThreshold) {
+    final sz = getSize(spot);
+    final r = Rect.fromCenter(
+      center: center,
+      width: sz.width,
+      height: sz.height,
+    ).inflate(extraThreshold);
+    return r.contains(touched);
+  }
+}
+
 class _PriceChart extends StatelessWidget {
-  const _PriceChart({required this.data});
+  const _PriceChart({
+    required this.data,
+    this.listingsAverage,
+  });
 
   final Map<DateTime, double> data;
+  /// Mean price of all sold comps in the selected grade + date window (listings, not daily points).
+  final double? listingsAverage;
 
   @override
   Widget build(BuildContext context) {
@@ -717,9 +829,17 @@ class _PriceChart extends StatelessWidget {
     );
 
     final sortedDates = data.keys.toList()..sort();
-    final minPrice = data.values.reduce((a, b) => a < b ? a : b);
-    final maxPrice = data.values.reduce((a, b) => a > b ? a : b);
-    final priceRange = maxPrice - minPrice;
+    var minPrice = data.values.reduce((a, b) => a < b ? a : b);
+    var maxPrice = data.values.reduce((a, b) => a > b ? a : b);
+    final avg = listingsAverage;
+    if (avg != null) {
+      if (avg < minPrice) minPrice = avg;
+      if (avg > maxPrice) maxPrice = avg;
+    }
+    var axisSpan = maxPrice - minPrice;
+    if (axisSpan < 1e-6) {
+      axisSpan = (minPrice.abs() * 0.05) + 1;
+    }
 
     final spots = <FlSpot>[];
     for (int i = 0; i < sortedDates.length; i++) {
@@ -729,13 +849,74 @@ class _PriceChart extends StatelessWidget {
       spots.add(FlSpot(i.toDouble(), roundedPrice));
     }
 
+    final lastX = (sortedDates.length - 1).toDouble();
+    final pillCenterX = lastX / 2.0;
+
+    final lineBars = <LineChartBarData>[
+      LineChartBarData(
+        spots: spots,
+        isCurved: true,
+        color: const Color(0xFF800020),
+        barWidth: 2.5,
+        dotData: FlDotData(
+          show: true,
+          getDotPainter: (spot, percent, barData, index) {
+            return FlDotCirclePainter(
+              radius: 4,
+              color: const Color(0xFF800020),
+              strokeWidth: 2,
+              strokeColor: Colors.white,
+            );
+          },
+        ),
+        belowBarData: BarAreaData(
+          show: true,
+          color: const Color(0xFF800020).withValues(alpha: 0.08),
+        ),
+      ),
+    ];
+
+    if (avg != null) {
+      lineBars.add(
+        LineChartBarData(
+          spots: [FlSpot(0, avg), FlSpot(lastX, avg)],
+          isCurved: false,
+          color: colors.primary.withValues(alpha: 0.42),
+          barWidth: 2,
+          dashArray: [6, 4],
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(show: false),
+        ),
+      );
+      lineBars.add(
+        LineChartBarData(
+          spots: [FlSpot(pillCenterX, avg)],
+          isCurved: false,
+          color: Colors.transparent,
+          barWidth: 0,
+          dotData: FlDotData(
+            show: true,
+            getDotPainter: (spot, percent, barData, index) {
+              return _AvgPillDotPainter(
+                fillColor: colors.primary,
+                textColor: colors.onPrimary,
+                label: formatUsd(avg),
+              );
+            },
+          ),
+          belowBarData: BarAreaData(show: false),
+        ),
+      );
+    }
+
     return LineChart(
       LineChartData(
+        extraLinesData: const ExtraLinesData(),
         gridData: FlGridData(
           show: true,
           drawHorizontalLine: true,
           drawVerticalLine: false,
-          horizontalInterval: (maxPrice - minPrice) / 4,
+          horizontalInterval: axisSpan / 4,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: const Color(0xFFF3F4F6),
@@ -802,31 +983,9 @@ class _PriceChart extends StatelessWidget {
             },
           ),
         ),
-        minY: minPrice - priceRange * 0.1,
-        maxY: maxPrice + priceRange * 0.1,
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: const Color(0xFF800020),
-            barWidth: 2.5,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) {
-                return FlDotCirclePainter(
-                  radius: 4,
-                  color: const Color(0xFF800020),
-                  strokeWidth: 2,
-                  strokeColor: Colors.white,
-                );
-              },
-            ),
-            belowBarData: BarAreaData(
-              show: true,
-              color: const Color(0xFF800020).withValues(alpha: 0.08),
-            ),
-          ),
-        ],
+        minY: minPrice - axisSpan * 0.1,
+        maxY: maxPrice + axisSpan * 0.1,
+        lineBarsData: lineBars,
       ),
     );
   }

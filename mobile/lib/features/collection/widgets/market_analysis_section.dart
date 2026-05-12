@@ -7,6 +7,7 @@ import '../../../core/services/comps_service.dart';
 import '../../../core/utils/currency_format.dart';
 import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
+import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/app_segmented_control.dart';
 import 'card_active_listings_section.dart';
 import 'card_comps_section.dart';
@@ -69,11 +70,16 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   bool get _cardHedgePillsTappable =>
       widget.cardhedgeId != null && widget.cardhedgeId!.trim().isNotEmpty;
 
-  /// Grade for the sold-comps list: explicit selection, in-flight tap target, then DB auto.
-  String? get _listedCompsGrade =>
+  /// Which grade pill looks selected (includes in-flight tap target).
+  String? get _pillSelectionGrade =>
       _cardHedgeCompsGrade ??
       (_cardHedgeCompsLoading ? _cardHedgeCompsFetchingGrade : null) ??
       _autoDbCompsGrade;
+
+  /// Grade passed to [CardCompsSection] — omitted while a tap fetch runs so the child
+  /// does not race the edge write and flash the empty-state info box.
+  String? get _mountedCompsGrade =>
+      _cardHedgeCompsLoading ? null : (_cardHedgeCompsGrade ?? _autoDbCompsGrade);
 
   @override
   void initState() {
@@ -145,7 +151,8 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
 
   String _titleSemanticsLabel() {
     final g = widget.titleGain;
-    if (g == null || g.abs() < _kGainNoiseEps) return 'Market Analysis';
+    if (g == null) return 'Market Analysis';
+    if (g.abs() < _kGainNoiseEps) return 'Market Analysis, flat';
     final dir = g > 0 ? 'up' : 'down';
     return 'Market Analysis, $dir ${g.abs().toStringAsFixed(1)} percent';
   }
@@ -157,9 +164,20 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
           letterSpacing: -0.2,
         );
     final g = widget.titleGain;
-    final showGain = g != null && g.abs() >= _kGainNoiseEps;
-    final positive = (g ?? 0) > 0;
-    final accent = positive ? const Color(0xFF2E7D32) : colors.error;
+    if (g == null) {
+      return Semantics(
+        header: true,
+        label: _titleSemanticsLabel(),
+        excludeSemantics: true,
+        child: Text('Market Analysis', style: baseStyle),
+      );
+    }
+
+    final strong = g.abs() >= _kGainNoiseEps;
+    final positive = g > 0;
+    final accent = strong
+        ? (positive ? const Color(0xFF2E7D32) : colors.error)
+        : colors.onSurface.withValues(alpha: 0.55);
 
     return Semantics(
       header: true,
@@ -170,23 +188,21 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         textBaseline: TextBaseline.alphabetic,
         children: [
           Text('Market Analysis', style: baseStyle),
-          if (showGain) ...[
-            const SizedBox(width: 8),
-            Icon(
-              positive ? Icons.trending_up : Icons.trending_down,
-              size: 22,
+          const SizedBox(width: 8),
+          Icon(
+            strong ? (positive ? Icons.trending_up : Icons.trending_down) : Icons.trending_flat,
+            size: 22,
+            color: accent,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            strong ? '${positive ? '+' : ''}${g.toStringAsFixed(1)}%' : '${g.toStringAsFixed(1)}%',
+            style: baseStyle?.copyWith(
               color: accent,
+              fontWeight: FontWeight.w800,
+              fontSize: (baseStyle.fontSize ?? 22) * 0.92,
             ),
-            const SizedBox(width: 4),
-            Text(
-              '${positive ? '+' : ''}${g.toStringAsFixed(1)}%',
-              style: baseStyle?.copyWith(
-                color: accent,
-                fontWeight: FontWeight.w800,
-                fontSize: (baseStyle.fontSize ?? 22) * 0.92,
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -218,18 +234,25 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                       loadingGrade: _cardHedgeCompsLoading
                           ? (_cardHedgeCompsFetchingGrade ?? _cardHedgeCompsGrade)
                           : null,
-                      selectedGrade: _listedCompsGrade,
+                      selectedGrade: _pillSelectionGrade,
                       onGradeTap: _onCardHedgeGradeTap,
                     ),
-                    if (_listedCompsGrade != null) ...[
+                    if (_cardHedgeCompsLoading &&
+                        _cardHedgeCompsFetchingGrade != null) ...[
+                      const SizedBox(height: 12),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: CardFanLoader(size: 72)),
+                      ),
+                    ],
+                    if (_mountedCompsGrade != null) ...[
                       const SizedBox(height: 12),
                       CardCompsSection(
                         key: ValueKey(
-                          'market-comps-${widget.masterCardId}-$_listedCompsGrade-'
-                          '$_cardHedgeCompsNonce-${_cardHedgeCompsGrade != null}',
+                          'market-comps-${widget.masterCardId}-$_mountedCompsGrade',
                         ),
                         masterCardId: widget.masterCardId,
-                        initialGrade: _listedCompsGrade!,
+                        initialGrade: _mountedCompsGrade!,
                         refreshVersion:
                             _cardHedgeCompsGrade != null ? _cardHedgeCompsNonce : widget.refreshVersion,
                         externalLoading: widget.externalLoading,

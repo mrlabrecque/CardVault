@@ -15,6 +15,7 @@ class CardHedgeMatchPayload {
     this.match,
     this.errorMessage,
     this.persistedMaster,
+    this.parallelDebug,
   });
 
   final bool matched;
@@ -35,6 +36,9 @@ class CardHedgeMatchPayload {
   /// Present when catalog search was invoked with persist id: Edge wrote CardHedge
   /// to Postgres and returned this row (keys match `MasterCard.fromJson` in `cards_service`).
   final Map<String, dynamic>? persistedMaster;
+
+  /// Edge `parallel_debug`: CardHedge rows (number + variant + card_id) after filters.
+  final Map<String, dynamic>? parallelDebug;
 
   bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
 
@@ -57,6 +61,9 @@ class CardHedgeMatchPayload {
     Map<String, dynamic>? persisted;
     final pm = json['persisted_master'];
     if (pm is Map) persisted = Map<String, dynamic>.from(pm);
+    Map<String, dynamic>? parallelDebug;
+    final pd = json['parallel_debug'];
+    if (pd is Map) parallelDebug = Map<String, dynamic>.from(pd);
 
     return CardHedgeMatchPayload(
       matched: matched,
@@ -76,6 +83,7 @@ class CardHedgeMatchPayload {
       match: matchMap != null ? CardHedgeMatchedCard.fromJson(matchMap) : null,
       errorMessage: json['error'] as String?,
       persistedMaster: persisted,
+      parallelDebug: parallelDebug,
     );
   }
 
@@ -84,6 +92,7 @@ class CardHedgeMatchPayload {
       matched: false,
       minConfidence: 0.9,
       errorMessage: message,
+      parallelDebug: null,
     );
   }
 }

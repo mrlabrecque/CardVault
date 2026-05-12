@@ -1,4 +1,4 @@
-/** Strip trailing " /99" style serial from parallel display names. */
+/** Strip trailing " /99" style print-run suffix from parallel labels (Vault or CardHedge `variant`). */
 export function stripSerialSuffix(s: string): string {
   return s.replace(/\s*\/\d+$/, '').trim();
 }
@@ -7,43 +7,54 @@ export function normLabel(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-export function isBaseParallelName(parallel: string): boolean {
-  const p = normLabel(stripSerialSuffix(parallel));
-  return p === '' || p === 'base';
-}
-
 /**
- * Match Vault parallel name to CardHedge **`variant`** only (insert/subset lines
- * live in `description` — see `insertSetMatchesDescription`).
+ * Strict parallel match: normalized + [stripSerialSuffix] on both catalog
+ * [expectedParallel] and CardHedge [row.variant].
+ *
+ * - Catalog **Base** (empty or "base"): same rules as legacy CardHedge base match —
+ *   empty variant, `base`, `base set`, or any `variant` containing the word `base`
+ *   (e.g. "Chrome Base"), so Base checklist rows still resolve.
+ * - Non-base: normalized variants must be **identical** (e.g. `red` === `red`, not `red stars`).
  */
-export function parallelMatchesVariant(
+export function parallelExactCatalogVariant(
   expectedParallel: string,
   row: Record<string, unknown>,
 ): boolean {
   const exp = normLabel(stripSerialSuffix(expectedParallel));
-  const vRaw = typeof row.variant === 'string' ? row.variant : '';
-  const v = normLabel(vRaw);
-
-  if (isBaseParallelName(expectedParallel)) {
-    if (!v || v === 'base') return true;
+  const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
+  if (!exp || exp === 'base') {
+    if (!v || v === 'base' || v === 'base set') return true;
     if (/\bbase\b/.test(v)) return true;
     return false;
   }
+  return v === exp;
+}
 
-  if (exp.length === 0) return true;
+/**
+ * Fuzzy score for CardHedge `variant` when [parallelExactCatalogVariant] finds no rows.
+ * Used only to pick a **single** best row for persist; [alternate_matches] stay empty in that path.
+ */
+export function parallelScore(parallelName: string, row: Record<string, unknown>): number {
+  const exp = normLabel(stripSerialSuffix(parallelName));
+  const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
 
-  if (v.includes(exp) || exp.includes(v)) return true;
+  if (!exp || exp === 'base') {
+    if (!v || v === 'base' || /\bbase\b/.test(v)) return 100;
+    return 15;
+  }
+
+  if (v === exp) return 100;
+  if (v.includes(exp) || exp.includes(v)) return 92;
 
   const tokens = exp.split(' ').filter((t) => t.length > 2);
   if (tokens.length === 0) {
-    return exp.length > 0 && v.includes(exp);
+    return v.includes(exp) ? 55 : 0;
   }
   let hits = 0;
   for (const t of tokens) {
     if (v.includes(t)) hits++;
   }
-  const need = Math.max(1, Math.ceil(tokens.length * 0.65));
-  return hits >= need;
+  return Math.min(72, 25 + hits * 16);
 }
 
 /** Title-case sport string → CardHedge category (e.g. `football` → `Football`). */
@@ -136,28 +147,4 @@ export function cardNumberMatches(expected: string | undefined | null, apiNumber
   const a = normalizeCardNumber(typeof apiNumber === 'string' ? apiNumber : String(apiNumber ?? ''));
   if (!e || !a) return false;
   return e === a;
-}
-
-/** Higher = better fit for [parallelName] on CardHedge **`variant`** only. */
-export function parallelScore(parallelName: string, row: Record<string, unknown>): number {
-  const exp = normLabel(stripSerialSuffix(parallelName));
-  const v = normLabel(typeof row.variant === 'string' ? row.variant : '');
-
-  if (!exp || exp === 'base') {
-    if (!v || v === 'base' || /\bbase\b/.test(v)) return 100;
-    return 15;
-  }
-
-  if (v === exp) return 100;
-  if (v.includes(exp) || exp.includes(v)) return 92;
-
-  const tokens = exp.split(' ').filter((t) => t.length > 2);
-  if (tokens.length === 0) {
-    return v.includes(exp) ? 55 : 0;
-  }
-  let hits = 0;
-  for (const t of tokens) {
-    if (v.includes(t)) hits++;
-  }
-  return Math.min(72, 25 + hits * 16);
 }

@@ -5,24 +5,29 @@
  * Structured body only (no `search` field — parallel is resolved from `variant`
  * after fetch). CardHedge `set` = year (if not already on release) + releaseName +
  * category; subset (Fireworks, …) on `description`, parallel on `variant`.
- * Multiple pages aggregated, then card # + parallel scoring. Returns best row +
- * `alternate_matches` when useful.
+ * `alternate_matches` only for **exact** normalized `variant` ties. If none match
+ * exactly, a **single** best row is chosen via [parallelScore] (persist + prices)
+ * with `alternate_matches: []` so the app does not show fuzzy parallel chips.
+ * If the chosen row has no persistable `prices`, calls CardHedge
+ * `POST /v1/cards/all-prices-by-card` before persist and response `match`.
  */
 import {
   buildCardHedgeSearchSetLabel,
   cardNumberMatches,
   categoryFromSport,
   insertSetMatchesDescription,
-  isBaseParallelName,
-  parallelMatchesVariant,
+  normLabel,
+  parallelExactCatalogVariant,
   parallelScore,
   stripSerialSuffix,
 } from '../_shared/cardhedge_text.ts';
 import {
   type CatalogMasterSnapshot,
   fetchCatalogMasterSnapshot,
+  normalizePriceEntry,
   persistCardHedgeOntoMaster,
 } from '../_shared/cardhedge_persist_master.ts';
+import { fetchCardHedgeAllLatestPrices } from '../_shared/cardhedge_all_prices.ts';
 import { verifyUserJwt } from '../_shared/supabase_user_jwt.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -151,6 +156,73 @@ function searchRowToMatch(row: Record<string, unknown>) {
   };
 }
 
+function rowHasPersistablePrices(row: Record<string, unknown>): boolean {
+  const p = row.prices;
+  if (!Array.isArray(p)) return false;
+  for (const e of p) {
+    if (normalizePriceEntry(e) !== null) return true;
+  }
+  return false;
+}
+
+/** When card-search omits usable `prices`, CardHedge docs recommend all-prices-by-card. */
+async function ensureChosenRowHasPrices(
+  chosen: Record<string, unknown>,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  if (rowHasPersistablePrices(chosen)) return chosen;
+  const id = String(chosen.card_id ?? '').trim();
+  if (!id) return chosen;
+  const backfill = await fetchCardHedgeAllLatestPrices(apiKey, id, { timeoutMs });
+  if (!backfill || backfill.length === 0) {
+    console.log(JSON.stringify({ tag: LOG_TAG, event: 'prices_backfill_empty', card_id: id }));
+    return chosen;
+  }
+  console.log(
+    JSON.stringify({
+      tag: LOG_TAG,
+      event: 'prices_backfill_all_prices',
+      card_id: id,
+      grade_rows: backfill.length,
+    }),
+  );
+  return { ...chosen, prices: backfill };
+}
+
+/** Rows the app can show so you can compare catalog parallel vs CardHedge `variant` strings. */
+function buildParallelDebugPayload(input: {
+  requested_parallel: string;
+  after_number_count: number;
+  after_insert_set_count: number;
+  rows: Record<string, unknown>[];
+  row_limit?: number;
+  match_mode?: string | null;
+}): Record<string, unknown> {
+  const lim = input.row_limit ?? 120;
+  const rows: Record<string, unknown>[] = [];
+  for (let i = 0; i < Math.min(lim, input.rows.length); i++) {
+    const r = input.rows[i]!;
+    const n = r.number;
+    rows.push({
+      card_id: typeof r.card_id === 'string' ? r.card_id : null,
+      number: n === null || n === undefined ? null : String(n),
+      variant: typeof r.variant === 'string' ? r.variant : null,
+    });
+  }
+  const out: Record<string, unknown> = {
+    requested_parallel: input.requested_parallel || null,
+    after_number_count: input.after_number_count,
+    after_insert_set_count: input.after_insert_set_count,
+    variant_rows_shown: rows.length,
+    rows,
+  };
+  if (input.match_mode != null && input.match_mode !== '') {
+    out.match_mode = input.match_mode;
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'OPTIONS') {
     console.log(JSON.stringify({ tag: LOG_TAG, event: 'request', method: req.method }));
@@ -213,7 +285,8 @@ Deno.serve(async (req) => {
     }
     const setName = strField(body, 'setName', 'set_name');
     const cardNumber = strField(body, 'cardNumber', 'card_number', 'number');
-    const parallelName = strField(body, 'parallelName', 'parallel_name', 'parallel');
+    const parallelNameRaw = strField(body, 'parallelName', 'parallel_name', 'parallel');
+    const parallelName = parallelNameRaw ? stripSerialSuffix(parallelNameRaw) : '';
     const persistMasterVariantId = strField(body, 'persistMasterVariantId', 'persist_master_variant_id');
 
     const psRaw = body.page_size ?? body.pageSize;
@@ -388,11 +461,6 @@ Deno.serve(async (req) => {
       }),
     );
 
-    const MIN_NONBASE_PARALLEL_SCORE = 22;
-
-    let chosen: Record<string, unknown> | null = null;
-    let alternateRows: Record<string, unknown>[] = [];
-
     if (byNumber.length === 0) {
       console.log(JSON.stringify({ tag: LOG_TAG, event: 'outcome', matched: false, reason: allCards.length === 0 ? 'no_match' : 'no_rows_after_number_filter' }));
       return json({
@@ -413,6 +481,12 @@ Deno.serve(async (req) => {
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
+        parallel_debug: buildParallelDebugPayload({
+          requested_parallel: parallelName,
+          after_number_count: 0,
+          after_insert_set_count: 0,
+          rows: allCards,
+        }),
       });
     }
 
@@ -436,79 +510,92 @@ Deno.serve(async (req) => {
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
+        parallel_debug: buildParallelDebugPayload({
+          requested_parallel: parallelName,
+          after_number_count: byNumber.length,
+          after_insert_set_count: 0,
+          rows: byNumber,
+        }),
       });
     }
 
-    if (!parallelName || isBaseParallelName(parallelName)) {
-      const pool = byInsertSet.filter((row) => !parallelName || parallelMatchesVariant(parallelName, row));
-      if (pool.length === 0) {
-        console.log(JSON.stringify({ tag: LOG_TAG, event: 'outcome', matched: false, reason: 'base_parallel_filter_empty' }));
-        return json({
-          matched: false,
-          minConfidence,
-          reason: 'search_no_row_after_filter',
-          confidence: null,
-          resolved_via: 'card_search',
-          search_set: setLabel,
-          search_meta: {
-            page_size: pageSize,
-            max_pages_scanned: maxPages,
-            total_pages_reported: totalPages,
-            upstream_count: upstreamCount,
-            cards_accumulated: allCards.length,
-            after_number_filter: byNumber.length,
-            after_insert_set_filter: byInsertSet.length,
-            after_parallel_filter: 0,
-          },
-          expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
-          card_number: cardNumber || null,
-        });
-      }
-      chosen = pool[0] as Record<string, unknown>;
-      alternateRows = pool.slice(1).slice(0, 24);
-    } else {
-      const ranked = [...byInsertSet].sort(
-        (a, b) => parallelScore(parallelName, b) - parallelScore(parallelName, a),
+    const MIN_NONBASE_PARALLEL_SCORE = 22;
+
+    let chosen: Record<string, unknown> | null = null;
+    let alternateRows: Record<string, unknown>[] = [];
+    let parallelMatchMode: 'exact_variant' | 'fuzzy_best_no_alternates' | 'parallel_unspecified' =
+      'parallel_unspecified';
+    let afterParallelExact = 0;
+
+    if (!parallelName) {
+      const sorted = [...byInsertSet].sort((a, b) =>
+        String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''))
       );
-      const top = ranked[0] as Record<string, unknown>;
-      const topScore = parallelScore(parallelName, top);
-      if (topScore < MIN_NONBASE_PARALLEL_SCORE) {
-        console.log(
-          JSON.stringify({
-            tag: LOG_TAG,
-            event: 'outcome',
-            matched: false,
-            reason: 'parallel_score_below_threshold',
-            best_parallel_score: topScore,
-            threshold: MIN_NONBASE_PARALLEL_SCORE,
-          }),
+      chosen = sorted[0] as Record<string, unknown>;
+      alternateRows = sorted.slice(1).slice(0, 24);
+      parallelMatchMode = 'parallel_unspecified';
+    } else {
+      const exactPool = byInsertSet.filter((row) => parallelExactCatalogVariant(parallelName, row));
+      if (exactPool.length > 0) {
+        afterParallelExact = exactPool.length;
+        const sorted = [...exactPool].sort((a, b) =>
+          String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''))
         );
-        return json({
-          matched: false,
-          minConfidence,
-          reason: 'search_no_row_after_filter',
-          confidence: null,
-          resolved_via: 'card_search',
-          search_set: setLabel,
-          search_meta: {
-            page_size: pageSize,
-            max_pages_scanned: maxPages,
-            total_pages_reported: totalPages,
-            upstream_count: upstreamCount,
-            cards_accumulated: allCards.length,
-            after_number_filter: byNumber.length,
-            after_insert_set_filter: byInsertSet.length,
-            best_parallel_score: topScore,
-          },
-          expected_parallel: stripSerialSuffix(parallelName),
-          card_number: cardNumber || null,
-        });
+        chosen = sorted[0] as Record<string, unknown>;
+        alternateRows = sorted.slice(1).slice(0, 24);
+        parallelMatchMode = 'exact_variant';
+      } else {
+        const ranked = [...byInsertSet].sort(
+          (a, b) => parallelScore(parallelName, b) - parallelScore(parallelName, a),
+        );
+        const top = ranked[0] as Record<string, unknown>;
+        const topScore = parallelScore(parallelName, top);
+        const expN = normLabel(stripSerialSuffix(parallelName));
+        const minScore = !expN || expN === 'base' ? 15 : MIN_NONBASE_PARALLEL_SCORE;
+        if (topScore < minScore) {
+          console.log(
+            JSON.stringify({
+              tag: LOG_TAG,
+              event: 'outcome',
+              matched: false,
+              reason: 'no_exact_and_fuzzy_below_threshold',
+              best_fuzzy_parallel_score: topScore,
+              threshold: minScore,
+            }),
+          );
+          return json({
+            matched: false,
+            minConfidence,
+            reason: 'search_no_row_after_filter',
+            confidence: null,
+            resolved_via: 'card_search',
+            search_set: setLabel,
+            search_meta: {
+              page_size: pageSize,
+              max_pages_scanned: maxPages,
+              total_pages_reported: totalPages,
+              upstream_count: upstreamCount,
+              cards_accumulated: allCards.length,
+              after_number_filter: byNumber.length,
+              after_insert_set_filter: byInsertSet.length,
+              after_parallel_exact_filter: 0,
+              best_fuzzy_parallel_score: topScore,
+            },
+            expected_parallel: stripSerialSuffix(parallelName),
+            card_number: cardNumber || null,
+            parallel_debug: buildParallelDebugPayload({
+              requested_parallel: parallelName,
+              after_number_count: byNumber.length,
+              after_insert_set_count: byInsertSet.length,
+              rows: byInsertSet,
+              match_mode: 'fuzzy_rejected_below_threshold',
+            }),
+          });
+        }
+        chosen = top;
+        alternateRows = [];
+        parallelMatchMode = 'fuzzy_best_no_alternates';
       }
-      chosen = top;
-      const rest = ranked.slice(1);
-      alternateRows = rest
-        .filter((r) => parallelScore(parallelName, r) >= Math.max(MIN_NONBASE_PARALLEL_SCORE - 8, topScore - 32))
-        .slice(0, 24);
     }
 
     const alternate_matches = alternateRows.map((r) => searchRowToMatch(r));
@@ -520,15 +607,15 @@ Deno.serve(async (req) => {
       return json({ error: 'Internal error' }, 500);
     }
 
+    chosen = await ensureChosenRowHasPrices(chosen, apiKey, perReqTimeoutMs);
+
     console.log(
       JSON.stringify({
         tag: LOG_TAG,
         event: 'outcome',
         matched: true,
         chosen: summarizeRow(chosen),
-        chosen_parallel_score: parallelName && !isBaseParallelName(parallelName)
-          ? parallelScore(parallelName, chosen)
-          : null,
+        parallel_match: parallelMatchMode,
         alternate_count: alternate_matches.length,
         persist_master_variant_id: persistMasterVariantId || null,
       }),
@@ -573,13 +660,19 @@ Deno.serve(async (req) => {
         cards_accumulated: allCards.length,
         after_number_filter: byNumber.length,
         after_insert_set_filter: byInsertSet.length,
-        chosen_parallel_score: parallelName && !isBaseParallelName(parallelName) && chosen
-          ? parallelScore(parallelName, chosen)
-          : null,
+        after_parallel_exact_filter: afterParallelExact,
+        parallel_match: parallelMatchMode,
         alternate_count: alternate_matches.length,
       },
       match: searchRowToMatch(chosen),
       alternate_matches,
+      parallel_debug: buildParallelDebugPayload({
+        requested_parallel: parallelName,
+        after_number_count: byNumber.length,
+        after_insert_set_count: byInsertSet.length,
+        rows: byInsertSet,
+        match_mode: parallelMatchMode,
+      }),
       ...(persistMasterVariantId ? { persisted_master } : {}),
     });
   } catch (e) {
