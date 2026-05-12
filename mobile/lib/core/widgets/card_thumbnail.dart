@@ -1,62 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+/// List-row card image (collection, wishlist, grading, lot builder).
+///
+/// [ConstrainedBox] keeps width/height from collapsing before the network image
+/// has intrinsic dimensions (CardHedge / CDN thumbnails).
 class CardThumbnail extends StatelessWidget {
   const CardThumbnail({
     super.key,
     required this.imageUrl,
     required this.sport,
-    this.width = 70,
+    this.width = listRowWidth,
     this.height = double.infinity,
     this.borderRadius = 6,
   });
 
+  /// List rows — wide enough for CardHedge slab art.
+  static const double listRowWidth = 100;
+
   final String? imageUrl;
   final String sport;
   final double width;
+
+  /// When [height] is omitted, height follows standard trading-card portrait (2.5 × 3.5).
   final double height;
   final double borderRadius;
 
+  String? get _resolvedUrl {
+    final t = imageUrl?.trim();
+    if (t == null || t.isEmpty) return null;
+    return t;
+  }
+
+  double get _thumbHeight =>
+      height == double.infinity ? width * 3.5 / 2.5 : height;
+
   String get _sportEmoji => switch (sport.toLowerCase()) {
-    'basketball' => '🏀',
-    'baseball'   => '⚾',
-    'football'   => '🏈',
-    'hockey'     => '🏒',
-    'soccer'     => '⚽',
-    _            => '🏀',
-  };
+        'basketball' => '🏀',
+        'baseball' => '⚾',
+        'football' => '🏈',
+        'hockey' => '🏒',
+        'soccer' => '⚽',
+        _ => '🏀',
+      };
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(borderRadius),
-          bottomLeft: Radius.circular(borderRadius),
-        ),
-        child: CachedNetworkImage(
-          imageUrl: imageUrl!,
-          width: width,
-          fit: BoxFit.cover,
-          placeholder: (_, _) => _placeholder(),
-          errorWidget: (_, _, _) => _placeholder(),
-        ),
-      );
-    }
-    return _placeholder();
-  }
-
-  Widget _placeholder() => Container(
-    width: width,
-    height: height == double.infinity ? null : height,
-    decoration: BoxDecoration(
-      color: Colors.grey.withValues(alpha: 0.15),
+    final url = _resolvedUrl;
+    return ClipRRect(
       borderRadius: BorderRadius.only(
         topLeft: Radius.circular(borderRadius),
         bottomLeft: Radius.circular(borderRadius),
       ),
-    ),
-    alignment: Alignment.center,
-    child: Text(_sportEmoji, style: TextStyle(fontSize: width * 0.67)),
-  );
+      child: ConstrainedBox(
+        constraints: BoxConstraints.tightFor(width: width, height: _thumbHeight),
+        child: url != null ? _networkImage(url) : _placeholder(),
+      ),
+    );
+  }
+
+  Widget _networkImage(String url) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: width,
+      height: _thumbHeight,
+      fit: BoxFit.cover,
+      placeholder: (_, _) => _placeholder(),
+      errorWidget: (_, _, _) => _placeholder(),
+    );
+  }
+
+  Widget _placeholder() => ColoredBox(
+        color: Colors.grey.withValues(alpha: 0.15),
+        child: Center(
+          child: Text(_sportEmoji, style: TextStyle(fontSize: width * 0.5)),
+        ),
+      );
 }

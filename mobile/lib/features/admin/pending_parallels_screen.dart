@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/glass_nav_bar.dart';
@@ -236,6 +237,7 @@ class _PendingRow extends StatelessWidget {
                       onPressed: acting ? null : onDismiss,
                       style: AdaptiveButtonStyle.bordered,
                       color: Colors.red.shade400,
+                      padding: ChromeMetrics.adaptiveBorderedButtonPadding,
                       child: const Text('Dismiss'),
                     ),
                   ),

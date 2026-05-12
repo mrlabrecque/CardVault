@@ -1,7 +1,7 @@
 import 'package:card_vault/core/theme/fonts.dart';
 import 'package:card_vault/core/utils/platform_utils.dart';
 import 'package:card_vault/core/widgets/adaptive_list_card.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:card_vault/core/widgets/card_thumbnail.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
@@ -26,15 +26,6 @@ class SingleItemCard extends StatelessWidget {
   final bool isRefreshing;
   final int index;
 
-  String get _sportEmoji => switch (card.sport.toLowerCase()) {
-        'basketball' => '🏀',
-        'baseball' => '⚾',
-        'football' => '🏈',
-        'hockey' => '🏒',
-        'soccer' => '⚽',
-        _ => '🏀',
-      };
-
   void _openDetail(BuildContext context) {
     context.go('/collection/card', extra: card);
   }
@@ -47,7 +38,7 @@ class SingleItemCard extends StatelessWidget {
     final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildImage(),
+        CardThumbnail(imageUrl: card.imageUrl, sport: card.sport),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
@@ -81,32 +72,6 @@ class SingleItemCard extends StatelessWidget {
         .fadeIn(duration: const Duration(milliseconds: 200))
         .slideY(begin: 0.08, end: 0, duration: const Duration(milliseconds: 200));
   }
-
-  Widget _buildImage() {
-    if (card.imageUrl != null) {
-      return ClipRRect(
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6)),
-        child: CachedNetworkImage(
-          imageUrl: card.imageUrl!,
-          width: 60,
-          fit: BoxFit.fill,
-          placeholder: (ctx, url) => _imagePlaceholder(),
-          errorWidget: (ctx, url, err) => _imagePlaceholder(),
-        ),
-      );
-    }
-    return _imagePlaceholder();
-  }
-
-  Widget _imagePlaceholder() => Container(
-        width: 60,
-        height: 85,
-        decoration: BoxDecoration(
-          color: Colors.grey.withValues(alpha: 0.15),
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6)),
-        ),
-        child: Center(child: Text(_sportEmoji, style: const TextStyle(fontSize: 40))),
-      );
 
   Widget _buildValue(ColorScheme colors) {
     return DefaultTextStyle(

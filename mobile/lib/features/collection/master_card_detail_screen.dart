@@ -9,6 +9,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/utils/cardhedge_grade_prices.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../wishlist/wishlist_screen.dart';
 import 'widgets/active_state_indicator.dart';
@@ -433,6 +434,7 @@ class _MasterCardDetailScreenState
                                   onPressed: widget.onAddToWishlist,
                                   style: AdaptiveButtonStyle.bordered,
                                   color: AppTheme.primary,
+                                  padding: ChromeMetrics.adaptiveBorderedButtonPadding,
                                   child: DefaultTextStyle.merge(
                                     style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
                                     child: const Row(

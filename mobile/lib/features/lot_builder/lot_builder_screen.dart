@@ -271,7 +271,8 @@ class _BasketScrollView extends StatelessWidget {
             onToggleBrowseBasket: onToggleBrowseBasket,
           ),
         ),
-        const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
+        // Non-zero gap so basket body clears pinned frost (tight gap lets the first row read blurred).
+        const SliverChromeGap(height: ChromeMetrics.contentTopGap),
         SliverToBoxAdapter(
           child: _BasketView(lot: lot, notifier: notifier),
         ),
@@ -459,7 +460,7 @@ class _BrowseCardRow extends StatelessWidget {
             child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                
@@ -606,40 +607,60 @@ class _BasketView extends StatelessWidget {
         const SizedBox(height: 16),
         Divider(color: Theme.of(context).colorScheme.outlineVariant, height: 1),
         const SizedBox(height: 16),
-        // Summary header
+        // Summary: stats (left) + Clear (right, same row)
         AdaptiveListCard(
           margin: EdgeInsets.zero,
           cornerRadius: 16,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${lot.items.length} ${lot.items.length == 1 ? 'card' : 'cards'}',
-                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45)),
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${lot.items.length} ${lot.items.length == 1 ? 'card' : 'cards'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
+                          fontFamily: AppFonts.fontFamily,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Market total: ${formatUsd(lot.totalValue)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontFamily: AppFonts.fontFamily,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Market total: ${formatUsd(lot.totalValue)}',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              AdaptiveButton.child(
-                onPressed: notifier.clear,
-                style: AdaptiveButtonStyle.bordered,
-                color: AppTheme.primary,
-                child: const Text(
-                  'Clear',
-                  style: TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600),
                 ),
-              ),
-            ],
-          ),
+                AdaptiveButton.child(
+                  onPressed: notifier.clear,
+                  style: AdaptiveButtonStyle.bordered,
+                  color: AppTheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  borderRadius: BorderRadius.circular(12),
+                  minSize: const Size(88, 44),
+                  child: Text(
+                    'Clear',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: AppFonts.fontFamily,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -669,7 +690,7 @@ class _BasketCardRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport),
              Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),                

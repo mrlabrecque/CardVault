@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_breadcrumb.dart';
@@ -459,6 +460,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                 onPressed: _importingSets ? null : _importSets,
                 style: AdaptiveButtonStyle.bordered,
                 color: AppTheme.primary,
+                padding: ChromeMetrics.adaptiveBorderedButtonPadding,
                 child: DefaultTextStyle.merge(
                   style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
                   child: const Row(

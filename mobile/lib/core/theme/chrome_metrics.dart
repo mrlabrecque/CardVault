@@ -12,6 +12,13 @@ class ChromeMetrics {
   static const double horizontalInset = 16;
   static const double compactHorizontalInset = 12;
 
+  /// Padding for [AdaptiveButton.child] + [AdaptiveButtonStyle.bordered] with text
+  /// (or icon+text). adaptive_platform_ui passes null padding for bordered on iOS,
+  /// so labels sit flush; this matches the same library's filled Cupertino horizontal
+  /// inset and a compact vertical inset for medium-sized actions.
+  static const EdgeInsets adaptiveBorderedButtonPadding =
+      EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+
   /// Segment-only sticky rhythm.
   static const double segmentOnlyTopInset = 4;
   static const double segmentOnlyBottomInset = 6;

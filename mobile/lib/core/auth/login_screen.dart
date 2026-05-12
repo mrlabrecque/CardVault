@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../theme/app_theme.dart';
+import '../theme/chrome_metrics.dart';
 import 'auth_service.dart';
 
 // ── Segment indices ───────────────────────────────────────────────────────────
@@ -604,6 +605,7 @@ class _MagicLinkButton extends StatelessWidget {
       child: AdaptiveButton.child(
         onPressed: enabled ? () { HapticFeedback.lightImpact(); onPressed(); } : null,
         style: AdaptiveButtonStyle.bordered,
+        padding: ChromeMetrics.adaptiveBorderedButtonPadding,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

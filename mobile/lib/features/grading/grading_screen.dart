@@ -87,6 +87,11 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   void initState() {
     super.initState();
     _gradingFeeCtrl = TextEditingController(text: _gradingFeeUsdFmt.formatDouble(_gradingFee));
+    // Grading is often opened after collection edits; force a fetch so removed cards disappear.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.invalidate(userCardsProvider);
+    });
   }
 
   @override
@@ -109,7 +114,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     final tierFilter = _tierFromKey(_tierFilterKey);
 
     var cards = raw.where((c) {
-      if (!c.isGraded == false) return false; // only ungraded
+      if (c.isGraded) return false;
       if (q.isNotEmpty &&
           !c.player.toLowerCase().contains(q) &&
           !(c.set ?? '').toLowerCase().contains(q) &&
@@ -149,6 +154,20 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     } catch (_) {
       setState(() => _cardStates[cardId] = const _CardState(error: true));
     }
+  }
+
+  void _schedulePruneGradingState(List<UserCard> live) {
+    final ids = live.map((c) => c.id).toSet();
+    final staleIds = _cardStates.keys.where((id) => !ids.contains(id)).toList();
+    if (staleIds.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        for (final id in staleIds) {
+          _cardStates.remove(id);
+        }
+      });
+    });
   }
 
   @override
@@ -222,6 +241,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
       loading: () => const Center(child: CardFanLoader()),
       error: (e, _) => Center(child: Text('Error: $e')),
       data: (allCards) {
+        _schedulePruneGradingState(allCards);
         final ungradedCards = allCards.where((c) => !c.isGraded).toList();
         final display = _applyFiltersAndSort(ungradedCards);
         final analyzedCount = _cardStates.values.where((s) => s.result != null).length;
@@ -401,7 +421,7 @@ class _CardRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport, width: 70),
+              CardThumbnail(imageUrl: card.imageUrl, sport: card.sport),
               Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(12, 8, 6, 12), child: _buildInfo(tier))),
               Padding(padding: const EdgeInsets.all(12), child: _buildRightSide(tier)),
             ],

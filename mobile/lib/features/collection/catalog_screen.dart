@@ -1696,6 +1696,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                                               onPressed: () => _addToWishlist(),
                                               style: AdaptiveButtonStyle.bordered,
                                               color: AppTheme.primary,
+                                              padding: ChromeMetrics.adaptiveBorderedButtonPadding,
                                               child: DefaultTextStyle.merge(
                                                 style: const TextStyle(
                                                     color: AppTheme.primary, fontWeight: FontWeight.w600),

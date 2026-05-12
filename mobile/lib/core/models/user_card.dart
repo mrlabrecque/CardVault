@@ -31,6 +31,20 @@ bool _hasAttribute(dynamic attrs, String code) {
   return attrs.any((a) => (a?.toString().toUpperCase() ?? '') == code);
 }
 
+/// PostgREST embeds are usually a single [Map], but some clients return a one-element [List].
+Map<String, dynamic>? _embedAsMap(dynamic v) {
+  if (v == null) return null;
+  if (v is Map<String, dynamic>) return v;
+  if (v is Map) return Map<String, dynamic>.from(v);
+  if (v is List) {
+    for (final el in v) {
+      if (el is Map<String, dynamic>) return el;
+      if (el is Map) return Map<String, dynamic>.from(el);
+    }
+  }
+  return null;
+}
+
 class UserCard {
   final String id;
   final String? masterCardId;
@@ -131,9 +145,11 @@ class UserCard {
         }
       }
     }
-    final setData = master?['set_cards'] as Map<String, dynamic>?;
-    final release = setData?['sets']?['releases'] as Map<String, dynamic>?;
-    final parallel = json['set_parallels'] as Map<String, dynamic>?;
+    final setData = _embedAsMap(master?['set_cards']);
+    final setsData = _embedAsMap(setData?['sets']) ?? _embedAsMap(setData?['set']);
+    final release =
+        _embedAsMap(setsData?['releases']) ?? _embedAsMap(setsData?['release']);
+    final parallel = _embedAsMap(json['set_parallels']);
     final attrs = master?['attributes'];
     final parallelName = _tryParseString(json['parallel_name']) ??
         _tryParseString(parallel?['name']) ??
@@ -173,11 +189,11 @@ class UserCard {
       player: setData?['player'] as String? ?? json['player'] as String? ?? '',
       cardNumber: setData?['card_number'] as String?,
       sport: release?['sport'] as String? ?? '',
-      set: release?['name'] as String?,        // release name e.g. "Topps Chrome"
-      checklist: setData?['name'] as String?,  // set name e.g. "Base Set"
+      set: release?['name'] as String?, // release name
+      checklist: setsData?['name'] as String?, // `sets.name` (product line / insert)
       year: _tryParseInt(release?['year']),
-      setId: setData?['id'] as String?,
-      setCardCount: _tryParseInt(setData?['card_count']),
+      setId: setsData?['id'] as String?,
+      setCardCount: _tryParseInt(setsData?['card_count']),
       parallel: parallelName,
       parallelId: json['parallel_id'] as String?,
       grade: gradeStr,

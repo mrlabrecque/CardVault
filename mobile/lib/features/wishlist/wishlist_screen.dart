@@ -473,15 +473,14 @@ class _WishlistCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-
                     CardThumbnail(
                       imageUrl: item.imageUrl,
                       sport: item.sport ?? 'Unknown',
-                      width: 70,
                     ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+                        padding: const EdgeInsets.fromLTRB(0, 8, 6, 12),
                           child: CardInfoSection(
                             player: item.player ?? 'Unknown',
                             cardNumber: item.cardNumber,
@@ -616,14 +615,11 @@ class _MatchRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (match.imageUrl != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.network(match.imageUrl!, width: 36, height: 48, fit: BoxFit.cover,
-                  errorBuilder: (ctx, err, st) => const SizedBox(width: 36, height: 48)),
-            ),
-            const SizedBox(width: 10),
-          ],
+          CardThumbnail(
+            imageUrl: match.imageUrl,
+            sport: 'Unknown',
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

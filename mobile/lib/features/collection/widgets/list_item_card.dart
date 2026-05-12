@@ -84,7 +84,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CardThumbnail(imageUrl: stack.imageUrl, sport: stack.sport, width: 70),
+          CardThumbnail(imageUrl: stack.imageUrl, sport: stack.sport),
           const SizedBox(width: 10),
           Expanded(child: tappableInfo),
           Padding(

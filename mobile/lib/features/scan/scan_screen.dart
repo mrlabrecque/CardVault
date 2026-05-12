@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/card_fan_loader.dart';
@@ -612,6 +613,7 @@ class _ScanScreenState extends State<ScanScreen> {
               onPressed: _resetToSportPicker,
               style: AdaptiveButtonStyle.bordered,
               color: const Color(0xFF800020),
+              padding: ChromeMetrics.adaptiveBorderedButtonPadding,
               child: const Text(
                 'Try Again',
                 style: TextStyle(

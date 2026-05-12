@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/models/user_card.dart';
 import '../../../core/services/cards_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/chrome_metrics.dart';
 import '../../../core/widgets/card_attributes_wrap.dart';
 
 enum CardDetailSection { hero, attributes, actions }
@@ -226,6 +227,7 @@ class CardDetailView extends StatelessWidget {
                 onPressed: onAddToWishlist,
                 style: AdaptiveButtonStyle.bordered,
                 color: AppTheme.primary,
+                padding: ChromeMetrics.adaptiveBorderedButtonPadding,
                 child: const Text(
                   'Add to Wishlist',
                   style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
