@@ -16,7 +16,11 @@ class FixedSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    // Fill the persistent header slot so [BackdropFilter] in pinned chrome samples
+    // the full viewport width (avoids partial / "half" blur in tight layouts).
+    return SizedBox.expand(child: child);
+  }
 
   @override
   bool shouldRebuild(covariant FixedSliverHeaderDelegate oldDelegate) =>

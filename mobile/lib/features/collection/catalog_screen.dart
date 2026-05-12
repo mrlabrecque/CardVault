@@ -394,13 +394,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       });
       unawaited(_saveNavigationState());
       unawaited(ref.read(compsServiceProvider).fetchCardImage(master.id));
-      _openMasterCardDetail(
-        card: master,
-        parallelName: parallelLabel,
-        parallel: effectiveParallel,
-        release: relSet.release,
-        set: relSet.set,
-      );
+      // Defer push until after this frame so catalog state + shell layout settle;
+      // immediate push from the scan post-frame callback could drop the detail route.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_openMasterCardDetail(
+          card: master,
+          parallelName: parallelLabel,
+          parallel: effectiveParallel,
+          release: relSet.release,
+          set: relSet.set,
+        ));
+      });
     } catch (_) {
       if (mounted) {
         AdaptiveSnackBar.show(

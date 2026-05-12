@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
+import '../models/cardhedge_match.dart';
 import '../models/comp.dart';
 
 class CompsService {
@@ -337,6 +338,77 @@ class CompsService {
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  /// CardHedge **card-search** via Edge `cardhedge-search-cards`. Upstream `set` is
+  /// [year] (if not already leading [releaseName]) + [releaseName] + category;
+  /// [setName] filters on API `description`; [parallelName] on `variant`.
+  /// Edge scans multiple pages, then card # + insert + parallel scoring.
+  Future<CardHedgeMatchPayload> searchCardHedgeCatalog({
+    required String player,
+    int? year,
+    String? releaseName,
+    String? setName,
+    String? sport,
+    String? category,
+    String? cardNumber,
+    String? parallelName,
+    int pageSize = 100,
+  }) async {
+    final body = <String, dynamic>{
+      'player': player.trim(),
+      'page_size': pageSize.clamp(1, 100),
+    };
+    if (year != null) body['year'] = year;
+    final r = releaseName?.trim();
+    if (r != null && r.isNotEmpty) body['releaseName'] = r;
+    final s = setName?.trim();
+    if (s != null && s.isNotEmpty) body['setName'] = s;
+    final sp = sport?.trim();
+    if (sp != null && sp.isNotEmpty) body['sport'] = sp;
+    final c = category?.trim();
+    if (c != null && c.isNotEmpty) body['category'] = c;
+    final cn = cardNumber?.trim();
+    if (cn != null && cn.isNotEmpty) body['cardNumber'] = cn;
+    final p = parallelName?.trim();
+    if (p != null && p.isNotEmpty) body['parallelName'] = p;
+
+    try {
+      final res = await _supabase.functions.invoke(
+        'cardhedge-search-cards',
+        body: body,
+      );
+      final raw = res.data;
+      if (raw is Map) {
+        final map = Map<String, dynamic>.from(raw);
+        if (res.status == 200) {
+          return CardHedgeMatchPayload.fromJson(map);
+        }
+        final err = map['error']?.toString() ?? 'Request failed';
+        final hint = map['hint']?.toString();
+        final details = map['details']?.toString();
+        if (details != null && details.isNotEmpty) {
+          final short = details.length > 200 ? '${details.substring(0, 200)}…' : details;
+          return CardHedgeMatchPayload.error(
+            hint != null && hint.isNotEmpty ? '$err: $short\n$hint' : '$err: $short',
+          );
+        }
+        return CardHedgeMatchPayload.error(
+          hint != null && hint.isNotEmpty ? '$err\n$hint' : err,
+        );
+      }
+      return CardHedgeMatchPayload.error('CardHedge search: unexpected response (${res.status})');
+    } on FunctionException catch (e) {
+      final details = e.details;
+      if (details is Map) {
+        final m = Map<String, dynamic>.from(details);
+        final err = m['error']?.toString() ?? 'Request failed';
+        return CardHedgeMatchPayload.error('$err (${e.status})');
+      }
+      return CardHedgeMatchPayload.error('CardHedge search failed (${e.status})');
+    } catch (e) {
+      return CardHedgeMatchPayload.error(e.toString());
     }
   }
 }

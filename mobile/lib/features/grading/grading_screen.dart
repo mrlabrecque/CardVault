@@ -1,4 +1,5 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_card.dart';
@@ -160,7 +161,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
       extendBodyBehindAppBar: true,
       appBar: buildGlassNavBar(
         context,
-        useBlurBackground: false,
         automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
@@ -419,14 +419,15 @@ class _CardRow extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CardInfoSection.fromUserCard(card, isGraded: false),
+            Expanded(
+              child: CardInfoSection.fromUserCard(card, isGraded: false),
+            ),
             if (tier != _Tier.pending) ...[
               const SizedBox(width: 6),
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child:
-              _TierBadge(tier: tier),
-              )
+                child: _TierBadge(tier: tier),
+              ),
             ],
           ],
         ),
@@ -472,14 +473,20 @@ class _CardRow extends StatelessWidget {
           ..._buildResultBoxes(state.result!)
         else
           SizedBox(
-            width: 88,
+            width: 32,
+            height: 32,
             child: AdaptiveButton.child(
               onPressed: onAnalyze,
-              style: AdaptiveButtonStyle.bordered,
+              style: AdaptiveButtonStyle.filled,
               color: AppTheme.primary,
-              child: const Text(
-                'Analyze',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              // Keep this in Flutter's scene so it blurs under pinned chrome.
+              useNative: false,
+              padding: EdgeInsets.zero,
+              borderRadius: BorderRadius.circular(999),
+              child: const Icon(
+                CupertinoIcons.search_circle_fill,
+                size: 17,
+                color: Colors.white,
               ),
             ),
           ),

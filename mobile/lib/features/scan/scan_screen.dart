@@ -28,7 +28,9 @@ class CardSightDetection {
     return CardSightDetection(
       confidence: json['confidence'] ?? 'Low',
       card: CardSightCard.fromJson(json['card'] ?? {}),
-      grading: json['grading'] != null ? GradingInfo.fromJson(json['grading']) : null,
+      grading: json['grading'] != null
+          ? GradingInfo.fromJson(json['grading'])
+          : null,
     );
   }
 }
@@ -72,7 +74,9 @@ class CardSightCard {
       releaseId: json['releaseId'],
       setId: json['setId'],
       segmentId: json['segmentId'],
-      parallel: json['parallel'] != null ? ParallelInfo.fromJson(json['parallel']) : null,
+      parallel: json['parallel'] != null
+          ? ParallelInfo.fromJson(json['parallel'])
+          : null,
     );
   }
 }
@@ -114,10 +118,7 @@ class GradingCompany {
   GradingCompany({this.id, required this.name});
 
   factory GradingCompany.fromJson(Map<String, dynamic> json) {
-    return GradingCompany(
-      id: json['id'],
-      name: json['name'] ?? 'Unknown',
-    );
+    return GradingCompany(id: json['id'], name: json['name'] ?? 'Unknown');
   }
 }
 
@@ -141,7 +142,11 @@ class _ScanScreenState extends State<ScanScreen> {
   CardSightDetection? _detection;
   String? _errorMessage;
 
-  Uint8List? _encodeScanJpeg(Uint8List raw, {int maxSide = 1200, int quality = 82}) {
+  Uint8List? _encodeScanJpeg(
+    Uint8List raw, {
+    int maxSide = 1200,
+    int quality = 82,
+  }) {
     final decoded = img.decodeImage(raw);
     if (decoded == null) return null;
     var im = decoded;
@@ -202,7 +207,8 @@ class _ScanScreenState extends State<ScanScreen> {
 
     try {
       final raw = await file.readAsBytes();
-      final jpeg = _encodeScanJpeg(Uint8List.fromList(raw)) ?? Uint8List.fromList(raw);
+      final jpeg =
+          _encodeScanJpeg(Uint8List.fromList(raw)) ?? Uint8List.fromList(raw);
       var base64String = base64Encode(jpeg);
 
       FunctionResponse res;
@@ -210,7 +216,9 @@ class _ScanScreenState extends State<ScanScreen> {
         res = await _invokeIdentify(base64String);
       } on TimeoutException {
         final smaller =
-            _encodeScanJpeg(jpeg, maxSide: 900, quality: 78) ?? _encodeScanJpeg(raw, maxSide: 900, quality: 78) ?? jpeg;
+            _encodeScanJpeg(jpeg, maxSide: 900, quality: 78) ??
+            _encodeScanJpeg(raw, maxSide: 900, quality: 78) ??
+            jpeg;
         base64String = base64Encode(smaller);
         res = await _invokeIdentify(base64String);
       }
@@ -235,7 +243,8 @@ class _ScanScreenState extends State<ScanScreen> {
         if (mounted) {
           setState(() {
             _state = _ScanState.error;
-            _errorMessage = 'No cards detected. Try again with a clearer photo.';
+            _errorMessage =
+                'No cards detected. Try again with a clearer photo.';
           });
         }
         return;
@@ -253,8 +262,8 @@ class _ScanScreenState extends State<ScanScreen> {
       final message = e.status == 404
           ? 'Scan service is unavailable. Edge Function `$_scanFunctionName` was not found for this Supabase project. Deploy it with `supabase functions deploy $_scanFunctionName` and try again.'
           : e.status == 504
-              ? 'Identification took too long (upstream timeout). Try Wi‑Fi or a simpler shot of the card front.'
-              : 'Scan failed (${e.status}). Please try again.';
+          ? 'Identification took too long (upstream timeout). Try Wi‑Fi or a simpler shot of the card front.'
+          : 'Scan failed (${e.status}). Please try again.';
       if (mounted) {
         setState(() {
           _state = _ScanState.error;
@@ -290,10 +299,25 @@ class _ScanScreenState extends State<ScanScreen> {
 
   void _goToCardDetails() {
     if (_detection == null) return;
-    context.push('/catalog', extra: <String, dynamic>{
-      'detection': _detection!,
-      'sport': _selectedSport,
-    });
+    context.push(
+      '/catalog',
+      extra: <String, dynamic>{
+        'detection': _detection!,
+        'sport': _selectedSport,
+      },
+    );
+  }
+
+  /// Inset scroll content below [buildGlassNavBar] + status bar when using
+  /// [extendBodyBehindAppBar].
+  EdgeInsets _paddingBelowGlassAppBar(
+    BuildContext context, {
+    double horizontal = 16,
+    double bottom = 24,
+    double extraTop = 8,
+  }) {
+    final top = MediaQuery.paddingOf(context).top + kToolbarHeight + extraTop;
+    return EdgeInsets.fromLTRB(horizontal, top, horizontal, bottom);
   }
 
   Color _getConfidenceColor(String confidence) {
@@ -311,7 +335,9 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _state == _ScanState.sportPicker ? _buildSportPicker() : _buildContent(),
+      body: _state == _ScanState.sportPicker
+          ? _buildSportPicker()
+          : _buildContent(),
     );
   }
 
@@ -323,62 +349,65 @@ class _ScanScreenState extends State<ScanScreen> {
         context,
         title: Align(
           alignment: Alignment.centerLeft,
-          child: Text('Scan Card', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
+          child: Text(
+            'Scan Card',
+            style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
+          ),
         ),
         actions: appBarShellTrailingActions(context),
       ),
       body: Column(
         children: [
           Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            child: Column(
-              children: [
-                GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.2,
-                  children: _sports.map((sport) {
-                    final (name, value, emoji, tintColor) = sport;
-                    return GestureDetector(
-                      onTap: () => _selectSport(value),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: tintColor.withValues(alpha: 0.15),
-                          border: Border.all(
-                            color: tintColor.withValues(alpha: 0.3),
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(emoji, style: const TextStyle(fontSize: 48)),
-                            const SizedBox(height: 12),
-                            Text(
-                              name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                              textAlign: TextAlign.center,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                children: [
+                  GridView.count(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.2,
+                    children: _sports.map((sport) {
+                      final (name, value, emoji, tintColor) = sport;
+                      return GestureDetector(
+                        onTap: () => _selectSport(value),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: tintColor.withValues(alpha: 0.15),
+                            border: Border.all(
+                              color: tintColor.withValues(alpha: 0.3),
+                              width: 1.5,
                             ),
-                          ],
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(emoji, style: const TextStyle(fontSize: 48)),
+                              const SizedBox(height: 12),
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -422,7 +451,10 @@ class _ScanScreenState extends State<ScanScreen> {
               color: const Color(0xFF800020),
               child: const Text(
                 'Try Again',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -442,143 +474,156 @@ class _ScanScreenState extends State<ScanScreen> {
         context,
         title: Align(
           alignment: Alignment.centerLeft,
-          child: Text('Scan Results', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
+          child: Text(
+            'Scan Results',
+            style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
+          ),
         ),
         actions: appBarShellTrailingActions(context),
       ),
       body: SingleChildScrollView(
-        child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        padding: _paddingBelowGlassAppBar(context, horizontal: 24, bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Confidence pill
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.2),
+                border: Border.all(color: color),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                detection.confidence,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Player name or "Partial Match"
+            if (card.name != null)
+              Text(
+                card.name!,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
+            else
+              Text(
+                'Partial Match',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+            const SizedBox(height: 12),
+
+            // Info chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                // Confidence pill
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.2),
-                    border: Border.all(color: color),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    detection.confidence,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Player name or "Partial Match"
-                if (card.name != null)
-                  Text(
-                    card.name!,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  )
-                else
-                  Text(
-                    'Partial Match',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.black54,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-
-                const SizedBox(height: 12),
-
-                // Info chips
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (card.year != null) _buildChip(card.year!),
-                    if (card.manufacturer != null) _buildChip(card.manufacturer!),
-                    if (card.releaseName != null) _buildChip(card.releaseName!),
-                    if (card.setName != null) _buildChip(card.setName!),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Parallel chip
-                if (card.parallel != null) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF800020).withValues(alpha: 0.3),
-                      border: Border.all(color: const Color(0xFF800020)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      card.parallel!.numberedTo != null
-                          ? '${card.parallel!.name} /${card.parallel!.numberedTo}'
-                          : card.parallel!.name,
-                      style: const TextStyle(
-                        color: Color(0xFF800020),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Grading badge
-                if (detection.grading != null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.15),
-                      border: Border.all(color: Colors.blue),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '🔒 ${detection.grading!.company.name}',
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 32),
-
-                // View Card Details button
-                AdaptiveButton.child(
-                  onPressed: _goToCardDetails,
-                  style: AdaptiveButtonStyle.filled,
-                  color: const Color(0xFF800020),
-                  child: const Text(
-                    'View Card Details',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Try Again button
-                AdaptiveButton.child(
-                  onPressed: _resetToSportPicker,
-                  style: AdaptiveButtonStyle.bordered,
-                  color: const Color(0xFF800020),
-                  child: const Text(
-                    'Try Again',
-                    style: TextStyle(color: Color(0xFF800020), fontWeight: FontWeight.w600),
-                  ),
-                ),
+                if (card.year != null) _buildChip(card.year!),
+                if (card.manufacturer != null) _buildChip(card.manufacturer!),
+                if (card.releaseName != null) _buildChip(card.releaseName!),
+                if (card.setName != null) _buildChip(card.setName!),
               ],
             ),
+
+            const SizedBox(height: 16),
+
+            // Parallel chip
+            if (card.parallel != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF800020).withValues(alpha: 0.3),
+                  border: Border.all(color: const Color(0xFF800020)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  card.parallel!.numberedTo != null
+                      ? '${card.parallel!.name} /${card.parallel!.numberedTo}'
+                      : card.parallel!.name,
+                  style: const TextStyle(
+                    color: Color(0xFF800020),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+
+            // Grading badge
+            if (detection.grading != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.15),
+                  border: Border.all(color: Colors.blue),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '🔒 ${detection.grading!.company.name}',
+                  style: const TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 32),
+
+            // View Card Details button
+            AdaptiveButton.child(
+              onPressed: _goToCardDetails,
+              style: AdaptiveButtonStyle.filled,
+              color: const Color(0xFF800020),
+              child: const Text(
+                'View Card Details',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Try Again button
+            AdaptiveButton.child(
+              onPressed: _resetToSportPicker,
+              style: AdaptiveButtonStyle.bordered,
+              color: const Color(0xFF800020),
+              child: const Text(
+                'Try Again',
+                style: TextStyle(
+                  color: Color(0xFF800020),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-      );
+    );
   }
 
   Widget _buildChip(String text) {
