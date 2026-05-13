@@ -150,7 +150,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
   }
 
   Future<void> _importSets() async {
-    final csId = _selectedRelease?.cardsightId;
+    final csId = _selectedRelease?.catalogImportReleaseKey;
     if (csId == null) return;
     setState(() => _importingSets = true);
     try {
@@ -171,12 +171,12 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
 
   Future<void> _importCardsForSet(SetRecord set) async {
     final release = _selectedRelease!;
-    if (release.cardsightId == null || set.cardsightId == null) return;
+    if (release.catalogImportReleaseKey == null || set.catalogImportSetKey == null) return;
     setState(() => _importingCards.add(set.id));
     try {
       await ref.read(cardsServiceProvider).importCardsForSet(
-        cardsightReleaseId: release.cardsightId!,
-        cardsightSetId: set.cardsightId!,
+        cardsightReleaseId: release.catalogImportReleaseKey!,
+        cardsightSetId: set.catalogImportSetKey!,
         setId: set.id,
       );
       await _loadSets();
@@ -306,7 +306,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                         Flexible(
                           child: Text(_year.isEmpty || _segment.isEmpty
                               ? 'Select a year and sport to import'
-                              : _importSkip == 0 ? 'Import from CardSight' : 'Load next batch (skip $_importSkip)'),
+                              : _importSkip == 0 ? 'Import from catalog' : 'Load next batch (skip $_importSkip)'),
                         ),
                       ],
                     ),
@@ -386,7 +386,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                           Text('No sets imported yet.',
                               style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
                           const SizedBox(height: 16),
-                          if (_selectedRelease?.cardsightId != null)
+                          if (_selectedRelease?.catalogImportReleaseKey != null)
                             AdaptiveButton.child(
                               onPressed: _importingSets ? null : _importSets,
                               style: AdaptiveButtonStyle.filled,
@@ -398,7 +398,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                                   children: [
                                     Icon(Icons.download_outlined, size: 16, color: Colors.white),
                                     SizedBox(width: 8),
-                                    Text('Import Sets from CardSight'),
+                                    Text('Import sets from catalog'),
                                   ],
                                 ),
                               ),
@@ -451,7 +451,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                       },
                     ),
         ),
-        if (_sets.isNotEmpty && _selectedRelease?.cardsightId != null)
+        if (_sets.isNotEmpty && _selectedRelease?.catalogImportReleaseKey != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: SizedBox(
@@ -468,7 +468,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                     children: [
                       Icon(Icons.refresh, size: 16, color: AppTheme.primary),
                       SizedBox(width: 8),
-                      Text('Re-import sets from CardSight'),
+                      Text('Re-import sets from catalog'),
                     ],
                   ),
                 ),

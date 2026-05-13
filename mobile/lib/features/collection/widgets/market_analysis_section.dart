@@ -21,10 +21,10 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
     required this.segmentColor,
     this.refreshVersion = 0,
     this.externalLoading = false,
-    this.cardHedgeGradeAverages,
+    this.guideGradePriceAverages,
     this.skipScraperSoldComps = false,
     this.showDbSoldCompsWhenAvailable = false,
-    this.cardhedgeId,
+    this.guidePriceCardId,
     this.titleGain,
   });
 
@@ -34,14 +34,14 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
   final int refreshVersion;
   final bool externalLoading;
   /// Keys [Raw], [PSA 10], [PSA 9]; null values render as N/A (same as scraper comps).
-  final Map<String, double?>? cardHedgeGradeAverages;
+  final Map<String, double?>? guideGradePriceAverages;
   final bool skipScraperSoldComps;
-  /// When [skipScraperSoldComps] / CardHedge sold path is active, probe [card_sold_comps] for
+  /// When [skipScraperSoldComps] / guide sold-comps path is active, probe [card_sold_comps] for
   /// [initialGrade] and mount [CardCompsSection] without requiring a grade pill tap.
   final bool showDbSoldCompsWhenAvailable;
-  /// When set, sold-comps grade pills fetch CardHedge `/v1/cards/comps` for that grade.
-  final String? cardhedgeId;
-  /// CardHedge `gain` on `master_card_definitions` — shown next to the section title (↑/↓).
+  /// When set, sold-comps grade pills fetch upstream `/v1/cards/comps` for that grade.
+  final String? guidePriceCardId;
+  /// `gain` on `master_card_definitions` — shown next to the section title (↑/↓).
   final double? titleGain;
 
   @override
@@ -50,36 +50,36 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
 
 class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   int _segment = 0;
-  int _cardHedgeCompsNonce = 0;
-  bool _cardHedgeCompsLoading = false;
+  int _guideSoldCompsNonce = 0;
+  bool _guideSoldCompsLoading = false;
   /// Grade whose comps are being fetched (spinner on pill before list mounts).
-  String? _cardHedgeCompsFetchingGrade;
-  /// Shown after [CompsService.ensureCardHedgeGradeComps] succeeds — avoids reading DB before rows exist.
-  String? _cardHedgeCompsGrade;
+  String? _guideSoldCompsFetchingGrade;
+  /// Shown after [CompsService.ensureGuideGradeComps] succeeds — avoids reading DB before rows exist.
+  String? _guideSoldCompsGrade;
   /// When [showDbSoldCompsWhenAvailable], set if [card_sold_comps] already has rows for [initialGrade].
   String? _autoDbCompsGrade;
   int _dbCompsProbeGen = 0;
 
-  bool get _useCardHedgeSoldComps {
+  bool get _useGuideSoldCompsPath {
     if (widget.skipScraperSoldComps) return true;
-    final avgs = widget.cardHedgeGradeAverages;
+    final avgs = widget.guideGradePriceAverages;
     if (avgs == null) return false;
     return avgs.values.any((v) => v != null && v > 0);
   }
 
-  bool get _cardHedgePillsTappable =>
-      widget.cardhedgeId != null && widget.cardhedgeId!.trim().isNotEmpty;
+  bool get _guideGradePillsTappable =>
+      widget.guidePriceCardId != null && widget.guidePriceCardId!.trim().isNotEmpty;
 
   /// Which grade pill looks selected (includes in-flight tap target).
   String? get _pillSelectionGrade =>
-      _cardHedgeCompsGrade ??
-      (_cardHedgeCompsLoading ? _cardHedgeCompsFetchingGrade : null) ??
+      _guideSoldCompsGrade ??
+      (_guideSoldCompsLoading ? _guideSoldCompsFetchingGrade : null) ??
       _autoDbCompsGrade;
 
   /// Grade passed to [CardCompsSection] — omitted while a tap fetch runs so the child
   /// does not race the edge write and flash the empty-state info box.
   String? get _mountedCompsGrade =>
-      _cardHedgeCompsLoading ? null : (_cardHedgeCompsGrade ?? _autoDbCompsGrade);
+      _guideSoldCompsLoading ? null : (_guideSoldCompsGrade ?? _autoDbCompsGrade);
 
   @override
   void initState() {
@@ -95,13 +95,13 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         oldWidget.showDbSoldCompsWhenAvailable != widget.showDbSoldCompsWhenAvailable ||
         oldWidget.skipScraperSoldComps != widget.skipScraperSoldComps ||
         oldWidget.refreshVersion != widget.refreshVersion ||
-        oldWidget.cardHedgeGradeAverages != widget.cardHedgeGradeAverages) {
+        oldWidget.guideGradePriceAverages != widget.guideGradePriceAverages) {
       Future.microtask(_tryAutoShowDbComps);
     }
   }
 
   Future<void> _tryAutoShowDbComps() async {
-    if (!widget.showDbSoldCompsWhenAvailable || !_useCardHedgeSoldComps) {
+    if (!widget.showDbSoldCompsWhenAvailable || !_useGuideSoldCompsPath) {
       if (mounted && _autoDbCompsGrade != null) {
         setState(() => _autoDbCompsGrade = null);
       }
@@ -116,32 +116,32 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     setState(() => _autoDbCompsGrade = has ? g : null);
   }
 
-  Future<void> _onCardHedgeGradeTap(String grade) async {
-    if (!_cardHedgePillsTappable) return;
-    final hid = widget.cardhedgeId!.trim();
+  Future<void> _onGuideGradeTap(String grade) async {
+    if (!_guideGradePillsTappable) return;
+    final hid = widget.guidePriceCardId!.trim();
     setState(() {
-      _cardHedgeCompsLoading = true;
-      _cardHedgeCompsFetchingGrade = grade;
-      _cardHedgeCompsGrade = null;
+      _guideSoldCompsLoading = true;
+      _guideSoldCompsFetchingGrade = grade;
+      _guideSoldCompsGrade = null;
     });
-    final n = await ref.read(compsServiceProvider).ensureCardHedgeGradeComps(
+    final n = await ref.read(compsServiceProvider).ensureGuideGradeComps(
           masterVariantId: widget.masterCardId,
-          cardhedgeId: hid,
+          guidePriceCardId: hid,
           grade: grade,
         );
     if (!mounted) return;
     setState(() {
-      _cardHedgeCompsLoading = false;
-      _cardHedgeCompsFetchingGrade = null;
+      _guideSoldCompsLoading = false;
+      _guideSoldCompsFetchingGrade = null;
       if (n != null) {
-        _cardHedgeCompsGrade = grade;
-        _cardHedgeCompsNonce++;
+        _guideSoldCompsGrade = grade;
+        _guideSoldCompsNonce++;
       }
     });
     if (n == null && mounted) {
       AdaptiveSnackBar.show(
         context,
-        message: 'Could not load CardHedge comps for $grade.',
+        message: 'Could not load sold comps for $grade.',
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -223,22 +223,22 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         ),
         const SizedBox(height: 16),
         if (_segment == 0)
-          (_useCardHedgeSoldComps
+          (_useGuideSoldCompsPath
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _CardHedgeCompsSummary(
+                    _GuideSoldCompsSummary(
                       gradeAverages:
-                          widget.cardHedgeGradeAverages ?? const <String, double?>{},
-                      pillsTappable: _cardHedgePillsTappable,
-                      loadingGrade: _cardHedgeCompsLoading
-                          ? (_cardHedgeCompsFetchingGrade ?? _cardHedgeCompsGrade)
+                          widget.guideGradePriceAverages ?? const <String, double?>{},
+                      pillsTappable: _guideGradePillsTappable,
+                      loadingGrade: _guideSoldCompsLoading
+                          ? (_guideSoldCompsFetchingGrade ?? _guideSoldCompsGrade)
                           : null,
                       selectedGrade: _pillSelectionGrade,
-                      onGradeTap: _onCardHedgeGradeTap,
+                      onGradeTap: _onGuideGradeTap,
                     ),
-                    if (_cardHedgeCompsLoading &&
-                        _cardHedgeCompsFetchingGrade != null) ...[
+                    if (_guideSoldCompsLoading &&
+                        _guideSoldCompsFetchingGrade != null) ...[
                       const SizedBox(height: 12),
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 20),
@@ -254,9 +254,9 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                         masterCardId: widget.masterCardId,
                         initialGrade: _mountedCompsGrade!,
                         refreshVersion:
-                            _cardHedgeCompsGrade != null ? _cardHedgeCompsNonce : widget.refreshVersion,
+                            _guideSoldCompsGrade != null ? _guideSoldCompsNonce : widget.refreshVersion,
                         externalLoading: widget.externalLoading,
-                        embeddedCardHedgeComps: true,
+                        embeddedGuideSoldComps: true,
                       ),
                     ],
                   ],
@@ -276,8 +276,8 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   }
 }
 
-class _CardHedgeCompsSummary extends StatelessWidget {
-  const _CardHedgeCompsSummary({
+class _GuideSoldCompsSummary extends StatelessWidget {
+  const _GuideSoldCompsSummary({
     required this.gradeAverages,
     required this.pillsTappable,
     required this.onGradeTap,
@@ -302,7 +302,7 @@ class _CardHedgeCompsSummary extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
-              _CardHedgeGradePill(
+              _GuideSoldCompsGradePill(
                 label: 'Raw',
                 price: _price('Raw'),
                 selected: selectedGrade == 'Raw',
@@ -310,7 +310,7 @@ class _CardHedgeCompsSummary extends StatelessWidget {
                 onTap: pillsTappable ? () => onGradeTap('Raw') : null,
               ),
               const SizedBox(width: 8),
-              _CardHedgeGradePill(
+              _GuideSoldCompsGradePill(
                 label: 'PSA 10',
                 price: _price('PSA 10'),
                 selected: selectedGrade == 'PSA 10',
@@ -318,7 +318,7 @@ class _CardHedgeCompsSummary extends StatelessWidget {
                 onTap: pillsTappable ? () => onGradeTap('PSA 10') : null,
               ),
               const SizedBox(width: 8),
-              _CardHedgeGradePill(
+              _GuideSoldCompsGradePill(
                 label: 'PSA 9',
                 price: _price('PSA 9'),
                 selected: selectedGrade == 'PSA 9',
@@ -334,8 +334,8 @@ class _CardHedgeCompsSummary extends StatelessWidget {
 }
 
 /// Same layout as sold-comps grade pills in [CardCompsSection].
-class _CardHedgeGradePill extends StatelessWidget {
-  const _CardHedgeGradePill({
+class _GuideSoldCompsGradePill extends StatelessWidget {
+  const _GuideSoldCompsGradePill({
     required this.label,
     required this.price,
     this.onTap,

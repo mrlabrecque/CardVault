@@ -1,289 +1,290 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchSoldListingsBrightData } from '../_shared/sold_listings_brightdata.ts';
-const LOOKBACK_DAYS   = 90;
-const DAILY_LIMIT     = 10; // top-value cards refreshed each run
-const WEEKLY_LIMIT    = 5;  // opted-in cards refreshed each run
-const DELAY_MS        = 400; // between provider calls to stay rate-limit safe
+/**
+ * Scheduled refresh: guide-price data → `current_prices` on `master_card_definitions`.
+ *
+ * Uses `POST /v1/cards/batch-price-estimate` (≤100 card/grade pairs per HTTP call) when possible,
+ * then merges with existing DB rows so uncommon grades are preserved. Falls back to
+ * `all-prices-by-card` per master if the batch request fails.
+ *
+ * Auth: `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` (pg_cron).
+ * Secrets: `CARDHEDGE_API_KEY` or `CARDHEDGER_API_KEY`.
+ */
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  CARDHEDGE_CRON_BATCH_GRADES,
+  fetchCardHedgeAllLatestPrices,
+  fetchCardHedgeBatchPriceEstimateAllChunks,
+  type BatchPriceEstimateRow,
+} from '../_shared/cardhedge_all_prices.ts';
+import { persistGuidePricesOntoMaster } from '../_shared/cardhedge_persist_master.ts';
+
+/** Max distinct stale masters to refresh per invocation. */
+const DAILY_LIMIT = 10;
+const STALE_MS = 23 * 60 * 60 * 1000;
+const DELAY_MS = 400;
+/** Rows to load before JS sort/dedupe (many copies can share one master). */
+const DAILY_FETCH_CAP = 200;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ── Shared filtering (mirrors refresh-card-value) ─────────────────────────────
+function cardHedgeApiKey(): string | null {
+  return (
+    Deno.env.get('CARDHEDGE_API_KEY')?.trim() ||
+    Deno.env.get('CARDHEDGER_API_KEY')?.trim() ||
+    null
+  );
+}
 
-const PARALLEL_KEYWORDS = [
-  'refractor', 'holo', 'silver', 'gold', 'red', 'blue', 'green', 'orange',
-  'purple', 'pink', 'black', 'white', 'teal', 'yellow', 'brown', 'gray', 'grey',
-  'hyper', 'neon', 'aqua', 'mojo', 'wave', 'velocity', 'stars', 'scope',
-  'cracked ice', 'disco', 'tiger', 'nebula', 'shimmer', 'choice', 'lava',
-  'sp', 'ssp', 'foil', 'logo',
-];
-const GRADER_KEYWORDS = ['psa', 'bgs', 'sgc', 'cgc', 'csg', 'beckett'];
-const LISTING_NOISE = new Set([
-  'rookie', 'rated', 'serial', 'numbered', 'graded', 'limited', 'edition',
-  'insert', 'parallel', 'short', 'print', 'chrome', 'refractor', 'invest',
-  'basketball', 'football', 'baseball', 'hockey', 'soccer',
-  'auction', 'auctions', 'ended', 'listing',
-  'panini', 'topps', 'donruss', 'fleer', 'score', 'ultra', 'select', 'optic',
-  'mosaic', 'chronicles', 'certified', 'absolute', 'contenders', 'playoff',
-  'treasures', 'prestige', 'bowman', 'stadium', 'heritage', 'update', 'series',
-  'national', 'upper', 'deck', 'prizm', 'trading', 'sports', 'card', 'cards',
-  'single', 'color', 'colour',
-]);
+function vaultRank(c: { current_value: number | null; price_paid: number | null }): number {
+  const cv = typeof c.current_value === 'number' && Number.isFinite(c.current_value) ? c.current_value : 0;
+  const pp = typeof c.price_paid === 'number' && Number.isFinite(c.price_paid) ? c.price_paid : 0;
+  return Math.max(cv, pp);
+}
 
-function buildQuery(card: Record<string, any>): string {
-  const { year, release_name, set_name, player, card_number, parallel_name,
-          is_auto, is_patch, is_rookie, serial_max, is_graded, grader, grade_value } = card;
-  const parts: string[] = [String(year ?? ''), release_name ?? ''];
-  const setLabel = (set_name ?? '').trim();
-  if (setLabel && setLabel.toLowerCase() !== 'base' &&
-      !(release_name ?? '').toLowerCase().includes(setLabel.toLowerCase())) {
-    parts.push(setLabel);
+function masterStale(cardhedgeFetchedAt: string | null | undefined): boolean {
+  if (cardhedgeFetchedAt == null || cardhedgeFetchedAt === '') return true;
+  return new Date(cardhedgeFetchedAt).getTime() < Date.now() - STALE_MS;
+}
+
+type MasterEmbed = {
+  id: string;
+  cardhedge_id: string | null;
+  cardhedge_fetched_at: string | null;
+} | null;
+
+type UserCardRow = {
+  id: string;
+  master_card_id: string | null;
+  current_value: number | null;
+  price_paid: number | null;
+  master_card_definitions: MasterEmbed;
+};
+
+type RefreshJob = { masterVariantId: string; guidePriceCardId: string };
+
+/** Stale masters with a linked guide-price card id, highest vault rank first, at most [DAILY_LIMIT]. */
+function buildRefreshQueue(dailyRows: UserCardRow[]): RefreshJob[] {
+  const sorted = [...dailyRows].sort((a, b) => vaultRank(b) - vaultRank(a));
+  const jobs: RefreshJob[] = [];
+  const seenMaster = new Set<string>();
+
+  for (const row of sorted) {
+    const m = row.master_card_definitions;
+    const ch = typeof m?.cardhedge_id === 'string' ? m.cardhedge_id.trim() : '';
+    if (!m?.id || !ch) continue;
+    if (!masterStale(m.cardhedge_fetched_at)) continue;
+    if (seenMaster.has(m.id)) continue;
+    if (jobs.length >= DAILY_LIMIT) break;
+    seenMaster.add(m.id);
+    jobs.push({ masterVariantId: m.id, guidePriceCardId: ch });
   }
-  parts.push(player ?? '');
-  if (card_number) parts.push(`#${card_number}`);
-  const parallelLabel = (parallel_name ?? '').replace(/\s*\/\d+$/, '').trim();
-  const attrs: string[] = [];
-  if (parallelLabel && parallelLabel !== 'Base') attrs.push(parallelLabel);
-  if (is_auto)   attrs.push('Auto');
-  if (is_patch)  attrs.push('Patch');
-  if (serial_max) attrs.push(`/${serial_max}`);
-  if (is_rookie) attrs.push('RC');
-  if (is_graded && grader && grade_value) attrs.push(`${grader} ${grade_value}`);
-  return [...parts, ...attrs].filter(Boolean).join(' ');
+
+  return jobs;
 }
 
-function noUnexpectedParallels(title: string, query: string): boolean {
-  const t = title.toLowerCase();
-  const q = query.toLowerCase();
-  return !PARALLEL_KEYWORDS.some(k => {
-    const re = new RegExp(`\\b${k.replace(/\s+/g, '\\s+')}\\b`);
-    return re.test(t) && !q.includes(k);
-  });
+async function loadExistingGradePrices(
+  admin: SupabaseClient,
+  masterVariantId: string,
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const { data, error } = await admin
+    .from('current_prices')
+    .select('grade, price')
+    .eq('master_card_id', masterVariantId);
+  if (error) {
+    console.error('[auto-refresh] load current_prices', error.message);
+    return map;
+  }
+  for (const row of data ?? []) {
+    const r = row as Record<string, unknown>;
+    const g = String(r.grade ?? '').trim();
+    if (!g) continue;
+    const pr = r.price;
+    const n =
+      typeof pr === 'number' && Number.isFinite(pr)
+        ? pr
+        : parseFloat(String(pr ?? '').replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(n) && n > 0) map.set(g, n);
+  }
+  return map;
 }
 
-function noUnexpectedWords(title: string, query: string): boolean {
-  const t = title.toLowerCase();
-  const q = query.toLowerCase();
-  const titleWords = t.match(/\b[a-z]{6,}\b/g) ?? [];
-  return titleWords.every((w: string) => q.includes(w) || LISTING_NOISE.has(w));
+function applyBatchToPriceMap(
+  map: Map<string, number>,
+  upstreamCardId: string,
+  batchRows: BatchPriceEstimateRow[],
+): void {
+  for (const row of batchRows) {
+    if (row.card_id !== upstreamCardId) continue;
+    if (row.error) continue;
+    if (row.price == null || row.price <= 0) continue;
+    const g = row.grade.trim();
+    if (!g) continue;
+    map.set(g, row.price);
+  }
 }
 
-function parseAndFilter(raw: any[], query: string, setName?: string): any[] {
-  const yearMatch    = query.match(/\b(19|20)\d{2}\b/);
-  const cardNumMatch = query.match(/(?:^|\s)#?(\d{1,4})(?:\s|$)/);
-  const serialMatch  = query.match(/\/(\d{1,4})\b/);
-  const graderFound  = GRADER_KEYWORDS.find(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
-  const parallelsInQuery = PARALLEL_KEYWORDS.filter(k => new RegExp(`\\b${k}\\b`, 'i').test(query));
-  const parallelFromQuery = parallelsInQuery.length ? parallelsInQuery.join(' ') : null;
-  const noisePattern = new RegExp(`\\b(${[...LISTING_NOISE].join('|')})\\b`, 'gi');
-  const playerGuess = query
-    .replace(/\b(19|20)\d{2}\b/, '').replace(/(?:^|\s)#?\d{1,4}(?:\s|$)/, ' ')
-    .replace(/\/\d{1,4}\b/, '')
-    .replace(setName ? new RegExp(setName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi') : /(?:)/, '')
-    .replace(new RegExp(`\\b(${PARALLEL_KEYWORDS.join('|')})\\b`, 'gi'), '')
-    .replace(new RegExp(`\\b(${GRADER_KEYWORDS.join('|')})\\b`, 'gi'), '')
-    .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
-    .replace(noisePattern, '').replace(/\s{2,}/g, ' ').trim();
-
-  const year       = yearMatch ? parseInt(yearMatch[0]) : null;
-  const serial_max = serialMatch ? parseInt(serialMatch[1]) : null;
-  const playerWords = playerGuess.toLowerCase().split(/\s+/).filter(Boolean);
-  const parallelStr = parallelFromQuery ?? '';
-  const is_auto    = /\bauto(graph)?\b/i.test(query);
-  const is_patch   = /\b(patch|relic|jersey)\b/i.test(query);
-  const is_graded  = !!graderFound;
-  const grader     = graderFound ?? null;
-
-  return raw.filter(item => {
-    const title = (item.title ?? '').toLowerCase();
-    if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) return false;
-    if (year && !title.includes(String(year))) return false;
-    if (cardNumMatch && !new RegExp(`\\b${cardNumMatch[1]}\\b`).test(title)) return false;
-    if (/\blot\b/i.test(title)) return false;
-    const hasSerial = /\/\d{1,4}\b/.test(title);
-    if (!serial_max && hasSerial) return false;
-    if (serial_max && !new RegExp(`\\/${serial_max}\\b`).test(title)) return false;
-    if (is_graded && grader && !title.includes(grader)) return false;
-    const hasGrader = GRADER_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`, 'i').test(title));
-    if (!is_graded && hasGrader) return false;
-    const hasAuto  = /\bauto(graph)?\b/.test(title);
-    const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
-    if (is_auto  && !hasAuto)  return false;
-    if (!is_auto  && hasAuto)  return false;
-    if (is_patch && !hasPatch) return false;
-    if (!is_patch && hasPatch) return false;
-    if (/\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) return false;
-    if (/\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) return false;
-    if (parallelStr) {
-      const parallelWords = parallelStr.toLowerCase().split(/\s+/).filter(Boolean);
-      if (parallelWords.some((w: string) => !title.includes(w))) return false;
+async function persistMergedAndTouchUserCards(
+  admin: SupabaseClient,
+  job: RefreshJob,
+  apiKey: string,
+  batchRows: BatchPriceEstimateRow[] | null,
+): Promise<boolean> {
+  const existing = await loadExistingGradePrices(admin, job.masterVariantId);
+  if (batchRows != null) {
+    applyBatchToPriceMap(existing, job.guidePriceCardId, batchRows);
+  } else {
+    const rows = await fetchCardHedgeAllLatestPrices(apiKey, job.guidePriceCardId, { timeoutMs: 20_000 });
+    if (!rows || rows.length === 0) return false;
+    existing.clear();
+    for (const r of rows) {
+      const price = parseFloat(String(r.price).replace(/[^0-9.-]/g, '')) || 0;
+      const g = r.grade.trim();
+      if (g && price > 0) existing.set(g, price);
     }
-    if (!noUnexpectedParallels(item.title, query)) return false;
-    if (!noUnexpectedWords(item.title, query))     return false;
-    return true;
+  }
+
+  const prices = [...existing.entries()]
+    .map(([grade, price]) => ({ grade, price }))
+    .filter((p) => p.grade && p.price > 0);
+  if (prices.length === 0) return false;
+
+  await persistGuidePricesOntoMaster(admin, {
+    masterVariantId: job.masterVariantId,
+    guidePriceCardId: job.guidePriceCardId,
+    prices,
   });
+  const nowIso = new Date().toISOString();
+  await admin.from('user_cards').update({ value_refreshed_at: nowIso }).eq('master_card_id', job.masterVariantId);
+  return true;
 }
-
-async function fetchSoldListings(query: string): Promise<any[]> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
-  const sourceItems = await fetchSoldListingsBrightData(query);
-  return sourceItems
-    .filter((item: any) => item.title && Number.parseFloat(item.price.value) > 0)
-    .filter((item: any) => !item.itemEndDate || new Date(item.itemEndDate) >= cutoff);
-}
-
-// ── Handler ───────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
   }
 
-  // Auth: service role key only (this endpoint is called by pg_cron, not users)
   const authHeader = req.headers.get('Authorization') ?? '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   if (token !== serviceRoleKey) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+
+  const apiKey = cardHedgeApiKey();
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({
+        error: 'CARDHEDGE_API_KEY not configured',
+        hint: 'Set CARDHEDGE_API_KEY on the auto-refresh-cards Edge Function.',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+    );
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  // ── Select cards due for refresh ──────────────────────────────────────────
-
-  // Daily tier: top N cards by value, not refreshed in the last 23 hours
-  const { data: dailyCards } = await admin
+  const { data: dailyRaw, error: dailyErr } = await admin
     .from('user_cards')
-    .select(`
-      id, user_id, current_value, is_graded, grader, grade_value, parallel_name,
-      master_card_definitions (
-        is_auto, is_patch, serial_max,
-        set_cards (
-          player, card_number, is_rookie,
-          sets ( name, releases ( year, name ) )
-        )
-      )
-    `)
-    .or('value_refreshed_at.is.null,value_refreshed_at.lt.' + new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString())
+    .select(
+      `
+      id, master_card_id, current_value, price_paid,
+      master_card_definitions ( id, cardhedge_id, cardhedge_fetched_at )
+    `,
+    )
+    .not('master_card_id', 'is', null)
     .order('current_value', { ascending: false, nullsFirst: false })
-    .limit(DAILY_LIMIT);
+    .order('price_paid', { ascending: false, nullsFirst: true })
+    .limit(DAILY_FETCH_CAP);
 
-  // Weekly tier: opted-in cards staggered by day-of-week hash, not refreshed in 6 days
-  // The hash bucketing happens in JS after fetching candidates for today
-  const todayDow = new Date().getDay(); // 0=Sun … 6=Sat
-  const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: weeklyPool } = await admin
-    .from('user_cards')
-    .select(`
-      id, user_id, current_value, is_graded, grader, grade_value, parallel_name,
-      master_card_definitions (
-        is_auto, is_patch, serial_max,
-        set_cards (
-          player, card_number, is_rookie,
-          sets ( name, releases ( year, name ) )
-        )
-      )
-    `)
-    .eq('weekly_price_check', true)
-    .or(`value_refreshed_at.is.null,value_refreshed_at.lt.${sixDaysAgo}`)
-    .limit(WEEKLY_LIMIT * 7); // fetch a week's worth and bucket locally
-
-  // Simple string hash to assign each card a stable day-of-week bucket
-  function dayBucket(id: string): number {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) { h = (Math.imul(31, h) + id.charCodeAt(i)) | 0; }
-    return Math.abs(h) % 7;
+  if (dailyErr) {
+    console.error('[auto-refresh] query', dailyErr.message);
+    return new Response(JSON.stringify({ error: dailyErr.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
   }
 
-  const dailyIds = new Set((dailyCards ?? []).map((c: any) => c.id));
-  const weeklyCards = (weeklyPool ?? [])
-    .filter((c: any) => !dailyIds.has(c.id) && dayBucket(c.id) === todayDow)
-    .slice(0, WEEKLY_LIMIT);
+  const dailyRows = (dailyRaw ?? []) as UserCardRow[];
+  const queue = buildRefreshQueue(dailyRows);
+  console.log(`[auto-refresh] guide-price masters=${queue.length} (cap ${DAILY_LIMIT})`);
 
-  const batch = [...(dailyCards ?? []), ...weeklyCards];
-  console.log(`[auto-refresh] daily=${dailyCards?.length ?? 0} weekly=${weeklyCards.length} total=${batch.length}`);
-
-  if (batch.length === 0) {
-    return new Response(JSON.stringify({ refreshed: 0 }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
+  if (queue.length === 0) {
+    return new Response(JSON.stringify({ refreshed: 0, skipped: 'no stale linked masters' }), {
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
   }
 
-  // ── Refresh each card ─────────────────────────────────────────────────────
+  const items: { card_id: string; grade: string }[] = [];
+  for (const j of queue) {
+    for (const g of CARDHEDGE_CRON_BATCH_GRADES) {
+      items.push({ card_id: j.guidePriceCardId, grade: g });
+    }
+  }
+
+  const batchRows = await fetchCardHedgeBatchPriceEstimateAllChunks(apiKey, items, {
+    timeoutMs: 45_000,
+    delayMsBetweenChunks: DELAY_MS,
+  });
 
   let refreshed = 0;
   let errors = 0;
+  let usedBatch = batchRows != null;
 
-  for (const card of batch) {
-    const mcd     = (card as any).master_card_definitions ?? {};
-    const sc      = mcd.set_cards ?? {};
-    const setData = sc.sets ?? {};
-    const release = setData.releases ?? {};
-
-    const cardRow = {
-      year:          release.year,
-      release_name:  release.name,
-      set_name:      setData.name,
-      player:        sc.player,
-      card_number:   sc.card_number,
-      parallel_name: (card as any).parallel_name,
-      is_auto:       mcd.is_auto,
-      is_patch:      mcd.is_patch,
-      is_rookie:     sc.is_rookie,
-      serial_max:    mcd.serial_max,
-      is_graded:     (card as any).is_graded,
-      grader:        (card as any).grader,
-      grade_value:   (card as any).grade_value,
-    };
-
-    const query = buildQuery(cardRow);
-
-    try {
-      const raw   = await fetchSoldListings(query);
-      const items = parseAndFilter(raw, query, setData.name ?? undefined);
-      const prices = items.map((i: any) => parseFloat(i.price?.value ?? '0')).filter((p: number) => p > 0);
-      const avgValue = prices.length > 0
-        ? prices.reduce((s: number, p: number) => s + p, 0) / prices.length
-        : 0;
-
-      await admin.from('user_cards')
-        .update({
-          previous_value: (card as any).current_value ?? null,
-          current_value: avgValue,
-          value_refreshed_at: new Date().toISOString(),
-        })
-        .eq('id', card.id);
-
-      await admin.from('card_sold_comps').delete().eq('user_card_id', card.id);
-      if (items.length > 0) {
-        await admin.from('card_sold_comps').insert(items.map((item: any) => ({
-          user_card_id: card.id,
-          ebay_item_id: item.itemId ?? null,
-          title:        item.title ?? '',
-          price:        parseFloat(item.price?.value ?? '0'),
-          currency:     item.price?.currency ?? 'USD',
-          sale_type:    typeof item.buyingOptions === 'string' ? item.buyingOptions : 'fixed_price',
-          sold_at:      item.itemEndDate ?? null,
-          url:          item.itemWebUrl ?? null,
-        })));
+  if (usedBatch) {
+    for (const job of queue) {
+      try {
+        const ok = await persistMergedAndTouchUserCards(admin, job, apiKey, batchRows);
+        if (!ok) {
+          console.error(`[auto-refresh] ✗ batch merge empty master=${job.masterVariantId}`);
+          errors++;
+        } else {
+          console.log(`[auto-refresh] ✓ master=${job.masterVariantId} (batch)`);
+          refreshed++;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[auto-refresh] ✗ master=${job.masterVariantId}: ${msg}`);
+        errors++;
       }
-
-      console.log(`[auto-refresh] ✓ ${sc.player} — $${avgValue.toFixed(2)} (${prices.length} comps)`);
-      refreshed++;
-    } catch (e: any) {
-      console.error(`[auto-refresh] ✗ ${sc.player}: ${e.message}`);
-      errors++;
     }
-
-    if (batch.indexOf(card) < batch.length - 1) {
-      await new Promise(r => setTimeout(r, DELAY_MS));
+  } else {
+    console.warn('[auto-refresh] batch-price-estimate failed; using all-prices-by-card per master');
+    for (let i = 0; i < queue.length; i++) {
+      const job = queue[i];
+      try {
+        const ok = await persistMergedAndTouchUserCards(admin, job, apiKey, null);
+        if (!ok) {
+          console.error(`[auto-refresh] ✗ no prices master=${job.masterVariantId} guideCard=${job.guidePriceCardId}`);
+          errors++;
+        } else {
+          console.log(`[auto-refresh] ✓ master=${job.masterVariantId} (all-prices)`);
+          refreshed++;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[auto-refresh] ✗ master=${job.masterVariantId}: ${msg}`);
+        errors++;
+      }
+      if (i < queue.length - 1) {
+        await new Promise((r) => setTimeout(r, DELAY_MS));
+      }
     }
   }
 
   return new Response(
-    JSON.stringify({ refreshed, errors }),
+    JSON.stringify({
+      refreshed,
+      errors,
+      masters: queue.length,
+      used_batch_price_estimate: usedBatch,
+    }),
     { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
   );
 });

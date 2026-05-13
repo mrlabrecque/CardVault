@@ -1,5 +1,5 @@
 /**
- * Fetches sold comps for a CardHedge card + grade (POST /v1/cards/comps),
+ * Fetches sold comps for a guide-price catalog card + grade (POST /v1/cards/comps),
  * upserts `comps_cache`, replaces existing rows for that catalog variant + grade,
  * and stores `sale_type` from the API payload. `parallel_name` on rows is taken
  * from `master_card_definitions.parallel_id` → `set_parallels`.
@@ -70,11 +70,13 @@ Deno.serve(async (req) => {
     Deno.env.get('CARDHEDGE_API_KEY')?.trim() ||
     Deno.env.get('CARDHEDGER_API_KEY')?.trim();
   if (!apiKey) {
-    return json({ error: 'CardHedge is not configured' }, 503);
+    return json({ error: 'Price guide API is not configured' }, 503);
   }
 
   let body: {
     masterVariantId?: string;
+    guidePriceCardId?: string;
+    /** @deprecated Prefer guidePriceCardId; accepted for older app builds. */
     cardhedgeId?: string;
     grade?: string;
     count?: number;
@@ -86,12 +88,15 @@ Deno.serve(async (req) => {
   }
 
   const masterVariantId = body.masterVariantId?.trim();
-  const cardhedgeId = body.cardhedgeId?.trim();
+  const guidePriceCardId =
+    (typeof body.guidePriceCardId === 'string' ? body.guidePriceCardId.trim() : '') ||
+    (typeof body.cardhedgeId === 'string' ? body.cardhedgeId.trim() : '') ||
+    '';
   const grade = normalizeGrade(body.grade ?? 'Raw');
   const count = Math.min(100, Math.max(1, Math.trunc(Number(body.count) || 40)));
 
   if (!masterVariantId) return json({ error: 'masterVariantId required' }, 400);
-  if (!cardhedgeId) return json({ error: 'cardhedgeId required' }, 400);
+  if (!guidePriceCardId) return json({ error: 'guidePriceCardId required' }, 400);
 
   const admin = createClient(supabaseUrl, serviceKey);
 
@@ -116,7 +121,7 @@ Deno.serve(async (req) => {
       'X-API-Key': apiKey,
     },
     body: JSON.stringify({
-      card_id: cardhedgeId,
+      card_id: guidePriceCardId,
       count,
       grade: chGrade,
       include_raw_prices: true,
@@ -126,7 +131,7 @@ Deno.serve(async (req) => {
 
   if (!upstream.ok) {
     const text = await upstream.text();
-    console.error('[cardhedge-grade-comps] upstream', upstream.status, text.slice(0, 2000));
+    console.error('[guide-grade-comps] upstream', upstream.status, text.slice(0, 2000));
     return json(
       { error: 'CardHedge comps request failed', status: upstream.status, details: text.slice(0, 500) },
       502,
@@ -172,7 +177,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const cacheKey = `cardhedge:${cardhedgeId}:${masterVariantId}:${grade}`;
+  const cacheKey = `guide_comps:${guidePriceCardId}:${masterVariantId}:${grade}`;
   const now = new Date().toISOString();
   await admin.from('comps_cache').upsert({
     query: cacheKey,
@@ -203,7 +208,7 @@ Deno.serve(async (req) => {
     }));
     const { error: insErr } = await admin.from('card_sold_comps').insert(rows);
     if (insErr) {
-      console.error('[cardhedge-grade-comps] insert', insErr);
+      console.error('[guide-grade-comps] insert', insErr);
       return json({ error: 'Failed to save comps', details: insErr.message }, 500);
     }
   }

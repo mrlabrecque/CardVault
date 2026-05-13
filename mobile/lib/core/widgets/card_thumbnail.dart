@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 /// List-row card image (collection, wishlist, grading, lot builder).
 ///
 /// [ConstrainedBox] keeps width/height from collapsing before the network image
-/// has intrinsic dimensions (CardHedge / CDN thumbnails).
+/// has intrinsic dimensions (CDN / slab thumbnails).
 class CardThumbnail extends StatelessWidget {
   const CardThumbnail({
     super.key,
@@ -15,7 +15,7 @@ class CardThumbnail extends StatelessWidget {
     this.borderRadius = 6,
   });
 
-  /// List rows — wide enough for CardHedge slab art.
+  /// List rows — wide enough for slab-style art.
   static const double listRowWidth = 100;
 
   final String? imageUrl;

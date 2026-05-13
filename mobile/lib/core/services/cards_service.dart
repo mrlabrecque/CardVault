@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
 import '../models/user_card.dart';
-import '../utils/cardhedge_grade_prices.dart';
+import '../utils/guide_grade_prices.dart';
 
 int? _tryParseInt(dynamic value) {
   if (value == null) return null;
@@ -76,12 +76,21 @@ class SetParallel {
 }
 
 class ReleaseRecord {
-  const ReleaseRecord({required this.id, required this.name, this.year, this.sport, this.cardsightId, this.setCount = 0, this.importedSetCount = 0});
+  const ReleaseRecord({
+    required this.id,
+    required this.name,
+    this.year,
+    this.sport,
+    this.catalogImportReleaseKey,
+    this.setCount = 0,
+    this.importedSetCount = 0,
+  });
   final String id;
   final String name;
   final int? year;
   final String? sport;
-  final String? cardsightId;
+  /// External id for the catalog import provider (matches the import column on `releases`).
+  final String? catalogImportReleaseKey;
   final int setCount;
   final int importedSetCount;
 
@@ -97,7 +106,7 @@ class ReleaseRecord {
       name:             j['name'] as String,
       year:             _tryParseInt(j['year']),
       sport:            j['sport'] as String?,
-      cardsightId:      j['cardsight_id'] as String?,
+      catalogImportReleaseKey: j['cardsight_id'] as String?,
       setCount:         setsRaw.length,
       importedSetCount: imported,
     );
@@ -107,11 +116,18 @@ class ReleaseRecord {
 }
 
 class SetRecord {
-  const SetRecord({required this.id, required this.name, this.cardCount, this.cardsightId, this.importedCount = 0});
+  const SetRecord({
+    required this.id,
+    required this.name,
+    this.cardCount,
+    this.catalogImportSetKey,
+    this.importedCount = 0,
+  });
   final String id;
   final String name;
   final int? cardCount;
-  final String? cardsightId;
+  /// External id for the catalog import provider (matches the import column on `sets`).
+  final String? catalogImportSetKey;
   final int importedCount;
 
   factory SetRecord.fromJson(Map<String, dynamic> j) {
@@ -120,7 +136,7 @@ class SetRecord {
       id:            j['id'] as String,
       name:          j['name'] as String,
       cardCount:     _tryParseInt(j['card_count']),
-      cardsightId:   j['cardsight_id'] as String?,
+      catalogImportSetKey: j['cardsight_id'] as String?,
       importedCount: defsRaw != null && defsRaw.isNotEmpty ? (_tryParseInt(defsRaw[0]['count']) ?? 0) : 0,
     );
   }
@@ -137,7 +153,7 @@ class MasterCard {
     this.isSSP = false,
     this.serialMax,
     this.imageUrl,
-    this.cardhedgeId,
+    this.guidePriceCardId,
     this.gain,
   });
   final String id;
@@ -149,9 +165,9 @@ class MasterCard {
   final bool isSSP;
   final int? serialMax;
   final String? imageUrl;
-  /// CardHedge catalog id when matched / persisted on this variant.
-  final String? cardhedgeId;
-  /// CardHedge market change (typically percent); persisted on `master_card_definitions`.
+  /// Upstream guide-price card id when matched / persisted on this variant.
+  final String? guidePriceCardId;
+  /// Market change (typically percent); persisted on `master_card_definitions`.
   final double? gain;
 
   factory MasterCard.fromJson(Map<String, dynamic> j) => MasterCard(
@@ -164,7 +180,7 @@ class MasterCard {
     isSSP: j['is_ssp'] as bool? ?? false,
     serialMax: _tryParseInt(j['serial_max']),
     imageUrl: j['image_url'] as String?,
-    cardhedgeId: (j['cardhedge_id'] as String?)?.trim().isNotEmpty == true ? j['cardhedge_id'] as String : null,
+    guidePriceCardId: (j['cardhedge_id'] as String?)?.trim().isNotEmpty == true ? j['cardhedge_id'] as String : null,
     gain: _tryParseDouble(j['gain']),
   );
 
@@ -231,8 +247,8 @@ class LazyImportResult {
   );
 }
 
-class CardSightCardResult {
-  const CardSightCardResult({
+class CatalogSearchCardResult {
+  const CatalogSearchCardResult({
     required this.id,
     required this.name,
     this.number,
@@ -249,7 +265,7 @@ class CardSightCardResult {
   final String releaseId;
   final List<String> attributes;
 
-  factory CardSightCardResult.fromJson(Map<String, dynamic> j) => CardSightCardResult(
+  factory CatalogSearchCardResult.fromJson(Map<String, dynamic> j) => CatalogSearchCardResult(
     id:        j['id'] as String,
     name:      j['name'] as String,
     number:    j['number'] as String?,
@@ -351,15 +367,15 @@ class CardsService {
       final maxFt = maxFetchedAtFromCurrentPriceRows(rows);
 
       final useSpot = spot != null && spot > 0;
-      final useCh = cardHedgeGradeMapHasAnyPrice(ch);
+      final useCh = guideGradeMapHasAnyPrice(ch);
 
       if (!useSpot && !useCh) return c;
 
       return UserCard.withResolvedCatalogTablePricing(
         c,
         catalogPriceFromCurrentPrices: useSpot ? spot : c.catalogPriceFromCurrentPrices,
-        embeddedCardHedgeGradePrices: useCh ? ch : c.embeddedCardHedgeGradePrices,
-        embeddedCardHedgePricesMaxFetchedAt: maxFt ?? c.embeddedCardHedgePricesMaxFetchedAt,
+        embeddedGuideGradePrices: useCh ? ch : c.embeddedGuideGradePrices,
+        embeddedGuideGradePricesFetchedAt: maxFt ?? c.embeddedGuideGradePricesFetchedAt,
       );
     }).toList();
   }
@@ -372,7 +388,7 @@ class CardsService {
               id, master_card_id, parallel_id, parallel_name,
               price_paid, current_value, previous_value, serial_number,
               is_graded, grader, grade_value, created_at,
-              weekly_price_check, value_refreshed_at,
+              value_refreshed_at,
               master_card_definitions (
                 id, image_url, is_auto, is_patch, is_ssp, serial_max,
                 gain, cardhedge_id, cardhedge_fetched_at,
@@ -450,7 +466,7 @@ class CardsService {
     return (data as List).map((r) => ReleaseRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  /// Lazily fetches sets for a release from CardSight and caches them in DB.
+  /// Lazily fetches sets for a release from the catalog API and caches them in DB.
   Future<List<SetRecord>> importSetsForRelease({
     required String cardsightReleaseId,
     String? releaseName,
@@ -472,7 +488,7 @@ class CardsService {
       'id':           (r as Map<String, dynamic>)['id'],
       'name':         r['name'],
       'card_count':   r['cardCount'],
-      'cardsight_id': r['cardsightId'],
+      'cardsight_id': (r as Map<String, dynamic>)['cardsightId'],
     })).toList();
   }
 
@@ -485,7 +501,7 @@ class CardsService {
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  /// Lazily imports all cards for a set from CardSight and caches them in DB.
+  /// Lazily imports all cards for a set from the catalog API and caches them in DB.
   Future<void> importCardsForSet({
     required String cardsightReleaseId,
     required String cardsightSetId,
@@ -533,7 +549,7 @@ class CardsService {
     final masterImg = (map['image_url'] as String?)?.trim();
     final checklistImg = (sc?['image_url'] as String?)?.trim();
     final coalesced = (masterImg != null && masterImg.isNotEmpty) ? masterImg : checklistImg;
-    final ch = (map['cardhedge_id'] as String?)?.trim();
+    final linkedGuidePriceId = (map['cardhedge_id'] as String?)?.trim();
     return MasterCard(
       id: map['id'] as String,
       player: sc?['player'] as String? ?? '',
@@ -544,7 +560,7 @@ class CardsService {
       isSSP: map['is_ssp'] as bool? ?? false,
       serialMax: _tryParseInt(map['serial_max']),
       imageUrl: (coalesced != null && coalesced.isNotEmpty) ? coalesced : null,
-      cardhedgeId: (ch != null && ch.isNotEmpty) ? ch : null,
+      guidePriceCardId: (linkedGuidePriceId != null && linkedGuidePriceId.isNotEmpty) ? linkedGuidePriceId : null,
       gain: _tryParseDouble(map['gain']),
     );
   }
@@ -607,13 +623,6 @@ class CardsService {
     return (release: release, set: setRecord);
   }
 
-  Future<void> setWeeklyPriceCheck(String cardId, bool enabled) async {
-    await _supabase
-        .from('user_cards')
-        .update({'weekly_price_check': enabled})
-        .eq('id', cardId);
-  }
-
   Future<List<CatalogRelease>> searchCatalogReleases(String query, {int? year, String? segment}) async {
     final body = <String, dynamic>{};
     if (query.isNotEmpty) body['query'] = query;
@@ -635,8 +644,8 @@ class CardsService {
     return list.map((r) => CatalogSetSummary.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  /// Search cards within a release cross-set via CardSight API (with retry on rate limit)
-  Future<List<CardSightCardResult>> searchCardsInRelease(
+  /// Search cards within a release cross-set via catalog API (with retry on rate limit)
+  Future<List<CatalogSearchCardResult>> searchCardsInRelease(
     String cardsightReleaseId,
     String name, {
     int take = 20,
@@ -651,7 +660,7 @@ class CardsService {
       if (res.status == 200) {
         final data = res.data as Map<String, dynamic>? ?? {};
         final cards = data['cards'] as List? ?? [];
-        return cards.map((c) => CardSightCardResult.fromJson(c as Map<String, dynamic>)).toList();
+        return cards.map((c) => CatalogSearchCardResult.fromJson(c as Map<String, dynamic>)).toList();
       }
 
       if (res.status == 429 && attempt < maxRetries - 1) {
@@ -665,10 +674,10 @@ class CardsService {
     return [];
   }
 
-  /// Resolve a CardSight card: lazy-import set + parallels, then find or import the card
+  /// Resolve a catalog card: lazy-import set + parallels, then find or import the card
   Future<({String masterCardId, String setId, List<SetParallel> parallels})>
       resolveCardFromCatalog({
-    required CardSightCardResult card,
+    required CatalogSearchCardResult card,
     required String releaseName,
     required int releaseYear,
     String? releaseSegmentId,
@@ -684,7 +693,7 @@ class CardsService {
     final setId = importResult.setId;
     final parallels = importResult.parallels;
 
-    // Step 2: Check if card already exists in DB (set_cards by CardSight id)
+    // Step 2: Check if card already exists in DB (set_cards by external catalog card id)
     final existingSc = await _supabase
         .from('set_cards')
         .select('id')
@@ -953,7 +962,7 @@ class CardsService {
               id: setMap['id'] as String,
               name: setMap['name'] as String,
               cardCount: _tryParseInt(setMap['card_count']),
-              cardsightId: setMap['cardsight_id'] as String?,
+              catalogImportSetKey: setMap['cardsight_id'] as String?,
             );
             sets.add((set, release));
           }
@@ -1006,7 +1015,7 @@ class CardsService {
                   id: setMap['id'] as String,
                   name: setMap['name'] as String,
                   cardCount: _tryParseInt(setMap['card_count']),
-                  cardsightId: setMap['cardsight_id'] as String?,
+                  catalogImportSetKey: setMap['cardsight_id'] as String?,
                 );
                 cards.add((card, set, release));
               }
@@ -1084,9 +1093,3 @@ final cardStacksProvider = Provider<AsyncValue<List<CardStack>>>((ref) {
   return ref.watch(userCardsProvider).whenData(CardStack.fromCards);
 });
 
-/// IDs of the top 50 cards by derived display value — auto-refreshed daily uses these.
-final dailyTierCardIdsProvider = Provider<Set<String>>((ref) {
-  final cards = ref.watch(userCardsProvider).value ?? [];
-  final sorted = [...cards]..sort((a, b) => (b.displayValue ?? 0).compareTo(a.displayValue ?? 0));
-  return sorted.take(50).map((c) => c.id).toSet();
-});

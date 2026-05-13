@@ -13,22 +13,22 @@ import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 
-// CardSight detection result model
-class CardSightDetection {
+// Catalog detection result model
+class ImageScanMatchResult {
   final String confidence; // High, Medium, Low
-  final CardSightCard card;
+  final ScannedCatalogCard card;
   final GradingInfo? grading;
 
-  CardSightDetection({
+  ImageScanMatchResult({
     required this.confidence,
     required this.card,
     this.grading,
   });
 
-  factory CardSightDetection.fromJson(Map<String, dynamic> json) {
-    return CardSightDetection(
+  factory ImageScanMatchResult.fromJson(Map<String, dynamic> json) {
+    return ImageScanMatchResult(
       confidence: json['confidence'] ?? 'Low',
-      card: CardSightCard.fromJson(json['card'] ?? {}),
+      card: ScannedCatalogCard.fromJson(json['card'] ?? {}),
       grading: json['grading'] != null
           ? GradingInfo.fromJson(json['grading'])
           : null,
@@ -36,7 +36,7 @@ class CardSightDetection {
   }
 }
 
-class CardSightCard {
+class ScannedCatalogCard {
   final String? id; // exact match only
   final String? name; // player name (exact match only)
   final String? number; // card number (exact match only)
@@ -49,7 +49,7 @@ class CardSightCard {
   final String? segmentId;
   final ParallelInfo? parallel;
 
-  CardSightCard({
+  ScannedCatalogCard({
     this.id,
     this.name,
     this.number,
@@ -63,8 +63,8 @@ class CardSightCard {
     this.parallel,
   });
 
-  factory CardSightCard.fromJson(Map<String, dynamic> json) {
-    return CardSightCard(
+  factory ScannedCatalogCard.fromJson(Map<String, dynamic> json) {
+    return ScannedCatalogCard(
       id: json['id'],
       name: json['name'],
       number: json['number'],
@@ -140,7 +140,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   _ScanState _state = _ScanState.sportPicker;
   String _selectedSport = '';
-  CardSightDetection? _detection;
+  ImageScanMatchResult? _detection;
   String? _errorMessage;
 
   Uint8List? _encodeScanJpeg(
@@ -251,7 +251,7 @@ class _ScanScreenState extends State<ScanScreen> {
         return;
       }
 
-      final detection = CardSightDetection.fromJson(detections[0]);
+      final detection = ImageScanMatchResult.fromJson(detections[0]);
 
       if (mounted) {
         setState(() {

@@ -30,7 +30,7 @@ CatalogScanEntry? _catalogScanEntryFromExtra(Object? extra) {
   if (extra is! Map) return null;
   final detection = extra['detection'];
   final sportRaw = extra['sport'];
-  if (detection is! CardSightDetection) return null;
+  if (detection is! ImageScanMatchResult) return null;
   final sport = sportRaw is String ? sportRaw : '';
   return CatalogScanEntry(detection: detection, sport: sport);
 }

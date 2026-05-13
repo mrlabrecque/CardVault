@@ -103,15 +103,15 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     return (price / qty * 100).roundToDouble() / 100;
   }
 
-  // ── Card search (cross-release via CardSight) ────────────────
+  // ── Card search (cross-release catalog API) ────────────────
   final _cardCtrl = TextEditingController();
-  List<CardSightCardResult> _cardResults = [];
+  List<CatalogSearchCardResult> _cardResults = [];
   bool _loadingCards = false;
   bool _resolvingCard = false;
 
   // ── Resolved card (after resolveCardFromCatalog) ──────────────
   MasterCard? _selectedCard;
-  CardSightCardResult? _selectedCsCard;
+  CatalogSearchCardResult? _selectedCsCard;
   String? _selectedSetId;
   List<SetParallel> _parallels = [];
 
@@ -184,19 +184,19 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
       return;
     }
     final release = _selectedRelease;
-    if (release == null || release.cardsightId == null) return;
+    if (release == null || release.catalogImportReleaseKey == null) return;
 
     setState(() { _loadingCards = true; });
     try {
       final svc = ref.read(cardsServiceProvider);
-      final results = await svc.searchCardsInRelease(release.cardsightId!, q, take: 20);
+      final results = await svc.searchCardsInRelease(release.catalogImportReleaseKey!, q, take: 20);
       setState(() { _cardResults = results; _loadingCards = false; });
     } catch (_) {
       setState(() { _loadingCards = false; });
     }
   }
 
-  Future<void> _selectCsCard(CardSightCardResult csCard) async {
+  Future<void> _selectCsCard(CatalogSearchCardResult csCard) async {
     setState(() { _resolvingCard = true; _cardResults = []; });
     _cardCtrl.text = csCard.number != null ? '${csCard.name} #${csCard.number}' : csCard.name;
 
@@ -232,7 +232,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
         }
         _resolvingCard = false;
       });
-      // Lazily fetch card image from CardSight
+      // Lazily fetch card image from catalog
       ref.read(compsServiceProvider).fetchCardImage(result.masterCardId);
     } catch (_) {
       if (!mounted) return;
@@ -548,19 +548,19 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                         placeholder: 'Player or card #...',
                         cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(
                           context,
-                          enabled: _selectedRelease?.cardsightId != null,
+                          enabled: _selectedRelease?.catalogImportReleaseKey != null,
                         ),
                         decoration: InputDecoration(
                           hintText: 'Player or card #...',
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         ),
-                        enabled: _selectedRelease?.cardsightId != null,
+                        enabled: _selectedRelease?.catalogImportReleaseKey != null,
                         onChanged: (q) => setState(() => _cardResults = []),
                       ),
                     ),
                     const SizedBox(width: 8),
                     GestureDetector(
-                      onTap: _selectedRelease?.cardsightId != null && _cardCtrl.text.isNotEmpty && !_loadingCards
+                      onTap: _selectedRelease?.catalogImportReleaseKey != null && _cardCtrl.text.isNotEmpty && !_loadingCards
                           ? () => _searchCards(_cardCtrl.text)
                           : null,
                       child: AnimatedContainer(
@@ -584,11 +584,11 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                     ),
                   ],
                 ),
-                if (_selectedRelease?.cardsightId == null)
+                if (_selectedRelease?.catalogImportReleaseKey == null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'This release is not linked to CardSight',
+                      'This release is not linked to the external catalog',
                       style: TextStyle(fontSize: 12, color: Colors.red.shade700),
                     ),
                   ),

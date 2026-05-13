@@ -4,10 +4,10 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/models/cardhedge_match.dart';
+import '../../core/models/guide_catalog_match.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
-import '../../core/utils/cardhedge_grade_prices.dart';
+import '../../core/utils/guide_grade_prices.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/card_fan_loader.dart';
@@ -91,24 +91,24 @@ class _MasterCardDetailScreenState
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _heroKey = GlobalKey();
 
-  /// CardHedge: load linked `current_prices` from DB, or run `cardhedge-search-cards`
-  /// when `cardhedge_id` is missing or prices are not yet materialized.
-  bool _cardHedgeLoading = true;
-  CardHedgeMatchPayload? _cardHedgeResult;
+  /// Loads linked `current_prices` from DB, or runs catalog search when the variant
+  /// has no linked guide-price id or prices are not yet materialized.
+  bool _guidePricesLoading = true;
+  GuideCatalogMatchPayload? _guideMatchResult;
 
   /// Grade prices from `current_prices` when the variant is already linked (no search).
   Map<String, double?>? _linkedGradePricesFromDb;
 
-  /// When CardHedge search returns multiple rows for the same card #, user can
+  /// When catalog search returns multiple rows for the same card #, user can
   /// pick the correct parallel (e.g. White Sparkle) here.
-  CardHedgeMatchedCard? _cardHedgeRowPick;
+  GuideCatalogMatchedRow? _guideMatchRowPick;
 
   /// Scroll offset (px) at which the hero gradient is fully behind the AppBar.
   /// Re-measured from the rendered hero on every frame.
   double _heroSwitchThreshold = 320;
   bool _scrolledPastHero = false;
 
-  /// When CardHedge persist writes `image_url`, refetch so the hero updates.
+  /// When persist writes `image_url`, refetch so the hero updates.
   MasterCard? _refreshedMaster;
 
   @override
@@ -116,7 +116,7 @@ class _MasterCardDetailScreenState
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_syncCardHedgeForMaster());
+      if (mounted) unawaited(_syncGuidePricesForMaster());
     });
   }
 
@@ -132,33 +132,33 @@ class _MasterCardDetailScreenState
         oldWidget.year != widget.year ||
         oldWidget.sport != widget.sport) {
       setState(() {
-        _cardHedgeLoading = true;
-        _cardHedgeResult = null;
+        _guidePricesLoading = true;
+        _guideMatchResult = null;
         _linkedGradePricesFromDb = null;
-        _cardHedgeRowPick = null;
+        _guideMatchRowPick = null;
         _refreshedMaster = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_syncCardHedgeForMaster());
+        if (mounted) unawaited(_syncGuidePricesForMaster());
       });
     }
   }
 
-  Future<void> _syncCardHedgeForMaster() async {
+  Future<void> _syncGuidePricesForMaster() async {
     final baseId = widget.masterCard.id;
     final working = _refreshedMaster ?? widget.masterCard;
-    final existingCh = working.cardhedgeId?.trim();
+    final linkedGuideId = working.guidePriceCardId?.trim();
 
-    if (existingCh != null && existingCh.isNotEmpty) {
+    if (linkedGuideId != null && linkedGuideId.isNotEmpty) {
       final dbPrices = await ref.read(compsServiceProvider).getMasterCardCurrentPrices(baseId);
       if (!mounted) return;
       final hasPrices = dbPrices.values.any((v) => v != null && v > 0);
       if (hasPrices) {
         setState(() {
-          _cardHedgeLoading = false;
+          _guidePricesLoading = false;
           _linkedGradePricesFromDb = dbPrices;
-          _cardHedgeResult = null;
-          _cardHedgeRowPick = null;
+          _guideMatchResult = null;
+          _guideMatchRowPick = null;
         });
         return;
       }
@@ -166,11 +166,11 @@ class _MasterCardDetailScreenState
 
     if (!mounted) return;
     setState(() {
-      _cardHedgeLoading = true;
+      _guidePricesLoading = true;
       _linkedGradePricesFromDb = null;
     });
 
-    final payload = await ref.read(compsServiceProvider).searchCardHedgeCatalog(
+    final payload = await ref.read(compsServiceProvider).searchGuidePriceCatalog(
           player: widget.masterCard.player,
           year: widget.year,
           releaseName: widget.releaseName,
@@ -191,18 +191,18 @@ class _MasterCardDetailScreenState
 
     if (!mounted) return;
     setState(() {
-      _cardHedgeLoading = false;
+      _guidePricesLoading = false;
       _linkedGradePricesFromDb = null;
-      _cardHedgeResult = payload;
-      _cardHedgeRowPick = null;
+      _guideMatchResult = payload;
+      _guideMatchRowPick = null;
       if (refreshed != null) _refreshedMaster = refreshed;
     });
   }
 
-  Future<void> _persistCardHedgeRow(CardHedgeMatchedCard m) async {
-    final fresh = await ref.read(compsServiceProvider).persistCardHedgeCatalogMatch(
+  Future<void> _persistGuideCatalogRow(GuideCatalogMatchedRow m) async {
+    final fresh = await ref.read(compsServiceProvider).persistGuidePriceCatalogMatch(
           masterVariantId: widget.masterCard.id,
-          cardhedgeId: m.cardId,
+          guidePriceCardId: m.cardId,
           imageUrl: m.image,
           prices: m.prices,
           sales7d: m.sales7d,
@@ -218,19 +218,19 @@ class _MasterCardDetailScreenState
     });
   }
 
-  CardHedgeMatchedCard? get _effectiveCardHedgeRow {
-    final r = _cardHedgeResult;
+  GuideCatalogMatchedRow? get _effectiveGuideMatchRow {
+    final r = _guideMatchResult;
     if (r == null || !r.matched) return null;
-    return _cardHedgeRowPick ?? r.match;
+    return _guideMatchRowPick ?? r.match;
   }
 
-  List<CardHedgeMatchedCard> _cardHedgeRowsToPick() {
-    final r = _cardHedgeResult;
+  List<GuideCatalogMatchedRow> _guideMatchRowsToPick() {
+    final r = _guideMatchResult;
     if (r == null || !r.matched || r.match == null) return const [];
     final m = r.match!;
     final alts = r.alternateMatches ?? const [];
     if (alts.isEmpty) return const [];
-    final out = <CardHedgeMatchedCard>[m];
+    final out = <GuideCatalogMatchedRow>[m];
     final seen = <String?>{m.cardId};
     for (final a in alts) {
       if (a.cardId != null && !seen.contains(a.cardId)) {
@@ -241,10 +241,10 @@ class _MasterCardDetailScreenState
     return out.length > 1 ? out : const [];
   }
 
-  double? _parseCardHedgePrice(dynamic raw) => parseCardHedgePriceField(raw);
+  double? _parseGuidePrice(dynamic raw) => parseGuidePriceField(raw);
 
-  Map<String, double?> _gradeAveragesFromCard(CardHedgeMatchedCard? match) {
-    final out = emptyCardHedgeGradePriceMap();
+  Map<String, double?> _gradeAveragesFromCard(GuideCatalogMatchedRow? match) {
+    final out = emptyGuideGradePriceMap();
     if (match == null) return out;
     final prices = match.prices;
     if (prices == null || prices.isEmpty) return out;
@@ -252,9 +252,9 @@ class _MasterCardDetailScreenState
       final gradeRaw = (row['grade'] ?? row['Grade'] ?? row['label'] ?? row['Label'] ?? row['name'] ?? row['Name'])
               ?.toString() ??
           '';
-      final key = normalizeCardHedgeDisplayGrade(gradeRaw);
+      final key = normalizeGuideDisplayGrade(gradeRaw);
       if (key == null) continue;
-      final parsed = _parseCardHedgePrice(
+      final parsed = _parseGuidePrice(
         row['price'] ?? row['Price'] ?? row['value'] ?? row['Value'] ?? row['avg'] ?? row['Avg'],
       );
       if (parsed == null || parsed <= 0) continue;
@@ -306,14 +306,14 @@ class _MasterCardDetailScreenState
 
     final masterCard = _refreshedMaster ?? widget.masterCard;
     final parallel = widget.parallelName;
-    final hedgeRow = _cardHedgeResult?.matched == true ? _effectiveCardHedgeRow : null;
-    // Hero uses DB/Storage URLs only — CardHedge CDN URLs were causing an extra
+    final guideMatchRow = _guideMatchResult?.matched == true ? _effectiveGuideMatchRow : null;
+    // Hero uses DB/Storage URLs only — third-party CDN URLs were causing an extra
     // swap (CDN → Storage) after persist.
     final heroTrimmed = masterCard.imageUrl?.trim();
     final heroImageUrl =
         (heroTrimmed != null && heroTrimmed.isNotEmpty) ? heroTrimmed : null;
 
-    final cardHedgeGradeAverages = _linkedGradePricesFromDb ?? _gradeAveragesFromCard(hedgeRow);
+    final guideGradePriceAverages = _linkedGradePricesFromDb ?? _gradeAveragesFromCard(guideMatchRow);
 
     final userCardsAsync = ref.watch(userCardsProvider);
     final copyCount = userCardsAsync.whenData((all) {
@@ -340,7 +340,7 @@ class _MasterCardDetailScreenState
     }).value ?? false;
 
     final overlayLoading =
-        _cardHedgeLoading || userCardsAsync.isLoading || wishlistAsync.isLoading;
+        _guidePricesLoading || userCardsAsync.isLoading || wishlistAsync.isLoading;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -451,12 +451,12 @@ class _MasterCardDetailScreenState
                       ],
                     ),
                     const SizedBox(height: 24),
-                    if (!_cardHedgeLoading &&
-                        _cardHedgeResult != null &&
-                        _cardHedgeResult!.matched &&
-                        _cardHedgeRowsToPick().length > 1) ...[
+                    if (!_guidePricesLoading &&
+                        _guideMatchResult != null &&
+                        _guideMatchResult!.matched &&
+                        _guideMatchRowsToPick().length > 1) ...[
                       Text(
-                        'Parallel (from CardHedge search)',
+                        'Parallel (from catalog match)',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -465,8 +465,8 @@ class _MasterCardDetailScreenState
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _cardHedgeRowsToPick().map((c) {
-                          final selected = _effectiveCardHedgeRow?.cardId == c.cardId;
+                        children: _guideMatchRowsToPick().map((c) {
+                          final selected = _effectiveGuideMatchRow?.cardId == c.cardId;
                           final raw = (c.variant ?? c.description ?? 'Card').trim();
                           final short =
                               raw.length > 44 ? '${raw.substring(0, 44)}…' : raw;
@@ -474,8 +474,8 @@ class _MasterCardDetailScreenState
                             label: Text(short),
                             selected: selected,
                             onSelected: (_) {
-                              setState(() => _cardHedgeRowPick = c);
-                              _persistCardHedgeRow(c);
+                              setState(() => _guideMatchRowPick = c);
+                              _persistGuideCatalogRow(c);
                             },
                           );
                         }).toList(),
@@ -486,8 +486,8 @@ class _MasterCardDetailScreenState
                       masterCardId: masterCard.id,
                       initialGrade: 'Raw',
                       segmentColor: colors.primary,
-                      cardhedgeId: masterCard.cardhedgeId ?? _effectiveCardHedgeRow?.cardId,
-                      cardHedgeGradeAverages: cardHedgeGradeAverages,
+                      guidePriceCardId: masterCard.guidePriceCardId ?? _effectiveGuideMatchRow?.cardId,
+                      guideGradePriceAverages: guideGradePriceAverages,
                       skipScraperSoldComps: true,
                       showDbSoldCompsWhenAvailable: true,
                       titleGain: masterCard.gain,

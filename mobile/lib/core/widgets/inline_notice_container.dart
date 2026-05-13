@@ -4,10 +4,9 @@ import 'adaptive_list_card.dart';
 
 /// Inline icon + body callout for detail screens.
 ///
-/// Visual chrome matches the in-detail "Auto-refreshed daily" badge: an
-/// [AdaptiveListCard] with 12pt corners, **14×12** inner padding, and a 20pt
-/// leading icon followed by a 10pt gap. Pass [highlightBorderColor] to give
-/// the row an emphasized outline (e.g. primary tint for active states).
+/// Visual chrome: an [AdaptiveListCard] with 12pt corners, **14×12** inner
+/// padding, and a 20pt leading icon followed by a 10pt gap. Pass
+/// [highlightBorderColor] for an emphasized outline (e.g. primary tint).
 class InlineNoticeContainer extends StatelessWidget {
   const InlineNoticeContainer({
     super.key,
@@ -16,12 +15,12 @@ class InlineNoticeContainer extends StatelessWidget {
     this.highlightBorderColor,
   });
 
-  /// Leading icon. Use a 20pt [Icon] for parity with `_DailyRefreshBadge`.
+  /// Leading icon. Use a 20pt [Icon] for parity with other detail notices.
   final Widget icon;
 
   /// Body content. A single [Text] renders as a one-line notice; a
-  /// `Column(crossAxisAlignment: start)` of title + supporting copy mirrors
-  /// the daily-refresh badge's title/subtitle layout.
+  /// `Column(crossAxisAlignment: start)` of title + supporting copy works
+  /// for multi-line callouts.
   final Widget child;
   final Color? highlightBorderColor;
 

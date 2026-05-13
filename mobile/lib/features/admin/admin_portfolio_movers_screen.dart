@@ -29,10 +29,10 @@ class AdminPortfolioMoversScreen extends ConsumerWidget {
               border: Border.all(color: const Color(0xFFBFDBFE)),
             ),
             child: const Text(
-              'Tools → Market Data has two tabs. Top movers calls Card Hedge GET `/v1/cards/top-movers` '
-              'via `cardhedge-top-movers` (user JWT). One uncategorized fetch; the app filters to Baseball, '
+              'Tools → Market Data has two tabs. Top movers calls the upstream top-movers endpoint '
+              'through a Supabase Edge function (user JWT). One uncategorized fetch; the app filters to Baseball, '
               'Basketball, Football, Soccer, and Hockey and applies sport chips client-side. '
-              'Deploy that function and set `CARDHEDGE_API_KEY` in Edge secrets.',
+              'Deploy the function and set the pricing provider API key in Edge secrets.',
               style: TextStyle(
                 color: Color(0xFF1E3A8A),
                 fontSize: 13,

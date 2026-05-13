@@ -1,5 +1,5 @@
-class CardHedgeMatchPayload {
-  const CardHedgeMatchPayload({
+class GuideCatalogMatchPayload {
+  const GuideCatalogMatchPayload({
     required this.matched,
     required this.minConfidence,
     this.reason,
@@ -29,20 +29,20 @@ class CardHedgeMatchPayload {
   final String? resolvedVia;
   final String? searchSet;
   final Map<String, dynamic>? searchMeta;
-  final List<CardHedgeMatchedCard>? alternateMatches;
-  final CardHedgeMatchedCard? match;
+  final List<GuideCatalogMatchedRow>? alternateMatches;
+  final GuideCatalogMatchedRow? match;
   final String? errorMessage;
 
-  /// Present when catalog search was invoked with persist id: Edge wrote CardHedge
-  /// to Postgres and returned this row (keys match `MasterCard.fromJson` in `cards_service`).
+  /// Present when catalog search was invoked with persist id: Edge persisted to Postgres
+  /// and returned this row (keys match `MasterCard.fromJson` in `cards_service`).
   final Map<String, dynamic>? persistedMaster;
 
-  /// Edge `parallel_debug`: CardHedge rows (number + variant + card_id) after filters.
+  /// Edge `parallel_debug`: candidate rows (number + variant + card_id) after filters.
   final Map<String, dynamic>? parallelDebug;
 
   bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
 
-  factory CardHedgeMatchPayload.fromJson(Map<String, dynamic> json) {
+  factory GuideCatalogMatchPayload.fromJson(Map<String, dynamic> json) {
     final matched = json['matched'] == true;
     final minConf = (json['minConfidence'] as num?)?.toDouble() ?? 0.9;
     Map<String, dynamic>? matchMap;
@@ -50,12 +50,12 @@ class CardHedgeMatchPayload {
     if (raw is Map) {
       matchMap = Map<String, dynamic>.from(raw);
     }
-    List<CardHedgeMatchedCard>? alternates;
+    List<GuideCatalogMatchedRow>? alternates;
     final altRaw = json['alternate_matches'];
     if (altRaw is List) {
       alternates = altRaw
           .whereType<Map>()
-          .map((e) => CardHedgeMatchedCard.fromJson(Map<String, dynamic>.from(e)))
+          .map((e) => GuideCatalogMatchedRow.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     }
     Map<String, dynamic>? persisted;
@@ -65,7 +65,7 @@ class CardHedgeMatchPayload {
     final pd = json['parallel_debug'];
     if (pd is Map) parallelDebug = Map<String, dynamic>.from(pd);
 
-    return CardHedgeMatchPayload(
+    return GuideCatalogMatchPayload(
       matched: matched,
       minConfidence: minConf,
       reason: json['reason'] as String?,
@@ -80,15 +80,15 @@ class CardHedgeMatchPayload {
           ? Map<String, dynamic>.from(json['search_meta'] as Map)
           : null,
       alternateMatches: alternates,
-      match: matchMap != null ? CardHedgeMatchedCard.fromJson(matchMap) : null,
+      match: matchMap != null ? GuideCatalogMatchedRow.fromJson(matchMap) : null,
       errorMessage: json['error'] as String?,
       persistedMaster: persisted,
       parallelDebug: parallelDebug,
     );
   }
 
-  factory CardHedgeMatchPayload.error(String message) {
-    return CardHedgeMatchPayload(
+  factory GuideCatalogMatchPayload.error(String message) {
+    return GuideCatalogMatchPayload(
       matched: false,
       minConfidence: 0.9,
       errorMessage: message,
@@ -97,8 +97,8 @@ class CardHedgeMatchPayload {
   }
 }
 
-class CardHedgeMatchedCard {
-  const CardHedgeMatchedCard({
+class GuideCatalogMatchedRow {
+  const GuideCatalogMatchedRow({
     this.cardId,
     this.description,
     this.player,
@@ -124,7 +124,7 @@ class CardHedgeMatchedCard {
   final String? image;
   final List<Map<String, dynamic>>? prices;
   final String? reasoning;
-  /// CardHedge market fields (from card-search row; may be null if API omits).
+  /// Market fields from card-search row (may be null if API omits).
   final int? sales7d;
   final int? sales30d;
   final double? gain;
@@ -152,7 +152,7 @@ class CardHedgeMatchedCard {
     return null;
   }
 
-  factory CardHedgeMatchedCard.fromJson(Map<String, dynamic> json) {
+  factory GuideCatalogMatchedRow.fromJson(Map<String, dynamic> json) {
     List<Map<String, dynamic>>? prices;
     final p = json['prices'];
     if (p is List) {
@@ -161,7 +161,7 @@ class CardHedgeMatchedCard {
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
     }
-    return CardHedgeMatchedCard(
+    return GuideCatalogMatchedRow(
       cardId: json['card_id'] as String?,
       description: json['description'] as String?,
       player: json['player'] as String?,

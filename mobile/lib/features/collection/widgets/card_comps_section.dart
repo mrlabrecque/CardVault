@@ -20,16 +20,16 @@ class CardCompsSection extends ConsumerStatefulWidget {
     this.initialGrade = 'Raw',
     this.refreshVersion = 0,
     this.externalLoading = false,
-    /// When true (CardHedge grade flow): no duplicate grade pills, no scraper loading
+    /// When true (embedded guide sold-comps): no duplicate grade pills, no scraper loading
     /// copy, no auto Bright Data refresh when the table is empty.
-    this.embeddedCardHedgeComps = false,
+    this.embeddedGuideSoldComps = false,
   });
 
   final String masterCardId;
   final String initialGrade;
   final int refreshVersion;
   final bool externalLoading;
-  final bool embeddedCardHedgeComps;
+  final bool embeddedGuideSoldComps;
 
   @override
   ConsumerState<CardCompsSection> createState() => _CardCompsSectionState();
@@ -48,7 +48,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   late String _selectedGrade = widget.initialGrade;
   late int _selectedDays = 0; // 0 = all, 7 = 7 days, 30 = 30 days
   bool _fetchInProgress = false;
-  /// When [refreshVersion] bumps while a fetch is in flight (e.g. CardHedge edge
+  /// When [refreshVersion] bumps while a fetch is in flight (e.g. upstream edge
   /// finishes after the first empty read), the follow-up [_fetchComps] must not
   /// be dropped — otherwise the UI stays empty forever.
   bool _compsFetchQueued = false;
@@ -96,7 +96,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   }
 
   void _syncLoadingTicker() {
-    if (widget.embeddedCardHedgeComps || !_isRefreshingUi) {
+    if (widget.embeddedGuideSoldComps || !_isRefreshingUi) {
       _loadingStatusTimer?.cancel();
       _loadingStatusTimer = null;
       _loadingStatusIndex = 0;
@@ -127,7 +127,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       if (comps.isEmpty &&
           !_autoRefreshAttempted &&
           !widget.externalLoading &&
-          !widget.embeddedCardHedgeComps) {
+          !widget.embeddedGuideSoldComps) {
         _autoRefreshAttempted = true;
         await ref.read(compsServiceProvider).refreshMasterCardComps(
               widget.masterCardId,
@@ -231,7 +231,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    if (widget.embeddedCardHedgeComps && _loading) {
+    if (widget.embeddedGuideSoldComps && _loading) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 4, vertical: 24),
         child: Center(child: CardFanLoader(size: 72)),
@@ -239,7 +239,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
 
     if (_isRefreshingUi && _allComps.isEmpty) {
-      if (widget.embeddedCardHedgeComps) {
+      if (widget.embeddedGuideSoldComps) {
         return const Padding(
           padding: EdgeInsets.symmetric(horizontal: 4, vertical: 24),
           child: Center(child: CardFanLoader(size: 72)),
@@ -281,7 +281,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }
 
     if (_allComps.isEmpty) {
-      if (widget.embeddedCardHedgeComps) {
+      if (widget.embeddedGuideSoldComps) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           decoration: BoxDecoration(
@@ -295,7 +295,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'No CardHedge sales returned for $_selectedGrade.',
+                  'No guide sales returned for $_selectedGrade.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.onSurface.withValues(alpha: 0.72),
                         height: 1.35,
@@ -350,7 +350,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_isRefreshingUi && !widget.embeddedCardHedgeComps)
+        if (_isRefreshingUi && !widget.embeddedGuideSoldComps)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Center(
@@ -401,8 +401,8 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           ),
         ),
 
-        // Grade pills (hidden when parent owns grade selection, e.g. CardHedge)
-        if (!widget.embeddedCardHedgeComps)
+        // Grade pills (hidden when parent owns grade selection, e.g. embedded guide path)
+        if (!widget.embeddedGuideSoldComps)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -477,8 +477,8 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                       ),
                 ),
                 Text(
-                  widget.embeddedCardHedgeComps
-                      ? 'No CardHedge sales in the selected date range at $_selectedGrade.'
+                  widget.embeddedGuideSoldComps
+                      ? 'No guide sales in the selected date range at $_selectedGrade.'
                       : 'No recent eBay sales found at $_selectedGrade grade.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.onSurface.withValues(alpha: 0.60),

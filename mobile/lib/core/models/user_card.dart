@@ -1,4 +1,4 @@
-import '../utils/cardhedge_grade_prices.dart';
+import '../utils/guide_grade_prices.dart';
 
 int? _tryParseInt(dynamic value) {
   if (value == null) return null;
@@ -75,18 +75,17 @@ class UserCard {
   final String? imageUrl;
   final DateTime? createdAt;
   final int? setCardCount;
-  final bool weeklyPriceCheck;
   final DateTime? valueRefreshedAt;
 
   /// From `current_prices` for [masterCardId], row whose `grade` matches this copy.
   final double? catalogPriceFromCurrentPrices;
 
-  /// From `master_card_definitions` embed (CardHedge grade rows).
-  final Map<String, double?>? embeddedCardHedgeGradePrices;
-  final DateTime? embeddedCardHedgePricesMaxFetchedAt;
+  /// From `master_card_definitions` embed (guide price grade rows).
+  final Map<String, double?>? embeddedGuideGradePrices;
+  final DateTime? embeddedGuideGradePricesFetchedAt;
   final double? masterDefinitionGain;
-  final String? embeddedMasterCardhedgeId;
-  final DateTime? embeddedMasterCardhedgeFetchedAt;
+  final String? embeddedMasterGuideCardId;
+  final DateTime? embeddedMasterGuideCardFetchedAt;
 
   const UserCard({
     required this.id,
@@ -116,14 +115,13 @@ class UserCard {
     this.imageUrl,
     this.createdAt,
     this.setCardCount,
-    this.weeklyPriceCheck = false,
     this.valueRefreshedAt,
     this.catalogPriceFromCurrentPrices,
-    this.embeddedCardHedgeGradePrices,
-    this.embeddedCardHedgePricesMaxFetchedAt,
+    this.embeddedGuideGradePrices,
+    this.embeddedGuideGradePricesFetchedAt,
     this.masterDefinitionGain,
-    this.embeddedMasterCardhedgeId,
-    this.embeddedMasterCardhedgeFetchedAt,
+    this.embeddedMasterGuideCardId,
+    this.embeddedMasterGuideCardFetchedAt,
   });
 
   factory UserCard.fromJson(Map<String, dynamic> json) {
@@ -162,8 +160,8 @@ class UserCard {
     DateTime? chMaxFetched;
     double? catalogSpot;
     double? masterGain;
-    String? cardhedgeId;
-    DateTime? cardhedgeFetchedAt;
+    String? guideCardId;
+    DateTime? guideCardFetchedAt;
     if (master != null) {
       final cpList = master['current_prices'];
       if (cpList is List) {
@@ -177,9 +175,9 @@ class UserCard {
         );
       }
       masterGain = _tryParseDouble(master['gain']);
-      cardhedgeId = _tryParseString(master['cardhedge_id']);
+      guideCardId = _tryParseString(master['cardhedge_id']);
       if (master['cardhedge_fetched_at'] != null) {
-        cardhedgeFetchedAt = DateTime.tryParse(master['cardhedge_fetched_at'].toString());
+        guideCardFetchedAt = DateTime.tryParse(master['cardhedge_fetched_at'].toString());
       }
     }
 
@@ -215,14 +213,13 @@ class UserCard {
           ? master!['image_url'] as String?
           : setData?['image_url'] as String?,
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
-      weeklyPriceCheck: json['weekly_price_check'] as bool? ?? false,
       valueRefreshedAt: json['value_refreshed_at'] != null ? DateTime.tryParse(json['value_refreshed_at'] as String) : null,
       catalogPriceFromCurrentPrices: catalogSpot,
-      embeddedCardHedgeGradePrices: chPrices,
-      embeddedCardHedgePricesMaxFetchedAt: chMaxFetched,
+      embeddedGuideGradePrices: chPrices,
+      embeddedGuideGradePricesFetchedAt: chMaxFetched,
       masterDefinitionGain: masterGain,
-      embeddedMasterCardhedgeId: cardhedgeId,
-      embeddedMasterCardhedgeFetchedAt: cardhedgeFetchedAt,
+      embeddedMasterGuideCardId: guideCardId,
+      embeddedMasterGuideCardFetchedAt: guideCardFetchedAt,
     );
   }
 
@@ -230,8 +227,8 @@ class UserCard {
   factory UserCard.withResolvedCatalogTablePricing(
     UserCard base, {
     required double? catalogPriceFromCurrentPrices,
-    required Map<String, double?>? embeddedCardHedgeGradePrices,
-    required DateTime? embeddedCardHedgePricesMaxFetchedAt,
+    required Map<String, double?>? embeddedGuideGradePrices,
+    required DateTime? embeddedGuideGradePricesFetchedAt,
   }) {
     return UserCard(
       id: base.id,
@@ -261,22 +258,21 @@ class UserCard {
       imageUrl: base.imageUrl,
       createdAt: base.createdAt,
       setCardCount: base.setCardCount,
-      weeklyPriceCheck: base.weeklyPriceCheck,
       valueRefreshedAt: base.valueRefreshedAt,
       catalogPriceFromCurrentPrices: catalogPriceFromCurrentPrices,
-      embeddedCardHedgeGradePrices: embeddedCardHedgeGradePrices,
-      embeddedCardHedgePricesMaxFetchedAt: embeddedCardHedgePricesMaxFetchedAt,
+      embeddedGuideGradePrices: embeddedGuideGradePrices,
+      embeddedGuideGradePricesFetchedAt: embeddedGuideGradePricesFetchedAt,
       masterDefinitionGain: base.masterDefinitionGain,
-      embeddedMasterCardhedgeId: base.embeddedMasterCardhedgeId,
-      embeddedMasterCardhedgeFetchedAt: base.embeddedMasterCardhedgeFetchedAt,
+      embeddedMasterGuideCardId: base.embeddedMasterGuideCardId,
+      embeddedMasterGuideCardFetchedAt: base.embeddedMasterGuideCardFetchedAt,
     );
   }
 
   Map<String, double?> get _gradePriceMapForDisplay =>
-      embeddedCardHedgeGradePrices ?? emptyCardHedgeGradePriceMap();
+      embeddedGuideGradePrices ?? emptyGuideGradePriceMap();
 
   /// True when the headline value comes from `current_prices` for this master + grade.
-  bool get headlineValueUsesCardHedge =>
+  bool get headlineValueUsesGuidePrices =>
       catalogPriceFromCurrentPrices != null && catalogPriceFromCurrentPrices! > 0;
 
   /// `current_prices` for [masterCardId] + this copy's grade, else [currentValue].
@@ -295,21 +291,21 @@ class UserCard {
   }
 
   /// For the Value row: neutral when headline uses `current_prices` (snapshot mismatch).
-  int get valueTrendForDisplay => headlineValueUsesCardHedge ? 0 : valueTrend;
+  int get valueTrendForDisplay => headlineValueUsesGuidePrices ? 0 : valueTrend;
 
   DateTime? get displayValueRefreshedAt {
-    if (headlineValueUsesCardHedge) {
-      return embeddedCardHedgePricesMaxFetchedAt ??
-          embeddedMasterCardhedgeFetchedAt ??
+    if (headlineValueUsesGuidePrices) {
+      return embeddedGuideGradePricesFetchedAt ??
+          embeddedMasterGuideCardFetchedAt ??
           valueRefreshedAt;
     }
     return valueRefreshedAt;
   }
 
-  Map<String, double?> get cardHedgeGradePricesForMarketSection => _gradePriceMapForDisplay;
+  Map<String, double?> get guideGradePricesForMarketSection => _gradePriceMapForDisplay;
 
-  bool get hasUsableCardHedgeGradePricesForMarket =>
-      cardHedgeGradeMapHasAnyPrice(cardHedgeGradePricesForMarketSection);
+  bool get hasUsableGuideGradePricesForMarket =>
+      guideGradeMapHasAnyPrice(guideGradePricesForMarketSection);
 }
 
 class CardStack {

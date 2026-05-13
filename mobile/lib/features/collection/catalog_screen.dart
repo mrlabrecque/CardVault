@@ -132,7 +132,7 @@ enum _CatalogMode { browse, search }
 /// When set, catalog opens on the card detail step (e.g. after a scan).
 class CatalogScanEntry {
   const CatalogScanEntry({required this.detection, required this.sport});
-  final CardSightDetection detection;
+  final ImageScanMatchResult detection;
   final String sport;
 }
 
@@ -317,7 +317,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-  Future<void> _openCatalogFromScan(CardSightDetection detection, String sport) async {
+  Future<void> _openCatalogFromScan(ImageScanMatchResult detection, String sport) async {
     if (!mounted) return;
     final card = detection.card;
     if (card.id == null || card.releaseId == null || card.setId == null) {
@@ -338,7 +338,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           ? card.releaseName!
           : (card.manufacturer ?? 'Unknown Release');
 
-      final csResult = CardSightCardResult(
+      final csResult = CatalogSearchCardResult(
         id: card.id!,
         name: card.name ?? '',
         number: card.number,
@@ -526,9 +526,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       final existing = await ref.read(cardsServiceProvider).getSetsForRelease(release.id);
       if (existing.isNotEmpty) {
         setState(() => _browseSets = existing);
-      } else if (release.cardsightId != null) {
+      } else if (release.catalogImportReleaseKey != null) {
         await ref.read(cardsServiceProvider).importSetsForRelease(
-          cardsightReleaseId: release.cardsightId!,
+          cardsightReleaseId: release.catalogImportReleaseKey!,
           releaseName: release.name,
           releaseYear: release.year?.toString(),
         );
@@ -551,23 +551,23 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     try {
       // Lazy-load parallels if needed
       var parallels = await ref.read(cardsServiceProvider).getParallels(set.id);
-      if (parallels.isEmpty && set.cardsightId != null) {
+      if (parallels.isEmpty && set.catalogImportSetKey != null) {
         final result = await ref.read(cardsServiceProvider).lazyImportCatalog(
-          cardsightReleaseId: release.cardsightId!,
+          cardsightReleaseId: release.catalogImportReleaseKey!,
           releaseName:        release.name,
           releaseYear:        release.year?.toString() ?? '',
           releaseSegmentId:   '',
-          cardsightSetId:     set.cardsightId!,
+          cardsightSetId:     set.catalogImportSetKey!,
         );
         parallels = result.parallels;
       }
 
       // Lazy-load cards if needed
       var cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '', limit: 10000);
-      if (cards.isEmpty && set.cardsightId != null && release.cardsightId != null) {
+      if (cards.isEmpty && set.catalogImportSetKey != null && release.catalogImportReleaseKey != null) {
         await ref.read(cardsServiceProvider).importCardsForSet(
-          cardsightReleaseId: release.cardsightId!,
-          cardsightSetId: set.cardsightId!,
+          cardsightReleaseId: release.catalogImportReleaseKey!,
+          cardsightSetId: set.catalogImportSetKey!,
           setId: set.id,
         );
         cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '', limit: 10000);
@@ -653,7 +653,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   /// The catalog's selected-card/parallel state must already reflect [card]
   /// and [parallelName]. [onAddToCollection] / [onAddToWishlist] close over the
   /// resolved `master_card_definitions` id so add / wishlist use the variant row
-  /// (parallel FK, CardHedge, `current_prices`), not the base-only list id.
+  /// (parallel FK, guide prices, `current_prices`), not the base-only list id.
   Future<void> _openMasterCardDetail({
     required MasterCard card,
     required String parallelName,
@@ -702,7 +702,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           isSSP: displayCard.isSSP,
           serialMax: parallel?.serialMax ?? displayCard.serialMax,
           imageUrl: displayCard.imageUrl,
-          cardhedgeId: displayCard.cardhedgeId,
+          guidePriceCardId: displayCard.guidePriceCardId,
           gain: displayCard.gain,
         ),
         parallelName: parallelName,

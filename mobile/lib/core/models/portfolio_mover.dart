@@ -2,7 +2,7 @@ class PortfolioMover {
   final String topPlayerId;
   final String playerName;
   final String sport;
-  /// Optional second line (e.g. set / parallel from CardHedge top movers).
+  /// Optional second line (e.g. set / parallel from top movers).
   final String? cardDescription;
   final double currentAvg;
   final double previousAvg;

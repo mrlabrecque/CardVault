@@ -1,10 +1,10 @@
 /**
- * Persists CardHedge match data onto `master_card_definitions` + `current_prices`.
+ * Persists guide-price match data onto `master_card_definitions` + `current_prices`.
  * Auth: user JWT. Uses service role for Storage + DB writes.
  * Returns `persisted_master` snapshot for the client (no extra refetch).
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchCatalogMasterSnapshot, persistCardHedgeOntoMaster } from '../_shared/cardhedge_persist_master.ts';
+import { fetchCatalogMasterSnapshot, persistGuidePricesOntoMaster } from '../_shared/cardhedge_persist_master.ts';
 import { verifyUserJwt } from '../_shared/supabase_user_jwt.ts';
 
 const CORS = {
@@ -33,6 +33,8 @@ Deno.serve(async (req) => {
 
   let body: {
     masterVariantId?: string;
+    guidePriceCardId?: string;
+    /** @deprecated Prefer guidePriceCardId; accepted for older app builds. */
     cardhedgeId?: string;
     imageUrl?: string | null;
     prices?: unknown[];
@@ -49,6 +51,11 @@ Deno.serve(async (req) => {
   const masterVariantId = body.masterVariantId?.trim();
   if (!masterVariantId) return json({ error: 'masterVariantId required' }, 400);
 
+  const guidePriceCardId =
+    (typeof body.guidePriceCardId === 'string' ? body.guidePriceCardId.trim() : '') ||
+    (typeof body.cardhedgeId === 'string' ? body.cardhedgeId.trim() : '') ||
+    undefined;
+
   const admin = createClient(supabaseUrl, serviceKey);
 
   const { data: row, error: qErr } = await admin
@@ -59,9 +66,9 @@ Deno.serve(async (req) => {
 
   if (qErr || !row) return json({ error: 'Variant not found' }, 404);
 
-  const { storedImageUrl } = await persistCardHedgeOntoMaster(admin, {
+  const { storedImageUrl } = await persistGuidePricesOntoMaster(admin, {
     masterVariantId,
-    cardhedgeId: body.cardhedgeId,
+    guidePriceCardId,
     imageUrl: body.imageUrl,
     prices: body.prices,
     sales7d: body.sales7d,

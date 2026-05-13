@@ -116,11 +116,11 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     if (card.masterCardId == null) {
       return 'This copy is not linked to the catalog, so no guide price is available.';
     }
-    final hasCh = card.embeddedMasterCardhedgeId != null && card.embeddedMasterCardhedgeId!.trim().isNotEmpty;
+    final hasCh = card.embeddedMasterGuideCardId != null && card.embeddedMasterGuideCardId!.trim().isNotEmpty;
     if (!hasCh) {
-      return 'CardHedge has not matched this variant yet — no guide price in the app. Try again from the catalog card page.';
+      return 'This variant has no catalog match yet — no guide price in the app. Try again from the catalog card page.';
     }
-    return 'No CardHedge guide price for this slab yet. Pull to refresh on Collection or reopen this card in a moment.';
+    return 'No guide price for this slab yet. Pull to refresh on Collection or reopen this card in a moment.';
   }
 
   void _close(BuildContext context) {
@@ -571,6 +571,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   _ValueRefreshNotice(
                     refreshedAt: card.displayValueRefreshedAt,
                     relativeRefreshed: _relativeRefreshed,
+                    marketGuideHeadline: card.headlineValueUsesGuidePrices,
                   )
                 else
                   InlineNoticeContainer(
@@ -583,18 +584,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                           ),
                     ),
                   ),
-                const SizedBox(height: 8),
-                if (ref.watch(dailyTierCardIdsProvider).contains(card.id))
-                  const _DailyRefreshBadge()
-                else
-                  _PriceCheckToggle(
-                    enabled: card.weeklyPriceCheck,
-                    onChanged: (val) async {
-                      await ref.read(cardsServiceProvider).setWeeklyPriceCheck(card.id, val);
-                      ref.invalidate(userCardsProvider);
-                    },
-                  ),
-
                 const SizedBox(height: 24),
                 Semantics(
                   container: true,
@@ -642,12 +631,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     initialGrade: _resolveDefaultGrade(card),
                     segmentColor: colors.primary,
                     titleGain: card.masterDefinitionGain,
-                    cardhedgeId: card.embeddedMasterCardhedgeId,
-                    cardHedgeGradeAverages: card.hasUsableCardHedgeGradePricesForMarket
-                        ? card.cardHedgeGradePricesForMarketSection
+                    guidePriceCardId: card.embeddedMasterGuideCardId,
+                    guideGradePriceAverages: card.hasUsableGuideGradePricesForMarket
+                        ? card.guideGradePricesForMarketSection
                         : null,
-                    skipScraperSoldComps: card.hasUsableCardHedgeGradePricesForMarket,
-                    showDbSoldCompsWhenAvailable: card.hasUsableCardHedgeGradePricesForMarket,
+                    skipScraperSoldComps: card.hasUsableGuideGradePricesForMarket,
+                    showDbSoldCompsWhenAvailable: card.hasUsableGuideGradePricesForMarket,
                   )
                 else
                   Padding(
@@ -718,18 +707,25 @@ class _ValueRefreshNotice extends StatelessWidget {
   const _ValueRefreshNotice({
     required this.refreshedAt,
     required this.relativeRefreshed,
+    this.marketGuideHeadline = false,
   });
 
   final DateTime? refreshedAt;
   final String Function(DateTime) relativeRefreshed;
+  /// When true, [refreshedAt] reflects guide-price / `current_prices`, not sold-comps refresh.
+  final bool marketGuideHeadline;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final t = refreshedAt;
     final text = t != null
-        ? 'Value last refreshed ${relativeRefreshed(t)} · ${_fmtClock(t)}'
-        : 'Value has not been refreshed yet — open Edit or pull collection refresh when available.';
+        ? (marketGuideHeadline
+            ? 'Market guide last updated ${relativeRefreshed(t)} · ${_fmtClock(t)}'
+            : 'Sold comps value last refreshed ${relativeRefreshed(t)} · ${_fmtClock(t)}')
+        : (marketGuideHeadline
+            ? 'No market guide timestamp yet — it updates when catalog prices are fetched.'
+            : 'Value has not been refreshed yet — open Edit or pull collection refresh when available.');
 
     final theme = Theme.of(context);
     return Semantics(
@@ -789,105 +785,6 @@ class _InfoBox extends StatelessWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DailyRefreshBadge extends StatelessWidget {
-  const _DailyRefreshBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Semantics(
-      label: 'Auto-refreshed daily. Top 50 by value, updated every 24 hours automatically.',
-      child: InlineNoticeContainer(
-        highlightBorderColor: colors.primary.withValues(alpha: 0.35),
-        icon: Icon(Icons.bolt, size: 20, color: colors.primary),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Auto-refreshed daily',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: colors.primary,
-              ),
-            ),
-            Text(
-              'Top 50 by value — updated every 24 hours automatically',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurface.withValues(alpha: 0.60),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PriceCheckToggle extends StatelessWidget {
-  const _PriceCheckToggle({required this.enabled, required this.onChanged});
-  final bool enabled;
-  final void Function(bool) onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final accent = enabled ? _detailProfitColor(context) : colors.onSurface.withValues(alpha: 0.45);
-
-    return Semantics(
-      label: 'Weekly price check. Auto-refresh value every 7 days.',
-      toggled: enabled,
-      child: AdaptiveListCard(
-        margin: EdgeInsets.zero,
-        cornerRadius: 12,
-        highlightBorderColor: enabled ? _detailProfitColor(context).withValues(alpha: 0.45) : null,
-        color: enabled
-            ? Color.alphaBlend(
-                _detailProfitColor(context).withValues(alpha: theme.brightness == Brightness.dark ? 0.14 : 0.08),
-                colors.surfaceContainerHighest,
-              )
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.schedule, size: 20, color: accent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Weekly price check',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: enabled ? _detailProfitColor(context) : colors.onSurface.withValues(alpha: 0.75),
-                      ),
-                    ),
-                    Text(
-                      'Auto-refresh value every 7 days',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.60),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Switch.adaptive(
-                value: enabled,
-                activeThumbColor: colors.primary,
-                activeTrackColor: colors.primary.withValues(alpha: 0.35),
-                onChanged: onChanged,
-              ),
-            ],
-          ),
         ),
       ),
     );

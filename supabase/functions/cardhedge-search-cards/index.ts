@@ -1,15 +1,15 @@
 /**
- * Proxies CardHedge **card-search** only (no card-match):
+ * Proxies upstream **card-search** only (no card-match):
  * POST https://api.cardhedger.com/v1/cards/card-search
  *
  * Structured body only (no `search` field — parallel is resolved from `variant`
- * after fetch). CardHedge `set` = year (if not already on release) + releaseName +
+ * after fetch). Upstream `set` = year (if not already on release) + releaseName +
  * category; subset (Fireworks, …) on `description`, parallel on `variant`.
  * `alternate_matches` only for **exact** normalized `variant` ties. If none match
  * exactly, a **single** best row is chosen via [parallelScore] (persist + prices)
  * with `alternate_matches: []` so the app does not show fuzzy parallel chips.
- * If the chosen row has no persistable `prices`, calls CardHedge
- * `POST /v1/cards/all-prices-by-card` before persist and response `match`.
+ * If the chosen row has no persistable `prices`, calls all-prices-by-card before
+ * persist and response `match`.
  */
 import {
   buildCardHedgeSearchSetLabel,
@@ -25,7 +25,7 @@ import {
   type CatalogMasterSnapshot,
   fetchCatalogMasterSnapshot,
   normalizePriceEntry,
-  persistCardHedgeOntoMaster,
+  persistGuidePricesOntoMaster,
 } from '../_shared/cardhedge_persist_master.ts';
 import { fetchCardHedgeAllLatestPrices } from '../_shared/cardhedge_all_prices.ts';
 import { verifyUserJwt } from '../_shared/supabase_user_jwt.ts';
@@ -628,9 +628,9 @@ Deno.serve(async (req) => {
         try {
           const admin = createClient(supabaseUrl, serviceKey);
           const matchOut = searchRowToMatch(chosen);
-          await persistCardHedgeOntoMaster(admin, {
+          await persistGuidePricesOntoMaster(admin, {
             masterVariantId: persistMasterVariantId,
-            cardhedgeId: typeof matchOut.card_id === 'string' ? matchOut.card_id : undefined,
+            guidePriceCardId: typeof matchOut.card_id === 'string' ? matchOut.card_id : undefined,
             imageUrl: typeof matchOut.image === 'string' ? matchOut.image : null,
             prices: Array.isArray(matchOut.prices) ? (matchOut.prices as unknown[]) : undefined,
             sales7d: matchOut.sales_7d,

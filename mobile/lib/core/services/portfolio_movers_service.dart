@@ -3,8 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../auth/auth_service.dart';
 import '../models/portfolio_mover.dart';
-import '../utils/cardhedge_grade_prices.dart';
-import '../utils/cardhedge_match_query.dart';
+import '../utils/guide_grade_prices.dart';
+import '../utils/guide_catalog_match_query.dart';
 
 class PortfolioMoversService {
   PortfolioMoversService(this._supabase);
@@ -56,7 +56,7 @@ class PortfolioMoversService {
     return movers;
   }
 
-  /// One CardHedge top-movers fetch (no `category`); client filters by sport without re-calling.
+  /// One top-movers fetch (no `category`); client filters by sport without re-calling.
   Future<List<PortfolioMover>> fetchTopMoversRaw() async {
     late final FunctionResponse res;
     try {
@@ -105,7 +105,7 @@ class PortfolioMoversService {
       if (player.isEmpty) continue;
 
       final sprRaw = (row['category'] as String? ?? '').trim();
-      final spr = canonicalCardHedgeMoverCategory(sprRaw);
+      final spr = canonicalTopMoverCategory(sprRaw);
       if (spr == null) continue;
 
       final cardId = (row['card_id'] as String?)?.trim() ?? '';
@@ -114,7 +114,7 @@ class PortfolioMoversService {
       final gainRaw = row['gain'];
       final gain = (gainRaw is num) ? gainRaw.toDouble() : double.tryParse('$gainRaw') ?? 0;
 
-      final headline = _headlinePriceFromCardHedgePrices(row['prices']);
+      final headline = _headlinePriceFromGuidePriceList(row['prices']);
       if (headline == null || headline <= 0) continue;
 
       final prev = gain > -99.9 ? headline / (1 + gain / 100.0) : headline;
@@ -180,11 +180,11 @@ PortfolioMoversData vaultMoversForDisplay(List<PortfolioMover> raw, String? spor
   );
 }
 
-/// CardHedge top movers: applies app-bar sport chip without network I/O.
+/// Top movers: applies app-bar sport chip without network I/O.
 List<PortfolioMover> marketTopMoversForDisplay(List<PortfolioMover> rawSortedDesc, String? uiSportFilter) {
   const maxSlots = 20;
   const maxPerSportAll = 5;
-  final category = cardHedgeCategoryForMoversFilter(uiSportFilter);
+  final category = sportChipToTopMoverCategory(uiSportFilter);
   if (category == null) {
     return _fairQuotaTake(rawSortedDesc, maxSlots, maxPerSportAll);
   }
@@ -207,7 +207,7 @@ String? _buildTopMoverDescription(Map<String, dynamic> row) {
   return s;
 }
 
-double? _headlinePriceFromCardHedgePrices(dynamic raw) {
+double? _headlinePriceFromGuidePriceList(dynamic raw) {
   if (raw is! List || raw.isEmpty) return null;
   final rows = <Map<String, dynamic>>[];
   for (final p in raw) {
@@ -218,19 +218,19 @@ double? _headlinePriceFromCardHedgePrices(dynamic raw) {
   for (final m in rows) {
     final g = (m['grade'] ?? m['Grade'] ?? '').toString().trim();
     if (g == 'PSA 10') {
-      final v = parseCardHedgePriceField(m['price'] ?? m['Price']);
+      final v = parseGuidePriceField(m['price'] ?? m['Price']);
       if (v != null && v > 0) return v;
     }
   }
   for (final m in rows) {
     final g = (m['grade'] ?? m['Grade'] ?? '').toString().trim().toLowerCase();
     if (g == 'raw') {
-      final v = parseCardHedgePriceField(m['price'] ?? m['Price']);
+      final v = parseGuidePriceField(m['price'] ?? m['Price']);
       if (v != null && v > 0) return v;
     }
   }
   for (final m in rows) {
-    final v = parseCardHedgePriceField(m['price'] ?? m['Price']);
+    final v = parseGuidePriceField(m['price'] ?? m['Price']);
     if (v != null && v > 0) return v;
   }
   return null;

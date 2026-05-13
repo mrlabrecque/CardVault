@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
-import '../models/cardhedge_match.dart';
+import '../models/guide_catalog_match.dart';
 import '../models/comp.dart';
-import '../utils/cardhedge_grade_prices.dart';
-import '../utils/cardhedge_match_query.dart';
+import '../utils/guide_grade_prices.dart';
+import '../utils/guide_catalog_match_query.dart';
 import 'cards_service.dart' show MasterCard;
 
 class CompsService {
@@ -128,16 +128,16 @@ class CompsService {
     return false;
   }
 
-  /// Grade averages from `current_prices` (written when CardHedge is linked).
+  /// Grade averages from `current_prices` (written when a guide-price card is linked).
   Future<Map<String, double?>> getMasterCardCurrentPrices(String masterCardId) async {
-    final out = emptyCardHedgeGradePriceMap();
+    final out = emptyGuideGradePriceMap();
     final data = await _supabase
         .from('current_prices')
         .select('grade, price')
         .eq('master_card_id', masterCardId);
     for (final row in data as List) {
       final m = Map<String, dynamic>.from(row as Map);
-      final key = normalizeCardHedgeDisplayGrade(m['grade']?.toString() ?? '');
+      final key = normalizeGuideDisplayGrade(m['grade']?.toString() ?? '');
       if (key == null) continue;
       final p = parsePostgresNumeric(m['price']);
       if (p == null || p <= 0) continue;
@@ -146,9 +146,9 @@ class CompsService {
     return out;
   }
 
-  /// Same CardHedge hydration path as [MasterCardDetailScreen._syncCardHedgeForMaster]:
+  /// Same hydration path as [MasterCardDetailScreen._syncGuidePricesForMaster]:
   /// when `cardhedge_id` is set and `current_prices` has rows, no network call;
-  /// otherwise invokes `cardhedge-search-cards` with persist for this variant.
+  /// otherwise invokes catalog search with persist for this variant.
   ///
   /// Call after adding to collection or when opening item detail so `current_prices`
   /// and `master_card_definitions` match what the catalog detail screen would load.
@@ -164,8 +164,8 @@ class CompsService {
     if (raw == null) return;
     final row = Map<String, dynamic>.from(raw as Map);
 
-    final hedgeRaw = row['cardhedge_id']?.toString().trim();
-    if (hedgeRaw != null && hedgeRaw.isNotEmpty) {
+    final linkedGuideCardId = row['cardhedge_id']?.toString().trim();
+    if (linkedGuideCardId != null && linkedGuideCardId.isNotEmpty) {
       final dbPrices = await getMasterCardCurrentPrices(trimId);
       if (dbPrices.values.any((v) => v != null && v > 0)) return;
     }
@@ -197,7 +197,7 @@ class CompsService {
     final par = asMap(row['set_parallels']);
     final parallelName = par?['name']?.toString();
 
-    await searchCardHedgeCatalog(
+    await searchGuidePriceCatalog(
       player: player,
       year: yearVal,
       releaseName: releaseName,
@@ -210,7 +210,7 @@ class CompsService {
   }
 
   /// True when any comps exist for this catalog variant + grade within the last 24h.
-  Future<bool> hasFreshCardHedgeGradeComps(
+  Future<bool> hasFreshGuideGradeComps(
     String masterCardId,
     String grade,
   ) async {
@@ -226,21 +226,21 @@ class CompsService {
     return (rows as List).isNotEmpty;
   }
 
-  /// Loads CardHedge `/v1/cards/comps` unless [hasFreshCardHedgeGradeComps] is true.
+  /// Loads upstream sold comps for the grade unless [hasFreshGuideGradeComps] is true.
   /// Returns `null` on failure, `-1` when the 24h cache was used (no network call),
   /// otherwise the number of sale rows stored.
-  Future<int?> ensureCardHedgeGradeComps({
+  Future<int?> ensureGuideGradeComps({
     required String masterVariantId,
-    required String cardhedgeId,
+    required String guidePriceCardId,
     required String grade,
     int count = 40,
   }) async {
-    if (await hasFreshCardHedgeGradeComps(masterVariantId, grade)) {
+    if (await hasFreshGuideGradeComps(masterVariantId, grade)) {
       return -1;
     }
-    return fetchCardHedgeGradeComps(
+    return fetchGuideGradeComps(
       masterVariantId: masterVariantId,
-      cardhedgeId: cardhedgeId,
+      guidePriceCardId: guidePriceCardId,
       grade: grade,
       count: count,
     );
@@ -409,12 +409,12 @@ class CompsService {
           .select('cardhedge_id')
           .eq('id', masterId)
           .maybeSingle();
-      final hedgeId = (masterRow?['cardhedge_id'] as String?)?.trim();
+      final linkedGuidePriceCardId = (masterRow?['cardhedge_id'] as String?)?.trim();
 
-      if (hedgeId != null && hedgeId.isNotEmpty) {
+      if (linkedGuidePriceCardId != null && linkedGuidePriceCardId.isNotEmpty) {
         final prices = await getMasterCardCurrentPrices(masterId);
-        final hasCardHedgePrices = prices.values.any((v) => v != null && v > 0);
-        if (hasCardHedgePrices) {
+        final hasGuideCatalogPrices = prices.values.any((v) => v != null && v > 0);
+        if (hasGuideCatalogPrices) {
           final rawAvg = prices['Raw'] ?? 0;
           final psa10Avg = prices['PSA 10'] ?? 0;
           final psa9Avg = prices['PSA 9'] ?? 0;
@@ -480,7 +480,7 @@ class CompsService {
     return (data as List).map((r) => LookupHistory.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  /// Lazily fetches a card image from CardSight and caches it.
+  /// Lazily fetches a card image from the catalog API and caches it.
   /// Safe to call multiple times — returns immediately if already cached.
   Future<String?> fetchCardImage(String masterCardId) async {
     try {
@@ -498,8 +498,8 @@ class CompsService {
     }
   }
 
-  /// Normalizes CardHedge `prices[]` entries (mixed key casing) for Edge insert into `current_prices`.
-  static List<Map<String, dynamic>>? _normalizeCardHedgePricesForPersist(
+  /// Normalizes upstream `prices[]` entries (mixed key casing) for Edge insert into `current_prices`.
+  static List<Map<String, dynamic>>? _normalizeGuidePricesForPersist(
     List<Map<String, dynamic>>? raw,
   ) {
     if (raw == null || raw.isEmpty) return null;
@@ -527,11 +527,11 @@ class CompsService {
     return out.isEmpty ? null : out;
   }
 
-  /// Persists CardHedge match onto the catalog variant via Edge `cardhedge-persist-variant`.
+  /// Persists a guide-price catalog match onto the variant via Edge `cardhedge-persist-variant`.
   /// Returns the updated row from the response (`persisted_master`), or null on failure.
-  Future<MasterCard?> persistCardHedgeCatalogMatch({
+  Future<MasterCard?> persistGuidePriceCatalogMatch({
     required String masterVariantId,
-    required String? cardhedgeId,
+    required String? guidePriceCardId,
     required String? imageUrl,
     List<Map<String, dynamic>>? prices,
     int? sales7d,
@@ -539,17 +539,17 @@ class CompsService {
     double? gain,
   }) async {
     try {
-      final normalizedPrices = _normalizeCardHedgePricesForPersist(prices);
+      final normalizedPrices = _normalizeGuidePricesForPersist(prices);
       final res = await _supabase.functions.invoke(
         'cardhedge-persist-variant',
         body: {
           'masterVariantId': masterVariantId,
-          if (cardhedgeId != null && cardhedgeId.isNotEmpty) 'cardhedgeId': cardhedgeId,
+          if (guidePriceCardId != null && guidePriceCardId.isNotEmpty) 'guidePriceCardId': guidePriceCardId,
           if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
           if (normalizedPrices != null && normalizedPrices.isNotEmpty) 'prices': normalizedPrices,
-          'sales7d': ?sales7d,
-          'sales30d': ?sales30d,
-          'gain': ?gain,
+          if (sales7d != null) 'sales7d': sales7d,
+          if (sales30d != null) 'sales30d': sales30d,
+          if (gain != null) 'gain': gain,
         },
       );
       if (res.status != 200) return null;
@@ -564,11 +564,11 @@ class CompsService {
     }
   }
 
-  /// CardHedge POST `/v1/cards/comps` for [grade], upserts `comps_cache`, replaces
+  /// POST sold-comps for [grade], upserts `comps_cache`, replaces
   /// `card_sold_comps` rows for that catalog variant + grade. Returns row count or null on failure.
-  Future<int?> fetchCardHedgeGradeComps({
+  Future<int?> fetchGuideGradeComps({
     required String masterVariantId,
-    required String cardhedgeId,
+    required String guidePriceCardId,
     required String grade,
     int count = 40,
   }) async {
@@ -577,7 +577,7 @@ class CompsService {
         'cardhedge-grade-comps',
         body: {
           'masterVariantId': masterVariantId,
-          'cardhedgeId': cardhedgeId,
+          'guidePriceCardId': guidePriceCardId,
           'grade': grade,
           'count': count,
         },
@@ -595,7 +595,7 @@ class CompsService {
     }
   }
 
-  /// CardHedge **card-search** via Edge `cardhedge-search-cards`. Upstream `set` is
+  /// Catalog card-search via Edge `cardhedge-search-cards`. Upstream `set` is
   /// [year] (if not already leading [releaseName]) + [releaseName] + category;
   /// [setName] filters on API `description`; [parallelName] on `variant`.
   /// Trailing print-run suffixes on [parallelName] (e.g. ` /149`) are stripped in
@@ -603,8 +603,8 @@ class CompsService {
   /// Edge scans multiple pages, then card # + insert + parallel scoring.
   ///
   /// When [persistMasterVariantId] is set and a match is found, the same request
-  /// writes CardHedge fields + `current_prices` and returns `persisted_master`.
-  Future<CardHedgeMatchPayload> searchCardHedgeCatalog({
+  /// writes guide fields + `current_prices` and returns `persisted_master`.
+  Future<GuideCatalogMatchPayload> searchGuidePriceCatalog({
     required String player,
     int? year,
     String? releaseName,
@@ -648,32 +648,32 @@ class CompsService {
       if (raw is Map) {
         final map = Map<String, dynamic>.from(raw);
         if (res.status == 200) {
-          return CardHedgeMatchPayload.fromJson(map);
+          return GuideCatalogMatchPayload.fromJson(map);
         }
         final err = map['error']?.toString() ?? 'Request failed';
         final hint = map['hint']?.toString();
         final details = map['details']?.toString();
         if (details != null && details.isNotEmpty) {
           final short = details.length > 200 ? '${details.substring(0, 200)}…' : details;
-          return CardHedgeMatchPayload.error(
+          return GuideCatalogMatchPayload.error(
             hint != null && hint.isNotEmpty ? '$err: $short\n$hint' : '$err: $short',
           );
         }
-        return CardHedgeMatchPayload.error(
+        return GuideCatalogMatchPayload.error(
           hint != null && hint.isNotEmpty ? '$err\n$hint' : err,
         );
       }
-      return CardHedgeMatchPayload.error('CardHedge search: unexpected response (${res.status})');
+      return GuideCatalogMatchPayload.error('Catalog search: unexpected response (${res.status})');
     } on FunctionException catch (e) {
       final details = e.details;
       if (details is Map) {
         final m = Map<String, dynamic>.from(details);
         final err = m['error']?.toString() ?? 'Request failed';
-        return CardHedgeMatchPayload.error('$err (${e.status})');
+        return GuideCatalogMatchPayload.error('$err (${e.status})');
       }
-      return CardHedgeMatchPayload.error('CardHedge search failed (${e.status})');
+      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})');
     } catch (e) {
-      return CardHedgeMatchPayload.error(e.toString());
+      return GuideCatalogMatchPayload.error(e.toString());
     }
   }
 }

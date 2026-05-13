@@ -1,12 +1,12 @@
-/// CardHedge grade labels aligned with sold-comps pills and `current_prices.grade`.
-const List<String> kCardHedgeDisplayGrades = ['Raw', 'PSA 10', 'PSA 9'];
+/// Guide grade labels aligned with sold-comps pills and `current_prices.grade`.
+const List<String> kGuideDisplayGrades = ['Raw', 'PSA 10', 'PSA 9'];
 
-Map<String, double?> emptyCardHedgeGradePriceMap() => {
-      for (final k in kCardHedgeDisplayGrades) k: null,
+Map<String, double?> emptyGuideGradePriceMap() => {
+      for (final k in kGuideDisplayGrades) k: null,
     };
 
-/// Maps API / DB grade strings onto [kCardHedgeDisplayGrades]; returns null if unknown.
-String? normalizeCardHedgeDisplayGrade(String grade) {
+/// Maps API / DB grade strings onto [kGuideDisplayGrades]; returns null if unknown.
+String? normalizeGuideDisplayGrade(String grade) {
   final g = grade.trim();
   if (g.isEmpty) return null;
   final lower = g.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
@@ -21,11 +21,11 @@ String? normalizeCardHedgeDisplayGrade(String grade) {
   }
   if (lower == 'psa 10' || lower == 'psa10') return 'PSA 10';
   if (lower == 'psa 9' || lower == 'psa9') return 'PSA 9';
-  if (kCardHedgeDisplayGrades.contains(g)) return g;
+  if (kGuideDisplayGrades.contains(g)) return g;
   return null;
 }
 
-double? parseCardHedgePriceField(dynamic raw) {
+double? parseGuidePriceField(dynamic raw) {
   if (raw == null) return null;
   if (raw is num) return raw.toDouble();
   if (raw is! String) return null;
@@ -46,7 +46,7 @@ double? parsePostgresNumeric(dynamic raw) {
   return null;
 }
 
-/// Picks the CardHedge / `current_prices` row for the user's slab, matching
+/// Picks the guide / `current_prices` row for the user's slab, matching
 /// [CompsService._valueForGrade] (Raw vs PSA 9 vs PSA 10 buckets).
 double? displayPriceForUserCopyFromGradeMap({
   required bool isGraded,
@@ -69,14 +69,14 @@ double? displayPriceForUserCopyFromGradeMap({
   return raw;
 }
 
-/// Parses nested PostgREST `current_prices` rows into [kCardHedgeDisplayGrades] keys.
+/// Parses nested PostgREST `current_prices` rows into [kGuideDisplayGrades] keys.
 Map<String, double?> parseEmbeddedCurrentPrices(List<dynamic>? rows) {
-  final out = emptyCardHedgeGradePriceMap();
+  final out = emptyGuideGradePriceMap();
   if (rows == null) return out;
   for (final row in rows) {
     if (row is! Map) continue;
     final m = Map<String, dynamic>.from(row);
-    final key = normalizeCardHedgeDisplayGrade(m['grade']?.toString() ?? '');
+    final key = normalizeGuideDisplayGrade(m['grade']?.toString() ?? '');
     if (key == null) continue;
     final p = parsePostgresNumeric(m['price']);
     if (p == null || p <= 0) continue;
@@ -99,7 +99,7 @@ DateTime? maxFetchedAtFromCurrentPriceRows(List<dynamic>? rows) {
   return maxFt;
 }
 
-bool cardHedgeGradeMapHasAnyPrice(Map<String, double?> m) =>
+bool guideGradeMapHasAnyPrice(Map<String, double?> m) =>
     m.values.any((v) => v != null && v > 0);
 
 /// True when [a] and [b] refer to the same slab label (spacing / case insensitive).

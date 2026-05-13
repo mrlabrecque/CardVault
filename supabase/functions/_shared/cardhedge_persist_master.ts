@@ -1,12 +1,12 @@
 /**
- * CardHedge → `master_card_definitions` + `current_prices` (shared by
+ * Writes guide-price data to `master_card_definitions` + `current_prices` (shared by
  * `cardhedge-persist-variant` and `cardhedge-search-cards` when persisting inline).
  */
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
-export type PersistCardHedgeInput = {
+export type PersistGuidePricesInput = {
   masterVariantId: string;
-  cardhedgeId?: string;
+  guidePriceCardId?: string;
   imageUrl?: string | null;
   prices?: unknown[];
   sales7d?: unknown;
@@ -50,10 +50,10 @@ export function normalizePriceEntry(p: unknown): { grade: string; price: number 
   return { grade, price };
 }
 
-/** Upload CardHedge image to Storage, patch master, replace `current_prices`. */
-export async function persistCardHedgeOntoMaster(
+/** Upload upstream image to Storage, patch master, replace `current_prices`. */
+export async function persistGuidePricesOntoMaster(
   admin: SupabaseClient,
-  input: PersistCardHedgeInput,
+  input: PersistGuidePricesInput,
 ): Promise<{ storedImageUrl: string | null }> {
   const masterVariantId = input.masterVariantId.trim();
   if (!masterVariantId) return { storedImageUrl: null };
@@ -91,7 +91,7 @@ export async function persistCardHedgeOntoMaster(
   const patch: Record<string, unknown> = {
     cardhedge_fetched_at: new Date().toISOString(),
   };
-  if (input.cardhedgeId) patch.cardhedge_id = input.cardhedgeId;
+  if (input.guidePriceCardId) patch.cardhedge_id = input.guidePriceCardId;
   if (storedImageUrl) patch.image_url = storedImageUrl;
 
   const s7 = toFiniteNumber(input.sales7d);
@@ -102,7 +102,7 @@ export async function persistCardHedgeOntoMaster(
   if (gn !== null) patch.gain = gn;
 
   const { error: updErr } = await admin.from('master_card_definitions').update(patch).eq('id', masterVariantId);
-  if (updErr) console.error('[cardhedge_persist_master] master update', updErr);
+  if (updErr) console.error('[guide_persist_master] master update', updErr);
 
   if (Array.isArray(input.prices) && input.prices.length > 0) {
     await admin.from('current_prices').delete().eq('master_card_id', masterVariantId);
@@ -121,7 +121,7 @@ export async function persistCardHedgeOntoMaster(
 
     if (rows.length > 0) {
       const { error: insErr } = await admin.from('current_prices').insert(rows);
-      if (insErr) console.error('[cardhedge_persist_master] current_prices insert', insErr);
+      if (insErr) console.error('[guide_persist_master] current_prices insert', insErr);
     }
   }
 
