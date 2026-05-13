@@ -11,6 +11,8 @@ PreferredSizeWidget buildGlassNavBar(
   bool automaticallyImplyLeading = true,
   PreferredSizeWidget? bottom,
   bool useBlurBackground = true,
+  double blurSigma = 10,
+  double surfaceTintAlpha = 0.14,
 }) {
   final colors = Theme.of(context).colorScheme;
   return AppBar(
@@ -31,9 +33,9 @@ PreferredSizeWidget buildGlassNavBar(
     flexibleSpace: useBlurBackground
         ? ClipRect(
             child: FlutterBackdropBlur(
-              sigma: 10,
+              sigma: blurSigma,
               child: Container(
-                color: colors.surface.withValues(alpha: 0.14),
+                color: colors.surface.withValues(alpha: surfaceTintAlpha),
               ),
             ),
           )

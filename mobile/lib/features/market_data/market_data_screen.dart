@@ -15,6 +15,7 @@ import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
+import '../../core/widgets/sticky_chrome_scaffold.dart';
 
 enum _MarketDataTab { portfolioMovers, topMovers }
 
@@ -53,13 +54,16 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final navOffset = MediaQuery.paddingOf(context).top + kToolbarHeight;
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
+    return StickyChromeScaffold(
+      stickyHeightEstimate: 58,
+      blurSigma: 12,
+      stickySurfaceTintAlpha: 0.2,
       appBar: buildGlassNavBar(
         context,
         useBlurBackground: true,
+        blurSigma: 14,
+        surfaceTintAlpha: 0.22,
         title: Text(
           'Market Data',
           style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
@@ -113,17 +117,18 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              ChromeMetrics.compactHorizontalInset,
-              navOffset + ChromeMetrics.contentTopGap + ChromeMetrics.segmentOnlyTopInset,
-              ChromeMetrics.compactHorizontalInset,
-              ChromeMetrics.segmentOnlyBottomInset,
-            ),
-            child: AppSegmentedControl(
+      stickyChrome: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          ChromeMetrics.compactHorizontalInset,
+          ChromeMetrics.segmentOnlyTopInset,
+          ChromeMetrics.compactHorizontalInset,
+          ChromeMetrics.segmentOnlyBottomInset,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppSegmentedControl(
               segmentKey: const ValueKey('market-data-tabs'),
               labels: const ['Portfolio movers', 'Top movers'],
               selectedIndex: _tab == _MarketDataTab.portfolioMovers ? 0 : 1,
@@ -134,33 +139,36 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
               },
               color: colors.primary,
             ),
-          ),
-          const SizedBox(height: ChromeMetrics.segmentToSearchGap),
-          Expanded(
-            child: _tab == _MarketDataTab.portfolioMovers ? _buildVaultTab(navOffset) : _buildTopMoversTab(navOffset),
-          ),
-        ],
+            // Same rhythm as collection pinned chrome: gap below segment before the next row.
+            const SizedBox(height: ChromeMetrics.segmentOnlyBottomInset),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildVaultTab(double navOffset) {
-    final async = ref.watch(vaultPortfolioMoversRawProvider);
-    return async.when(
-      loading: () => _buildLoading(navOffset),
-      error: (e, _) => _buildError(navOffset, e.toString()),
-      data: (raw) {
-        final data = vaultMoversForDisplay(raw, _selectedSport);
-        return _buildVaultScrollable(navOffset, data);
+      bodyBuilder: (context, contentTopInset) {
+        return _tab == _MarketDataTab.portfolioMovers
+            ? _buildVaultTab(contentTopInset)
+            : _buildTopMoversTab(contentTopInset);
       },
     );
   }
 
-  Widget _buildTopMoversTab(double navOffset) {
+  Widget _buildVaultTab(double contentTopInset) {
+    final async = ref.watch(vaultPortfolioMoversRawProvider);
+    return async.when(
+      loading: () => _buildLoading(contentTopInset),
+      error: (e, _) => _buildError(contentTopInset, e.toString()),
+      data: (raw) {
+        final data = vaultMoversForDisplay(raw, _selectedSport);
+        return _buildVaultScrollable(contentTopInset, data);
+      },
+    );
+  }
+
+  Widget _buildTopMoversTab(double contentTopInset) {
     final async = ref.watch(marketTopMoversRawProvider);
     return async.when(
-      loading: () => _buildLoading(navOffset),
-      error: (e, _) => _buildError(navOffset, e.toString()),
+      loading: () => _buildLoading(contentTopInset),
+      error: (e, _) => _buildError(contentTopInset, e.toString()),
       data: (raw) {
         final hot = marketTopMoversForDisplay(raw, _selectedSport);
         final data = PortfolioMoversData(
@@ -168,17 +176,17 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
           cold: const [],
           lastUpdated: DateTime.now(),
         );
-        return _buildTopMoversScrollable(navOffset, data);
+        return _buildTopMoversScrollable(contentTopInset, data);
       },
     );
   }
 
-  Widget _buildVaultScrollable(double navOffset, PortfolioMoversData data) {
+  Widget _buildVaultScrollable(double contentTopInset, PortfolioMoversData data) {
     final colors = Theme.of(context).colorScheme;
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(vaultPortfolioMoversRawProvider),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        padding: EdgeInsets.fromLTRB(16, contentTopInset, 16, 100),
         children: [
           if (data.hot.isEmpty && data.cold.isEmpty)
             _buildEmptyVault(colors)
@@ -217,12 +225,12 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
     );
   }
 
-  Widget _buildTopMoversScrollable(double navOffset, PortfolioMoversData data) {
+  Widget _buildTopMoversScrollable(double contentTopInset, PortfolioMoversData data) {
     final colors = Theme.of(context).colorScheme;
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(marketTopMoversRawProvider),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        padding: EdgeInsets.fromLTRB(16, contentTopInset, 16, 100),
         children: [
           if (data.hot.isEmpty && data.cold.isEmpty)
             _buildEmptyTopMovers()
@@ -311,18 +319,16 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
     );
   }
 
-  Widget _buildLoading(double navOffset) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.only(top: navOffset * 0.35),
-        child: const CardFanLoader(size: 72),
-      ),
+  Widget _buildLoading(double contentTopInset) {
+    return Padding(
+      padding: EdgeInsets.only(top: contentTopInset),
+      child: const Center(child: CardFanLoader(size: 72)),
     );
   }
 
-  Widget _buildError(double navOffset, String error) {
+  Widget _buildError(double contentTopInset, String error) {
     return Padding(
-      padding: EdgeInsets.only(top: navOffset * 0.2),
+      padding: EdgeInsets.only(top: contentTopInset + 24),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

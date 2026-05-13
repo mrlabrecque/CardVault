@@ -103,6 +103,7 @@ Key files: `lib/features/scan/scan_screen.dart`, `lib/features/collection/catalo
 | **Open** | **Parallel reference** | Browse/education per set — `set_parallels` / catalog. |
 | **Open** | **User upload image** | Storage + permissions; override vs master image. |
 | **Open** | **Watchlist** | Clarify vs **Wishlist**. |
+| **Open** | **Market Data → player sales drilldown** | Tap a Market Data row → Card Hedge [`POST /v1/cards/sales-stats-by-player`](https://api.cardhedger.com/docs#tag/market-data/POST/v1/cards/sales-stats-by-player): bucketed sale **count** / **total USD** / **avg** by day/week/month (player name matched in listing text). Implement via Edge `cardhedge-sales-stats-by-player` + detail route/chart; **parked until after 1.0** (Flutter + Edge code removed from repo). |
 
 ---
 
@@ -112,4 +113,4 @@ Key files: `lib/features/scan/scan_screen.dart`, `lib/features/collection/catalo
 2. **Optional polish** — Grep `toStringAsFixed` for prices; Grading search could include `checklist` in text filter (minor).
 3. **Scan / catalog** — Pick one repro (results under header, detail not loading, or dedicated route) and fix before larger OCR/bulk tracks.
 
-_Last updated: 2026-05-10 — Portfolio Movers rename + vault RPC decision_
+_Last updated: 2026-05-12 — Market Data player sales drilldown parked on backlog; Flutter + Edge stub removed until post–1.0._

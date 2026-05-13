@@ -18,6 +18,7 @@ class StickyChromeScaffold extends StatefulWidget {
     this.stickyHeightEstimate = 52,
     this.contentTopGap = ChromeMetrics.contentTopGap,
     this.blurSigma = 10,
+    this.stickySurfaceTintAlpha = FrostedChromeLayer.defaultSurfaceTintAlpha,
     required this.bodyBuilder,
   });
 
@@ -29,6 +30,8 @@ class StickyChromeScaffold extends StatefulWidget {
   /// Shared spacing between sticky chrome and first scroll content.
   final double contentTopGap;
   final double blurSigma;
+  /// Tint on the sticky strip ([FrostedChromeLayer]); separate from [appBar] glass.
+  final double stickySurfaceTintAlpha;
   final Widget Function(BuildContext context, double contentTopInset) bodyBuilder;
 
   static double navToolbarExtent(BuildContext context) {
@@ -101,6 +104,7 @@ class _StickyChromeScaffoldState extends State<StickyChromeScaffold> {
               child: FrostedChromeLayer(
                 contentMeasurementKey: _stickyKey,
                 sigma: widget.blurSigma,
+                surfaceTintAlpha: widget.stickySurfaceTintAlpha,
                 child: widget.stickyChrome!,
               ),
             ),
