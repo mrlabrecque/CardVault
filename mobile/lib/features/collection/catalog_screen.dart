@@ -24,7 +24,7 @@ import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sticky_chrome_scaffold.dart';
-import '../wishlist/wishlist_screen.dart';
+import '../wishlist/wishlist_screen.dart' show wishlistProvider;
 import '../wishlist/card_sheet.dart';
 import '../scan/scan_screen.dart';
 import 'master_card_detail_screen.dart';
@@ -191,7 +191,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   final _cardCtrl = TextEditingController();
   List<MasterCard> _cardResults = [];
   List<MasterCard> _allCards = [];
-  final _loadingCards = false;
   MasterCard? _selectedCard;
   bool _isNewCard = false;
 
@@ -1286,24 +1285,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             placeholder: 'Search player name…',
             prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-            suffixIcon: _loadingCards
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                : null,
             cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
             decoration: InputDecoration(
               labelText: 'Search players',
               hintText: 'Search player name…',
               hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
               prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-              suffixIcon: _loadingCards
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                    )
-                  : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               isDense: true,
             ),
@@ -1323,7 +1310,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _catalogSegmentRow(colors, hasSecondaryChrome: hasSecondaryChrome),
-          if (secondary != null) secondary,
+          ?secondary,
         ],
       ),
       heightEstimate: segmentEst + secondaryHeight,
@@ -1865,12 +1852,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   // ── Card results area ─────────────────────────────────────────
 
   Widget _buildCardResultsArea(ColorScheme colors, {double topInset = 0}) {
-    if (_loadingCards) {
-      return Padding(
-        padding: EdgeInsets.only(top: topInset),
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
     if (_cardResults.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: topInset),

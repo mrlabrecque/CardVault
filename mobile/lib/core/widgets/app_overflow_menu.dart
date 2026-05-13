@@ -16,16 +16,6 @@ class AppOverflowMenu extends StatelessWidget {
 
   static const _quickActions = <AdaptivePopupMenuEntry>[
     AdaptivePopupMenuItem<String>(
-      label: 'Bulk Add',
-      icon: 'square.stack.3d.up',
-      value: '/bulk-add',
-    ),
-    AdaptivePopupMenuItem<String>(
-      label: 'Comps',
-      icon: 'magnifyingglass',
-      value: '/comps',
-    ),
-    AdaptivePopupMenuItem<String>(
       label: 'Lot Builder',
       icon: 'shippingbox',
       value: '/lot-builder',

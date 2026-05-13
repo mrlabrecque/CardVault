@@ -26,9 +26,19 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+    throw StateError(
+      'Missing SUPABASE_URL or SUPABASE_ANON_KEY. '
+      'Rebuild with --dart-define (see Makefile DART_DEFINES). '
+      'In VS Code/Cursor, use launch.json "toolArgs", not "args", for dart-define.',
+    );
+  }
+
   await Supabase.initialize(
-    url: const String.fromEnvironment('SUPABASE_URL'),
-    anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
 
   runApp(const ProviderScope(child: CardVaultApp()));

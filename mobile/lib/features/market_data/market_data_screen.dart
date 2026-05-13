@@ -30,7 +30,7 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
   _MarketDataTab _tab = _MarketDataTab.portfolioMovers;
   String? _selectedSport;
 
-  static const _sportChoices = <String>['NBA', 'NFL', 'MLB', 'NHL', 'Soccer'];
+  static const _sportChoices = <String>['NBA', 'NFL', 'MLB', 'NHL'];
 
   bool get _sportFilterActive => _selectedSport != null;
 
@@ -44,8 +44,6 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
         return 'baseball.fill';
       case 'NHL':
         return 'hockey.puck.fill';
-      case 'Soccer':
-        return 'soccerball';
       default:
         return 'circle.fill';
     }
@@ -130,7 +128,7 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
           children: [
             AppSegmentedControl(
               segmentKey: const ValueKey('market-data-tabs'),
-              labels: const ['Portfolio movers', 'Top movers'],
+              labels: const ['Portfolio movers', 'Top gainers'],
               selectedIndex: _tab == _MarketDataTab.portfolioMovers ? 0 : 1,
               onValueChanged: (index) {
                 setState(() {
@@ -359,12 +357,7 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Portfolio movers ranks players by how average card values moved across all Vault collections, using each owned card’s current value versus its prior value (after comps refresh).',
-              style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Sport filters apply instantly to the loaded snapshot—no extra requests when you switch.',
+              'Portfolio movers ranks players by how average card values moved across all user\'s collections, using each owned card’s current value versus its prior value.',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
             ),
             SizedBox(height: 10),
@@ -374,7 +367,7 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
             ),
             SizedBox(height: 10),
             Text(
-              'This reflects collectors in Card Vault who have refreshed pricing, not a live market-wide index.',
+              'This is not a live market-wide index.',
               style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.5),
             ),
           ],
@@ -393,22 +386,17 @@ class _MarketDataScreenState extends ConsumerState<MarketDataScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Top movers lists market-wide cards with the strongest recent price gains from Card Hedge (same catalog as Comps). Each row shows a headline grade price and the published gain percentage.',
+              'Top gainers lists market-wide cards with the strongest recent price gains. Each row shows a headline grade price and the published gain percentage.',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
             ),
             SizedBox(height: 10),
             Text(
-              'Sport filters apply instantly to the list already loaded—no extra requests when you switch NBA, NFL, MLB, NHL, or Soccer.',
+              '🔥 Top gainers — We filter out unrealistic spikes.',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
             ),
             SizedBox(height: 10),
             Text(
-              '🔥 Top gainers — Card Hedge filters out unrealistic spikes.',
-              style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Data is not your personal collection; use the collection list and card detail for owned-card P/L.',
+              'Data is market-wide; use the collection list and card detail for owned-card P/L.',
               style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.5),
             ),
           ],
