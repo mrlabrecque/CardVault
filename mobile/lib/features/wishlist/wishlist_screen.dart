@@ -49,8 +49,11 @@ String buildEbayQuery({
   if (setName?.isNotEmpty == true) parts.add(setName!);
   if (player?.isNotEmpty == true) parts.add(player!);
   if (cardNumber?.isNotEmpty == true) parts.add('#$cardNumber');
-  final parallelLabel = (parallel ?? '').replaceAll(RegExp(r'\s*/\d+$'), '').trim();
-  if (parallelLabel.isNotEmpty && parallelLabel.toLowerCase() != 'base') parts.add(parallelLabel);
+  final parallelLabel = (parallel ?? '')
+      .replaceAll(RegExp(r'\s*/\d+$'), '')
+      .trim();
+  if (parallelLabel.isNotEmpty && parallelLabel.toLowerCase() != 'base')
+    parts.add(parallelLabel);
   if (isAuto) parts.add('Auto');
   if (isPatch) parts.add('Patch');
   if (serialMax != null) parts.add('/$serialMax');
@@ -63,8 +66,8 @@ String buildEbayQuery({
 
 final wishlistProvider =
     AsyncNotifierProvider<WishlistNotifier, List<WishlistItem>>(
-  WishlistNotifier.new,
-);
+      WishlistNotifier.new,
+    );
 
 class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
   @override
@@ -72,7 +75,9 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
     final supabase = ref.read(supabaseProvider);
     final data = await supabase
         .from('wishlist')
-        .select('*, wishlist_matches(*), master_card_definitions(image_url, set_cards(image_url))')
+        .select(
+          '*, wishlist_matches(*), master_card_definitions(image_url, set_cards(image_url))',
+        )
         .order('created_at', ascending: false);
     return (data as List)
         .map((r) => WishlistItem.fromJson(r as Map<String, dynamic>))
@@ -89,7 +94,8 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
     final item = items.firstWhere((i) => i.id == id);
     final next = item.isPaused ? 'active' : 'paused';
     _updateItem(id, (i) => i.copyWith(alertStatus: next));
-    await ref.read(supabaseProvider)
+    await ref
+        .read(supabaseProvider)
         .from('wishlist')
         .update({'alert_status': next})
         .eq('id', id);
@@ -112,7 +118,8 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
         lastSeenPrice: lowestPrice,
       );
     });
-    await ref.read(supabaseProvider)
+    await ref
+        .read(supabaseProvider)
         .from('wishlist_matches')
         .delete()
         .eq('id', matchId);
@@ -130,9 +137,14 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
 
   Future<({int checked, int triggered, String? error})> checkNow() async {
     try {
-      final res = await ref.read(supabaseProvider).functions.invoke('wishlist-check-now');
+      final res = await ref
+          .read(supabaseProvider)
+          .functions
+          .invoke('wishlist-check-now');
       if (res.status != 200) {
-        final err = (res.data as Map<String, dynamic>?)?['error'] as String? ?? 'Failed';
+        final err =
+            (res.data as Map<String, dynamic>?)?['error'] as String? ??
+            'Failed';
         return (checked: 0, triggered: 0, error: err);
       }
       final body = res.data as Map<String, dynamic>;
@@ -149,7 +161,10 @@ class WishlistNotifier extends AsyncNotifier<List<WishlistItem>> {
 
   Future<void> add(Map<String, dynamic> data) async {
     final userId = ref.read(supabaseProvider).auth.currentUser?.id;
-    await ref.read(supabaseProvider).from('wishlist').insert({...data, 'user_id': userId});
+    await ref.read(supabaseProvider).from('wishlist').insert({
+      ...data,
+      'user_id': userId,
+    });
     await reload();
   }
 
@@ -182,7 +197,9 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
   }
 
   void _toggleFilter(String f) => setState(() {
-    _activeFilters.contains(f) ? _activeFilters.remove(f) : _activeFilters.add(f);
+    _activeFilters.contains(f)
+        ? _activeFilters.remove(f)
+        : _activeFilters.add(f);
   });
 
   List<WishlistItem> _filterItems(List<WishlistItem> items) {
@@ -190,13 +207,15 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     final q = _searchQuery.toLowerCase();
     return items.where((item) {
       if (q.isNotEmpty) {
-        final matches = (item.player?.toLowerCase().contains(q) ?? false) ||
+        final matches =
+            (item.player?.toLowerCase().contains(q) ?? false) ||
             (item.setName?.toLowerCase().contains(q) ?? false) ||
             (item.parallel?.toLowerCase().contains(q) ?? false) ||
             (item.cardNumber?.toLowerCase().contains(q) ?? false);
         if (!matches) return false;
       }
-      if (_activeFilters.contains('DEAL FOUND') && item.matches.isEmpty) return false;
+      if (_activeFilters.contains('DEAL FOUND') && item.matches.isEmpty)
+        return false;
       return true;
     }).toList();
   }
@@ -229,8 +248,12 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                 buttonStyle: PopupButtonStyle.plain,
                 items: [
                   AdaptivePopupMenuItem(
-                    label: _activeFilters.contains('DEAL FOUND') ? '✓ Deal Found' : 'Deal Found',
-                    icon: _activeFilters.contains('DEAL FOUND') ? 'checkmark.circle.fill' : 'circle',
+                    label: _activeFilters.contains('DEAL FOUND')
+                        ? '✓ Deal Found'
+                        : 'Deal Found',
+                    icon: _activeFilters.contains('DEAL FOUND')
+                        ? 'checkmark.circle.fill'
+                        : 'circle',
                     value: 'DEAL FOUND',
                   ),
                   if (_activeFilters.isNotEmpty)
@@ -275,16 +298,37 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
         Column(
           children: [
             Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(color: colors.outline.withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: Icon(Icons.bookmark_border, size: 28, color: colors.onSurface.withValues(alpha: 0.3)),
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: colors.outline.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.bookmark_border,
+                size: 28,
+                color: colors.onSurface.withValues(alpha: 0.3),
+              ),
             ),
             const SizedBox(height: 16),
-            Text('No cards on your wishlist',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.onSurface, fontFamily: AppFonts.fontFamily)),
+            Text(
+              'No cards on your wishlist',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: colors.onSurface,
+                fontFamily: AppFonts.fontFamily,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Add cards to watch for deals on eBay.',
-                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5), fontFamily: AppFonts.fontFamily)),
+            Text(
+              'Add cards to watch for deals on eBay.',
+              style: TextStyle(
+                fontSize: 12,
+                color: colors.onSurface.withValues(alpha: 0.5),
+                fontFamily: AppFonts.fontFamily,
+              ),
+            ),
             const SizedBox(height: 20),
             AdaptiveButton(
               onPressed: () => _showWishlistForm(context, ref),
@@ -300,7 +344,6 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     );
   }
 
-
   Widget _buildList(List<WishlistItem> items) {
     final filtered = _filterItems(items);
     final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
@@ -308,7 +351,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     return CustomScrollView(
       slivers: [
         SliverFrostedHeader(
-          height: navOffset + ChromeMetrics.searchHeaderExtent + ChromeMetrics.searchOnlyTightExtraHeight,
+          height:
+              navOffset +
+              ChromeMetrics.searchHeaderExtent +
+              ChromeMetrics.searchOnlyTightExtraHeight,
           child: FrostedChromeLayer(
             child: Padding(
               padding: ChromeMetrics.searchOnlyTightPadding(navOffset),
@@ -336,11 +382,15 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             hasScrollBody: false,
             child: Center(
               child: Text(
-                _searchQuery.isNotEmpty ? 'No cards match your search.' : 'No wishlist items yet.',
+                _searchQuery.isNotEmpty
+                    ? 'No cards match your search.'
+                    : 'No wishlist items yet.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.5),
                   fontFamily: AppFonts.fontFamily,
                 ),
               ),
@@ -370,8 +420,9 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                     await ref.read(wishlistProvider.notifier).remove(item.id);
                     setState(() => _deletingId = null);
                   },
-                  onDismissMatch: (matchId) =>
-                      ref.read(wishlistProvider.notifier).dismissMatch(item.id, matchId),
+                  onDismissMatch: (matchId) => ref
+                      .read(wishlistProvider.notifier)
+                      .dismissMatch(item.id, matchId),
                 );
               },
             ),
@@ -380,7 +431,12 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     );
   }
 
-  void _showWishlistForm(BuildContext context, WidgetRef ref, {WishlistItem? editing, Map<String, dynamic>? prefill}) {
+  void _showWishlistForm(
+    BuildContext context,
+    WidgetRef ref, {
+    WishlistItem? editing,
+    Map<String, dynamic>? prefill,
+  }) {
     showAdaptiveSheet(
       context: context,
       builder: (_) => WishlistFormSheet(
@@ -401,7 +457,6 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
       ),
     );
   }
-
 }
 
 // ── Item card ──────────────────────────────────────────────────────────────────
@@ -429,7 +484,6 @@ class _WishlistCard extends StatelessWidget {
   final VoidCallback onDelete;
   final void Function(String matchId) onDismissMatch;
 
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -447,17 +501,34 @@ class _WishlistCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: colors.primary,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
               ),
               child: Row(
                 children: [
                   Icon(Icons.local_offer, color: colors.onPrimary, size: 14),
                   const SizedBox(width: 8),
-                  Text('Deal Found!', style: TextStyle(color: colors.onPrimary, fontSize: 12, fontWeight: FontWeight.w700, fontFamily: AppFonts.fontFamily)),
+                  Text(
+                    'Deal Found!',
+                    style: TextStyle(
+                      color: colors.onPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: AppFonts.fontFamily,
+                    ),
+                  ),
                   const Spacer(),
                   if (item.savings > 0)
-                    Text('${formatUsd(item.savings)} under target',
-                        style: TextStyle(color: colors.onPrimary, fontSize: 11, fontWeight: FontWeight.w600, fontFamily: AppFonts.fontFamily)),
+                    Text(
+                      '${formatUsd(item.savings)} under target',
+                      style: TextStyle(
+                        color: colors.onPrimary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: AppFonts.fontFamily,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -469,68 +540,76 @@ class _WishlistCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Main content row: image + info (expanded) + right (badge + prices)
-                IntrinsicHeight(child: 
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    CardThumbnail(
-                      imageUrl: item.imageUrl,
-                      sport: item.sport ?? 'Unknown',
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 8, 6, 12),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      CardThumbnail(
+                        imageUrl: item.imageUrl,
+                        sport: item.sport ?? 'Unknown',
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 8, 6, 12),
                           child: CardInfoSection(
                             player: item.player ?? 'Unknown',
                             cardNumber: item.cardNumber,
                             year: item.year,
-                            set: item.setName,
-                            parallel: item.parallel,
+                            releaseName: item.setName,
+                            setName: null,
+                            parallelName: item.parallel,
                             serialMax: item.serialMax,
                             sport: item.sport ?? 'Unknown',
                             rookie: item.attrs.contains('RC'),
                             autograph: item.attrs.contains('AUTO'),
                             memorabilia: item.attrs.contains('PATCH'),
                             ssp: item.attrs.contains('SSP'),
-                            isGraded: item.grade != null && item.grade!.isNotEmpty,
+                            isGraded:
+                                item.grade != null && item.grade!.isNotEmpty,
                             gradeLabel: item.grade,
                           ),
+                        ),
                       ),
-                    ),
-                    // Right side: badge + prices
-                    Padding(padding: EdgeInsets.all(12),
-                    child:
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // Top: badge only
-                        if (!triggered)
-                          _StatusBadge(status: item.alertStatus, colors: colors),
-                        if (!triggered)
-                          const SizedBox(height: 8),
-                        // Price boxes (inline)
-                        Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          alignment: WrapAlignment.end,
+                      // Right side: badge + prices
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            if (item.targetPrice != null)
-                              _PriceBox(colors: colors, label: 'Target', value: formatUsd(item.targetPrice!)),
-                            if (triggered && item.lastSeenPrice != null)
-                              _PriceBox(
+                            // Top: badge only
+                            if (!triggered)
+                              _StatusBadge(
+                                status: item.alertStatus,
                                 colors: colors,
-                                label: 'Best',
-                                value: formatUsd(item.lastSeenPrice!),
-                                highlight: true,
                               ),
+                            if (!triggered) const SizedBox(height: 8),
+                            // Price boxes (inline)
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              alignment: WrapAlignment.end,
+                              children: [
+                                if (item.targetPrice != null)
+                                  _PriceBox(
+                                    colors: colors,
+                                    label: 'Target',
+                                    value: formatUsd(item.targetPrice!),
+                                  ),
+                                if (triggered && item.lastSeenPrice != null)
+                                  _PriceBox(
+                                    colors: colors,
+                                    label: 'Best',
+                                    value: formatUsd(item.lastSeenPrice!),
+                                    highlight: true,
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
                 ),
 
                 // Active listings section
@@ -545,23 +624,38 @@ class _WishlistCard extends StatelessWidget {
                       children: [
                         Text(
                           '${item.matches.length} active listing${item.matches.length == 1 ? '' : 's'}',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.7), fontFamily: AppFonts.fontFamily),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: colors.onSurface.withValues(alpha: 0.7),
+                            fontFamily: AppFonts.fontFamily,
+                          ),
                         ),
-                        Icon(isMatchesExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: colors.onSurface.withValues(alpha: 0.5)),
+                        Icon(
+                          isMatchesExpanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          size: 16,
+                          color: colors.onSurface.withValues(alpha: 0.5),
+                        ),
                       ],
                     ),
                   ),
                   if (isMatchesExpanded) ...[
                     const SizedBox(height: 8),
                     Container(
-                      decoration: BoxDecoration(color: colors.surface, borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Column(
                         children: [
                           for (int i = 0; i < item.matches.length; i++) ...[
                             _MatchRow(
                               match: item.matches[i],
                               colors: colors,
-                              onDismiss: () => onDismissMatch(item.matches[i].id),
+                              onDismiss: () =>
+                                  onDismissMatch(item.matches[i].id),
                             ),
                             if (i < item.matches.length - 1)
                               Divider(height: 1, color: colors.outlineVariant),
@@ -595,13 +689,16 @@ class _WishlistCard extends StatelessWidget {
       child: card,
     );
   }
-
 }
 
 // ── Match row ──────────────────────────────────────────────────────────────────
 
 class _MatchRow extends StatelessWidget {
-  const _MatchRow({required this.match, required this.colors, required this.onDismiss});
+  const _MatchRow({
+    required this.match,
+    required this.colors,
+    required this.onDismiss,
+  });
   final WishlistMatch match;
   final ColorScheme colors;
   final VoidCallback onDismiss;
@@ -615,31 +712,48 @@ class _MatchRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CardThumbnail(
-            imageUrl: match.imageUrl,
-            sport: 'Unknown',
-          ),
+          CardThumbnail(imageUrl: match.imageUrl, sport: 'Unknown'),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(match.title,
-                    style: TextStyle(fontSize: 11, color: Colors.black87, fontFamily: AppFonts.fontFamily),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(
+                  match.title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.black87,
+                    fontFamily: AppFonts.fontFamily,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Text(isAuction ? 'Auction' : 'Buy Now',
-                        style: TextStyle(
-                            fontSize: 10, fontWeight: FontWeight.w600,
-                            color: isAuction ? const Color(0xFF9333EA) : const Color(0xFF2563EB),
-                            fontFamily: AppFonts.fontFamily)),
+                    Text(
+                      isAuction ? 'Auction' : 'Buy Now',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: isAuction
+                            ? const Color(0xFF9333EA)
+                            : const Color(0xFF2563EB),
+                        fontFamily: AppFonts.fontFamily,
+                      ),
+                    ),
                     if (match.url != null) ...[
                       const SizedBox(width: 6),
                       GestureDetector(
-                        onTap: () => launchUrl(Uri.parse(match.url!), mode: LaunchMode.externalApplication),
-                        child: Icon(Icons.open_in_new, size: 11, color: colors.onSurface.withValues(alpha: 0.4)),
+                        onTap: () => launchUrl(
+                          Uri.parse(match.url!),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        child: Icon(
+                          Icons.open_in_new,
+                          size: 11,
+                          color: colors.onSurface.withValues(alpha: 0.4),
+                        ),
                       ),
                     ],
                   ],
@@ -651,18 +765,32 @@ class _MatchRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(formatUsd(match.price),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.primary, fontFamily: AppFonts.fontFamily)),
+              Text(
+                formatUsd(match.price),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: colors.primary,
+                  fontFamily: AppFonts.fontFamily,
+                ),
+              ),
               const SizedBox(height: 6),
               GestureDetector(
                 onTap: onDismiss,
                 child: Container(
-                  width: 28, height: 28,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    border: Border.all(color: colors.error.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: colors.error.withValues(alpha: 0.3),
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.close, size: 14, color: colors.error.withValues(alpha: 0.6)),
+                  child: Icon(
+                    Icons.close,
+                    size: 14,
+                    color: colors.error.withValues(alpha: 0.6),
+                  ),
                 ),
               ),
             ],
@@ -683,15 +811,42 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (status) {
-      'active'    => ('Watching', colors.primary.withValues(alpha: 0.15), colors.primary),
-      'triggered' => ('Below Target!', colors.error.withValues(alpha: 0.15), colors.error),
-      'paused'    => ('Paused', colors.outline.withValues(alpha: 0.1), colors.onSurface.withValues(alpha: 0.5)),
-      _           => ('Unknown', colors.outline.withValues(alpha: 0.1), colors.onSurface.withValues(alpha: 0.5)),
+      'active' => (
+        'Watching',
+        colors.primary.withValues(alpha: 0.15),
+        colors.primary,
+      ),
+      'triggered' => (
+        'Below Target!',
+        colors.error.withValues(alpha: 0.15),
+        colors.error,
+      ),
+      'paused' => (
+        'Paused',
+        colors.outline.withValues(alpha: 0.1),
+        colors.onSurface.withValues(alpha: 0.5),
+      ),
+      _ => (
+        'Unknown',
+        colors.outline.withValues(alpha: 0.1),
+        colors.onSurface.withValues(alpha: 0.5),
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg, fontFamily: AppFonts.fontFamily)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: fg,
+          fontFamily: AppFonts.fontFamily,
+        ),
+      ),
     );
   }
 }
@@ -713,20 +868,42 @@ class _PriceBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        color: highlight ? colors.primary.withValues(alpha: 0.1) : colors.surface,
-        border: Border.all(color: highlight ? colors.primary.withValues(alpha: 0.3) : const Color(0xFFE5E7EB)),
+        color: highlight
+            ? colors.primary.withValues(alpha: 0.1)
+            : colors.surface,
+        border: Border.all(
+          color: highlight
+              ? colors.primary.withValues(alpha: 0.3)
+              : const Color(0xFFE5E7EB),
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: colors.onSurface.withValues(alpha: 0.4), letterSpacing: 0.2, fontFamily: AppFonts.fontFamily)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 7,
+              fontWeight: FontWeight.w600,
+              color: colors.onSurface.withValues(alpha: 0.4),
+              letterSpacing: 0.2,
+              fontFamily: AppFonts.fontFamily,
+            ),
+          ),
           const SizedBox(height: 1),
-          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: highlight ? colors.primary : colors.onSurface, fontFamily: AppFonts.fontFamily)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: highlight ? colors.primary : colors.onSurface,
+              fontFamily: AppFonts.fontFamily,
+            ),
+          ),
         ],
       ),
     );
   }
 }
-

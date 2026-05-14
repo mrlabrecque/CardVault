@@ -1,3 +1,84 @@
+/// Maps CardHedge image-search fields to Vault-style release / set / parallel labels.
+abstract final class CardHedgeImageSearchLabels {
+  CardHedgeImageSearchLabels._();
+
+  static String _wordKey(String raw) {
+    final t = raw.replaceAll(RegExp(r'^[^\w]+|[^\w]+$'), '').trim();
+    return t.toLowerCase();
+  }
+
+  /// Remaining text after removing every token that appears in CardHedge
+  /// [setLabel] (JSON `set`), [setType] (`set_type`), [name] (listing title), [player], or [variant].
+  ///
+  /// Both [setLabel] and [setType] are used so the release line does not leak back into the
+  /// derived set row when only one of the two fields carries the product name.
+  /// Empty result → `"Base"`.
+  static String setNameFromDescription(
+    String? description,
+    String? setLabel,
+    String? setType,
+    String? listingName,
+    String? player,
+    String? variant,
+  ) {
+    final d = description?.trim();
+    if (d == null || d.isEmpty) return 'Base';
+    final remove = <String>{};
+    void collect(String? s) {
+      if (s == null) return;
+      for (final raw in s.split(RegExp(r'\s+'))) {
+        final k = _wordKey(raw);
+        if (k.isNotEmpty) remove.add(k);
+      }
+    }
+
+    collect(setLabel);
+    collect(setType);
+    collect(listingName);
+    collect(player);
+    collect(variant);
+
+    final kept = <String>[];
+    for (final raw in d.split(RegExp(r'\s+'))) {
+      final k = _wordKey(raw);
+      if (k.isEmpty) continue;
+      if (remove.contains(k)) continue;
+      kept.add(raw);
+    }
+    if (kept.isEmpty) return 'Base';
+    return kept.join(' ');
+  }
+
+  /// Strips a leading **19xx/20xx** year and a trailing [category] phrase from a CardHedge
+  /// release line (e.g. `"2025 Donruss Optic Football"` + category `Football` → `"Donruss Optic"`).
+  static String? releaseNameWithoutYearAndCategory(
+    String? raw,
+    String? category,
+  ) {
+    var s = raw?.trim();
+    if (s == null || s.isEmpty) return null;
+
+    s = s.replaceFirst(RegExp(r'^(19|20)\d{2}\b\s*'), '').trim();
+    if (s.isEmpty) return null;
+
+    final cat = category?.trim();
+    if (cat != null && cat.isNotEmpty) {
+      final end = RegExp(
+        r'\s+' + RegExp.escape(cat) + r'\s*$',
+        caseSensitive: false,
+      );
+      if (end.hasMatch(s)) {
+        s = s.replaceFirst(end, '').trim();
+      } else if (s.toLowerCase() == cat.toLowerCase()) {
+        s = '';
+      }
+    }
+
+    s = s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+    return s.isEmpty ? null : s;
+  }
+}
+
 /// One guide-grade price row from CardHedge `card-details` (or backfill), attached to image-search hits.
 class CardHedgeGuidePriceChip {
   const CardHedgeGuidePriceChip({required this.grade, required this.price});
@@ -8,7 +89,10 @@ class CardHedgeGuidePriceChip {
   factory CardHedgeGuidePriceChip.fromJson(Map<String, dynamic> j) {
     final g = (j['grade'] ?? j['Grade'] ?? '').toString().trim();
     final raw = j['price'] ?? j['Price'] ?? j['value'];
-    final p = raw is num ? raw.toDouble() : double.tryParse(raw.toString().replaceAll(RegExp(r'[^0-9.-]'), '')) ?? 0;
+    final p = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw.toString().replaceAll(RegExp(r'[^0-9.-]'), '')) ??
+              0;
     return CardHedgeGuidePriceChip(grade: g.isEmpty ? '—' : g, price: p);
   }
 }
@@ -21,6 +105,8 @@ class CardHedgeImageSearchHit {
     this.distance,
     this.player,
     this.setLabel,
+    this.setType,
+    this.listingName,
     this.number,
     this.variant,
     this.category,
@@ -37,7 +123,15 @@ class CardHedgeImageSearchHit {
   final String? similarityLabel;
   final double? distance;
   final String? player;
+
+  /// CardHedge `set` field (product line they label as set — often the release line).
   final String? setLabel;
+
+  /// CardHedge `set_type` (preferred for Vault **release**; falls back to [setLabel]).
+  final String? setType;
+
+  /// CardHedge `name` (listing title tokens — remove from [description] to derive set name).
+  final String? listingName;
   final String? number;
   final String? variant;
   final String? category;
@@ -59,13 +153,49 @@ class CardHedgeImageSearchHit {
     return (n / 100).clamp(0.0, 1.0);
   }
 
+  /// CardHedge **`set_type`** when present, otherwise **`set`** — before [displayReleaseName] normalization.
+  String? get rawReleaseLine {
+    final st = setType?.trim();
+    if (st != null && st.isNotEmpty) return st;
+    final sl = setLabel?.trim();
+    if (sl != null && sl.isNotEmpty) return sl;
+    return null;
+  }
+
+  /// Same source as [rawReleaseLine], with leading year and trailing [category] removed for UI.
+  String? get displayReleaseName =>
+      CardHedgeImageSearchLabels.releaseNameWithoutYearAndCategory(
+        rawReleaseLine,
+        category,
+      );
+
+  /// Maps to DB-style **set** (checklist): [description] minus tokens from
+  /// `set`, `name`, `player`, and `variant`.
+  String get displaySetName =>
+      CardHedgeImageSearchLabels.setNameFromDescription(
+        description,
+        setLabel,
+        setType,
+        listingName,
+        player,
+        variant,
+      );
+
+  /// Maps to **parallel** (CardHedge `variant`).
+  String? get displayParallelName {
+    final v = variant?.trim();
+    return (v != null && v.isNotEmpty) ? v : null;
+  }
+
   factory CardHedgeImageSearchHit.fromJson(Map<String, dynamic> j) {
     final pricesRaw = j['prices'];
     final chips = <CardHedgeGuidePriceChip>[];
     if (pricesRaw is List) {
       for (final e in pricesRaw) {
         if (e is Map) {
-          final c = CardHedgeGuidePriceChip.fromJson(Map<String, dynamic>.from(e));
+          final c = CardHedgeGuidePriceChip.fromJson(
+            Map<String, dynamic>.from(e),
+          );
           if (c.price > 0 && c.grade.isNotEmpty && c.grade != '—') chips.add(c);
         }
       }
@@ -75,9 +205,18 @@ class CardHedgeImageSearchHit {
     return CardHedgeImageSearchHit(
       cardId: (j['card_id'] ?? j['cardId'] ?? '').toString().trim(),
       similarityLabel: j['similarity']?.toString(),
-      distance: (j['distance'] is num) ? (j['distance'] as num).toDouble() : double.tryParse('${j['distance']}'),
+      distance: (j['distance'] is num)
+          ? (j['distance'] as num).toDouble()
+          : double.tryParse('${j['distance']}'),
       player: j['player']?.toString(),
       setLabel: j['set']?.toString(),
+      setType: () {
+        final v = j['set_type'] ?? j['setType'] ?? j['SetType'];
+        if (v == null) return null;
+        final s = v.toString().trim();
+        return s.isEmpty ? null : s;
+      }(),
+      listingName: j['name']?.toString(),
       number: j['number']?.toString(),
       variant: j['variant']?.toString(),
       category: j['category']?.toString(),
