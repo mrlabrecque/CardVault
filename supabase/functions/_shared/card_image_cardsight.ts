@@ -1,5 +1,7 @@
 /**
- * CardSight card image → Supabase Storage (`card-images`) → `set_cards.image_url`.
+ * CardSight card image → Supabase Storage (`card-images`) → `set_cards.image_url`
+ * and, for the **base** checklist parallel only, `master_card_definitions.image_url`.
+ * Non-base parallel images should use a separate pipeline (not implemented here).
  */
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
@@ -20,15 +22,82 @@ export async function fetchCardsightCardImageBytes(cardsightCardId: string): Pro
   }
 }
 
+/** Mirrors DB `_default_parallel_for_set`: Base name first, then sort_order, then name. */
+export async function getDefaultParallelIdForSet(
+  supabase: SupabaseClient,
+  setId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('set_parallels')
+    .select('id, name, sort_order')
+    .eq('set_id', setId);
+  if (error || !data?.length) return null;
+  const sorted = [...data].sort((a, b) => {
+    const ab = a.name.trim().toLowerCase() === 'base' ? 0 : 1;
+    const bb = b.name.trim().toLowerCase() === 'base' ? 0 : 1;
+    if (ab !== bb) return ab - bb;
+    const so = (x: (typeof data)[0]) => x.sort_order ?? 999999;
+    return so(a) - so(b);
+  });
+  return sorted[0]?.id ?? null;
+}
+
 /**
- * Uploads JPEG bytes, updates `set_cards` for `setCardId`, returns public URL or null.
- * @param setCardId Checklist row id (`set_cards.id`); body field may still be named `masterCardId` for clients.
+ * When the CardSight checklist image is stored on `set_cards`, also write
+ * `master_card_definitions.image_url` for the **base** variant row
+ * (`set_card_id` + default parallel for `set_id`).
+ *
+ * If [catalogVariantId] is set, only update the base master row when that variant
+ * is the base parallel (skip for Silver / etc. — different route later).
+ */
+export async function syncBaseVariantMasterImageUrl(
+  supabase: SupabaseClient,
+  params: {
+    setCardId: string;
+    setId: string;
+    publicUrl: string;
+    catalogVariantId?: string | null;
+  },
+): Promise<void> {
+  const { setCardId, setId, publicUrl, catalogVariantId } = params;
+  const defaultPid = await getDefaultParallelIdForSet(supabase, setId);
+  if (!defaultPid) return;
+
+  if (catalogVariantId) {
+    const { data: row } = await supabase
+      .from('master_card_definitions')
+      .select('parallel_id')
+      .eq('id', catalogVariantId)
+      .maybeSingle();
+    if (!row || row.parallel_id !== defaultPid) return;
+  }
+
+  const { error } = await supabase
+    .from('master_card_definitions')
+    .update({ image_url: publicUrl })
+    .eq('set_card_id', setCardId)
+    .eq('parallel_id', defaultPid);
+
+  if (error) {
+    console.error('[card-image] master_card_definitions (base) update:', error);
+  }
+}
+
+/**
+ * Uploads JPEG bytes, updates `set_cards`, then mirrors to base-variant
+ * `master_card_definitions` when applicable.
  */
 export async function uploadCardImageAndUpdateMaster(
   supabase: SupabaseClient,
-  params: { masterCardId: string; cardsightCardId: string; imageBuffer: ArrayBuffer },
+  params: {
+    setCardId: string;
+    setId: string;
+    cardsightCardId: string;
+    imageBuffer: ArrayBuffer;
+    catalogVariantId?: string | null;
+  },
 ): Promise<string | null> {
-  const { masterCardId: setCardId, cardsightCardId, imageBuffer } = params;
+  const { setCardId, setId, cardsightCardId, imageBuffer, catalogVariantId } = params;
   const storagePath = `cards/${cardsightCardId}.jpg`;
 
   const { error: uploadError } = await supabase.storage
@@ -48,19 +117,32 @@ export async function uploadCardImageAndUpdateMaster(
     .eq('id', setCardId);
 
   if (updateError) {
-    console.log('[card-image] update error:', updateError);
+    console.log('[card-image] set_cards update error:', updateError);
     return null;
   }
+
+  await syncBaseVariantMasterImageUrl(supabase, {
+    setCardId,
+    setId,
+    publicUrl,
+    catalogVariantId: catalogVariantId ?? null,
+  });
 
   return publicUrl;
 }
 
 /**
- * Fetches from CardSight, uploads, updates row. Returns public URL or null on any failure.
+ * Fetches from CardSight, uploads, updates `set_cards` + base variant `master_card_definitions`
+ * when the resolved row is (or caller only had) the base parallel path.
  */
 export async function fetchUploadAndSetMasterImage(
   supabase: SupabaseClient,
-  params: { masterCardId: string; cardsightCardId: string },
+  params: {
+    setCardId: string;
+    setId: string;
+    cardsightCardId: string;
+    catalogVariantId?: string | null;
+  },
 ): Promise<string | null> {
   const imageBuffer = await fetchCardsightCardImageBytes(params.cardsightCardId);
   if (!imageBuffer) return null;

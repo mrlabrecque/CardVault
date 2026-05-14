@@ -35,6 +35,7 @@ class MasterCardDetailArgs {
     this.sport,
     this.onAddToCollection,
     this.onAddToWishlist,
+    this.openedFromScanResults,
   });
 
   final MasterCard masterCard;
@@ -47,6 +48,11 @@ class MasterCardDetailArgs {
   final String? sport;
   final VoidCallback? onAddToCollection;
   final VoidCallback? onAddToWishlist;
+
+  /// When true, back dismisses both this route and the catalog route pushed
+  /// from scan so the user returns to scan results. Nullable so hot reload /
+  /// older [extra] payloads default to false instead of throwing.
+  final bool? openedFromScanResults;
 }
 
 /// Read-only detail for a `master_card_definitions` entry — the same shell
@@ -68,6 +74,7 @@ class MasterCardDetailScreen extends ConsumerStatefulWidget {
     this.sport,
     this.onAddToCollection,
     this.onAddToWishlist,
+    this.openedFromScanResults,
   });
 
   final MasterCard masterCard;
@@ -80,6 +87,7 @@ class MasterCardDetailScreen extends ConsumerStatefulWidget {
   final String? sport;
   final VoidCallback? onAddToCollection;
   final VoidCallback? onAddToWishlist;
+  final bool? openedFromScanResults;
 
   @override
   ConsumerState<MasterCardDetailScreen> createState() =>
@@ -90,6 +98,8 @@ class _MasterCardDetailScreenState
     extends ConsumerState<MasterCardDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _heroKey = GlobalKey();
+
+  bool get _openedFromScanResults => widget.openedFromScanResults ?? false;
 
   /// Loads linked `current_prices` from DB, or runs catalog search when the variant
   /// has no linked guide-price id or prices are not yet materialized.
@@ -130,7 +140,9 @@ class _MasterCardDetailScreenState
         oldWidget.releaseName != widget.releaseName ||
         oldWidget.setName != widget.setName ||
         oldWidget.year != widget.year ||
-        oldWidget.sport != widget.sport) {
+        oldWidget.sport != widget.sport ||
+        (oldWidget.openedFromScanResults ?? false) !=
+            (widget.openedFromScanResults ?? false)) {
       setState(() {
         _guidePricesLoading = true;
         _guideMatchResult = null;
@@ -290,6 +302,16 @@ class _MasterCardDetailScreenState
     }
   }
 
+  void _handleMasterDetailBack() {
+    final nav = Navigator.of(context);
+    if (_openedFromScanResults) {
+      nav.pop();
+      nav.pop();
+    } else {
+      nav.maybePop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -342,7 +364,14 @@ class _MasterCardDetailScreenState
     final overlayLoading =
         _guidePricesLoading || userCardsAsync.isLoading || wishlistAsync.isLoading;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_openedFromScanResults,
+      onPopInvokedWithResult: (didPop, result) {
+        if (_openedFromScanResults && !didPop) {
+          _handleMasterDetailBack();
+        }
+      },
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -360,7 +389,7 @@ class _MasterCardDetailScreenState
           child: Center(
             child: GlassCircleIconButton(
               icon: Icons.arrow_back_ios_new,
-              onPressed: () => Navigator.of(context).maybePop(),
+              onPressed: _handleMasterDetailBack,
               tooltip: 'Back',
               iconSize: 17,
               onDarkSurface: !onLight,
@@ -512,6 +541,7 @@ class _MasterCardDetailScreenState
             ),
         ],
       ),
+    ),
     );
   }
 }

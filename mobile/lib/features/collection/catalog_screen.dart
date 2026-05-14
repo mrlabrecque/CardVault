@@ -218,19 +218,66 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   bool _saving = false;
 
+  /// While true, scan-driven catalog opens show [CardFanLoader] instead of browse
+  /// steps until resolve finishes or partial flow reveals the catalog UI.
+  bool _scanResolving = false;
+
+  /// Copy of [CatalogScreen.scanEntry] captured in [initState] (and updated when
+  /// reopening from [didUpdateWidget]). Post-frame work must not read
+  /// `widget.scanEntry` alone: GoRouter can rebuild this route without `extra`
+  /// for a frame, which would wrongly run [_restoreNavigationState] and flash
+  /// the browse catalog before scan resolve runs.
+  CatalogScanEntry? _scanBootstrapEntry;
 
   @override
   void initState() {
     super.initState();
+    // Opening from scan: show loader until [_openCatalogFromScan] opens master
+    // (full path) or hands off to partial browse. Do not use `_restoringState`
+    // here — that path is for prefs restore and would block initState re-runs.
+    _scanBootstrapEntry = widget.scanEntry;
+    if (_scanBootstrapEntry != null) {
+      _restoringState = false;
+      _scanResolving = true;
+    }
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final entry = widget.scanEntry;
-      if (entry != null) {
-        await _openCatalogFromScan(entry.detection, entry.sport);
-      } else {
-        await _restoreNavigationState();
+      if (_scanBootstrapEntry != null) {
+        final e = _scanBootstrapEntry!;
+        await _openCatalogFromScan(e.detection, e.sport);
+        return;
       }
+      await _restoreNavigationState();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant CatalogScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_shouldReopenScanEntry(oldWidget.scanEntry, widget.scanEntry)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || widget.scanEntry == null) return;
+      setState(() {
+        _scanBootstrapEntry = widget.scanEntry;
+        _scanResolving = true;
+      });
+      await _openCatalogFromScan(widget.scanEntry!.detection, widget.scanEntry!.sport);
+    });
+  }
+
+  /// New scan `extra` while [CatalogScreen] is still mounted (same route, new args).
+  bool _shouldReopenScanEntry(CatalogScanEntry? oldE, CatalogScanEntry? newE) {
+    if (newE == null) return false;
+    if (oldE == null) return true;
+    if (oldE.sport != newE.sport) return true;
+    final a = oldE.detection.card;
+    final b = newE.detection.card;
+    if (a.id != b.id || a.releaseId != b.releaseId || a.setId != b.setId) return true;
+    if (a.name != b.name || a.number != b.number) return true;
+    if (oldE.detection.confidence != newE.detection.confidence) return true;
+    return false;
   }
 
   @override
@@ -316,38 +363,299 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-  Future<void> _openCatalogFromScan(ImageScanMatchResult detection, String sport) async {
+  /// Scan flow sends lowercase slugs (e.g. `basketball`); browse filters use catalog labels.
+  String _catalogSportFromScanSlug(String scanSport) {
+    switch (scanSport.trim().toLowerCase()) {
+      case 'baseball':
+        return 'Baseball';
+      case 'basketball':
+        return 'Basketball';
+      case 'football':
+        return 'Football';
+      case 'hockey':
+        return 'Hockey';
+      case 'soccer':
+        return 'Soccer';
+      default:
+        if (scanSport.isEmpty) return scanSport;
+        return '${scanSport[0].toUpperCase()}${scanSport.substring(1).toLowerCase()}';
+    }
+  }
+
+  String _releaseHintFromCard(ScannedCatalogCard card) {
+    final rn = card.releaseName?.trim();
+    if (rn != null && rn.isNotEmpty) return rn;
+    final m = card.manufacturer?.trim();
+    if (m != null && m.isNotEmpty) return m;
+    return '';
+  }
+
+  String _normScanText(String s) {
+    return s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+  }
+
+  int _scoreReleaseForScan(ReleaseRecord r, {required String hint, required int? year}) {
+    var score = 0;
+    if (year != null && r.year == year) score += 16;
+    if (hint.isEmpty) return score;
+    final rn = _normScanText(r.name);
+    final hn = _normScanText(hint);
+    if (hn.isEmpty) return score;
+    if (rn == hn) return score + 100;
+    if (rn.contains(hn) || hn.contains(rn)) return score + 65;
+    final rtoks = rn.split(' ').where((t) => t.length > 1).toSet();
+    final htoks = hn.split(' ').where((t) => t.length > 1).toSet();
+    score += rtoks.intersection(htoks).length * 10;
+    return score;
+  }
+
+  int _scoreSetForScan(SetRecord s, String setHint) {
+    final hn = _normScanText(setHint);
+    if (hn.isEmpty) return 0;
+    final sn = _normScanText(s.name);
+    if (sn.isEmpty) return 0;
+    if (sn == hn) return 100;
+    if (sn.contains(hn) || hn.contains(sn)) return 70;
+    final st = sn.split(' ').where((t) => t.length > 1).toSet();
+    final ht = hn.split(' ').where((t) => t.length > 1).toSet();
+    return st.intersection(ht).length * 12;
+  }
+
+  /// When CardSight returns metadata but no checklist UUIDs, resolve release/set by name
+  /// and land on the checklist (or sets search) instead of restoring stale prefs.
+  Future<void> _openCatalogFromScanPartial(
+    ImageScanMatchResult detection,
+    String scanSport,
+  ) async {
     if (!mounted) return;
+    await _clearNavigationState();
+    if (!mounted) return;
+
     final card = detection.card;
-    if (card.id == null || card.releaseId == null || card.setId == null) {
+    final catalogSport = _catalogSportFromScanSlug(scanSport);
+    final year = int.tryParse(card.year ?? '');
+    final releaseHint = _releaseHintFromCard(card);
+    final setHint = card.setName?.trim() ?? '';
+
+    setState(() {
+      _restoringState = false;
+      _scanResolving = false;
+      _scanBootstrapEntry = null;
+      _mode = _CatalogMode.browse;
+      _catalogFilterSport = catalogSport;
+      _catalogFilterYear = card.year?.trim() ?? '';
+      _browseSearchCtrl.text = releaseHint;
+      _setSearchCtrl.clear();
+      _catalogStep = _CatalogStep.browsing;
+      _browseSelectedRelease = null;
+      _selectedRelease = null;
+      _browseSets = [];
+      _selectedSet = null;
+      _browseResults = [];
+      _browseOffset = 0;
+      _browseHasMore = false;
+    });
+
+    final svc = ref.read(cardsServiceProvider);
+    ReleaseRecord? resolvedRelease;
+    var bestReleaseScore = 0;
+    var resolvedFromSearch = false;
+    List<ReleaseRecord> searchCandidates = [];
+
+    if (releaseHint.isNotEmpty) {
+      searchCandidates = await svc.searchReleases(releaseHint);
+      searchCandidates = searchCandidates
+          .where(
+            (r) =>
+                r.sport == null ||
+                r.sport!.toLowerCase() == catalogSport.toLowerCase(),
+          )
+          .toList();
+      if (year != null) {
+        final byYear = searchCandidates.where((r) => r.year == year).toList();
+        if (byYear.isNotEmpty) searchCandidates = byYear;
+      }
+      for (final r in searchCandidates) {
+        final sc = _scoreReleaseForScan(r, hint: releaseHint, year: year);
+        if (sc > bestReleaseScore) {
+          bestReleaseScore = sc;
+          resolvedRelease = r;
+        }
+      }
+      if (bestReleaseScore < 28) {
+        resolvedRelease = null;
+        bestReleaseScore = 0;
+      } else {
+        resolvedFromSearch = true;
+      }
+    }
+
+    if (resolvedRelease == null) {
+      await _loadBrowseReleases(reset: true);
+      if (!mounted) return;
+      bestReleaseScore = 0;
+      for (final r in _browseResults) {
+        final sc = _scoreReleaseForScan(r, hint: releaseHint, year: year);
+        if (sc > bestReleaseScore) {
+          bestReleaseScore = sc;
+          resolvedRelease = r;
+        }
+      }
+      var pages = 0;
+      while (mounted && bestReleaseScore < 28 && _browseHasMore && pages < 6) {
+        pages++;
+        await _loadBrowseReleases();
+        if (!mounted) return;
+        for (final r in _browseResults) {
+          final sc = _scoreReleaseForScan(r, hint: releaseHint, year: year);
+          if (sc > bestReleaseScore) {
+            bestReleaseScore = sc;
+            resolvedRelease = r;
+          }
+        }
+      }
+      if (bestReleaseScore < 22) resolvedRelease = null;
+    }
+
+    if (resolvedRelease != null && resolvedFromSearch && searchCandidates.isNotEmpty) {
+      setState(() => _browseResults = List<ReleaseRecord>.from(searchCandidates));
+    }
+
+    if (resolvedRelease != null) {
+      await _selectBrowseRelease(resolvedRelease);
+      if (!mounted) return;
+
+      if (_browseSets.isEmpty) {
+        if (mounted) {
+          AdaptiveSnackBar.show(
+            context,
+            message:
+                'Found the release, but no sets are available yet. Try again after this release is imported.',
+            type: AdaptiveSnackBarType.info,
+          );
+          unawaited(_saveNavigationState());
+        }
+        return;
+      }
+
+      SetRecord? bestSet;
+      var bestSetScore = 0;
+      if (setHint.isNotEmpty) {
+        for (final s in _browseSets) {
+          final sc = _scoreSetForScan(s, setHint);
+          if (sc > bestSetScore) {
+            bestSetScore = sc;
+            bestSet = s;
+          }
+        }
+      }
+
+      if (bestSet != null && bestSetScore >= 32) {
+        await _selectBrowseSet(bestSet);
+        if (!mounted) return;
+
+        final nameQ = (card.name?.trim().isNotEmpty == true) ? card.name!.trim() : '';
+        final numQ = (card.number?.trim().isNotEmpty == true) ? card.number!.trim() : '';
+        final primaryQ = nameQ.isNotEmpty ? nameQ : numQ;
+        setState(() {
+          _cardCtrl.text = primaryQ;
+        });
+        _searchCards(primaryQ);
+
+        String normalizeParallelName(String name) =>
+            name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        final scanParallel = card.parallel;
+        SetParallel? matchedParallel;
+        if (scanParallel != null && scanParallel.name.isNotEmpty) {
+          final target = normalizeParallelName(scanParallel.name);
+          for (final p in _parallels) {
+            final candidate = normalizeParallelName(p.name);
+            if (candidate == target ||
+                candidate.contains(target) ||
+                target.contains(candidate)) {
+              matchedParallel = p;
+              break;
+            }
+          }
+        }
+        setState(() {
+          _selectedParallel = matchedParallel;
+          if (scanParallel != null && scanParallel.name.isNotEmpty) {
+            _parallelName = scanParallel.name;
+          }
+        });
+
+        if (mounted) {
+          AdaptiveSnackBar.show(
+            context,
+            message: nameQ.isEmpty
+                ? 'Opened this set from your scan. Search by player or card # to finish.'
+                : 'Opened this set from your scan. Pick your card from the list or refine search.',
+            type: AdaptiveSnackBarType.info,
+          );
+        }
+      } else {
+        setState(() {
+          _setSearchCtrl.text = setHint;
+        });
+        if (mounted) {
+          AdaptiveSnackBar.show(
+            context,
+            message:
+                'Choose the set that matches your card, then search the checklist.',
+            type: AdaptiveSnackBarType.info,
+          );
+        }
+      }
+    } else {
+      await _loadBrowseReleases(reset: true);
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: 'This match is incomplete — browse the catalog to find the card.',
+          message:
+              'Could not match this scan to a catalog release. Try search or adjust year/sport filters.',
           type: AdaptiveSnackBarType.info,
         );
-        await _restoreNavigationState();
       }
+    }
+
+    if (mounted) unawaited(_saveNavigationState());
+  }
+
+  Future<void> _openCatalogFromScan(ImageScanMatchResult detection, String sport) async {
+    if (!mounted) return;
+    final card = detection.card;
+    if (card.id == null || card.id!.trim().isEmpty) {
+      await _openCatalogFromScanPartial(detection, sport);
+      return;
+    }
+
+    final hasRelease =
+        card.releaseId != null && card.releaseId!.trim().isNotEmpty;
+    final hasSet = card.setId != null && card.setId!.trim().isNotEmpty;
+    if (!hasRelease || !hasSet) {
+      await _openCatalogFromScanPartial(detection, sport);
       return;
     }
 
     try {
+      final svc = ref.read(cardsServiceProvider);
+      final scanId = card.id!.trim();
       final year = int.tryParse(card.year ?? '') ?? DateTime.now().year;
       final releaseName = (card.releaseName?.trim().isNotEmpty == true)
           ? card.releaseName!
           : (card.manufacturer ?? 'Unknown Release');
 
       final csResult = CatalogSearchCardResult(
-        id: card.id!,
+        id: scanId,
         name: card.name ?? '',
         number: card.number,
-        setId: card.setId!,
+        setId: card.setId!.trim(),
         setName: card.setName ?? '',
-        releaseId: card.releaseId!,
+        releaseId: card.releaseId!.trim(),
         attributes: const [],
       );
 
-      final svc = ref.read(cardsServiceProvider);
       final resolved = await svc.resolveCardFromCatalog(
         card: csResult,
         releaseName: releaseName,
@@ -355,14 +663,25 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         releaseSegmentId: card.segmentId ?? '',
       );
 
-      final relSet = await svc.getReleaseAndSetForSetId(resolved.setId);
-      var cards = await svc.searchMasterCards(resolved.setId, '', limit: 10000);
-      final master = cards.where((c) => c.id == resolved.masterCardId).firstOrNull ??
-          await svc.fetchMasterCardById(resolved.masterCardId);
-      if (master == null) throw StateError('Card not found in catalog');
-      if (!cards.any((c) => c.id == master.id)) {
-        cards = [...cards, master];
-      }
+      // Scan payload already has display metadata; avoid extra DB reads for
+      // release/set rows and full checklist. Lazy import above returns vault
+      // [setId], parallels, and [masterCardId].
+      final release = ReleaseRecord(
+        id: card.releaseId!.trim(),
+        name: releaseName,
+        year: year,
+        sport: _catalogSportFromScanSlug(sport),
+      );
+      final set = SetRecord(
+        id: resolved.setId,
+        name: (card.setName?.trim().isNotEmpty == true) ? card.setName!.trim() : 'Set',
+      );
+      final master = MasterCard(
+        id: resolved.masterCardId,
+        player: (card.name ?? '').trim(),
+        cardNumber: (card.number?.trim().isNotEmpty == true) ? card.number : null,
+        imageUrl: (card.imageUrl?.trim().isNotEmpty == true) ? card.imageUrl : null,
+      );
 
       final scanParallel = card.parallel;
       String normalizeParallelName(String name) =>
@@ -396,40 +715,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       };
 
       if (!mounted) return;
-      setState(() {
-        _mode = _CatalogMode.browse;
-        _catalogFilterSport = sport;
-        _browseSelectedRelease = relSet.release;
-        _selectedRelease = relSet.release;
-        _browseSets = [];
-        _selectedSet = relSet.set;
-        _parallels = resolved.parallels;
-        _selectedParallel = matchedParallel;
-        _parallelName = parallelLabel;
-        _allCards = cards;
-        _cardResults = cards;
-        _selectedCard = master;
-        _cardCtrl.text = master.displayName;
-        _isNewCard = false;
-        _catalogStep = resolved.parallels.isEmpty
-            ? _CatalogStep.card
-            : _CatalogStep.parallel;
-        _restoringState = false;
-      });
-      unawaited(_saveNavigationState());
       unawaited(ref.read(compsServiceProvider).fetchCardImage(master.id));
-      // Defer push until after this frame so catalog state + shell layout settle;
-      // immediate push from the scan post-frame callback could drop the detail route.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        unawaited(_openMasterCardDetail(
-          card: master,
-          parallelName: parallelLabel,
-          parallel: effectiveParallel,
-          release: relSet.release,
-          set: relSet.set,
-        ));
-      });
+      await _openMasterCardDetail(
+        card: master,
+        parallelName: parallelLabel,
+        parallel: effectiveParallel,
+        release: release,
+        set: set,
+        openedFromScanResults: true,
+      );
     } catch (_) {
       if (mounted) {
         AdaptiveSnackBar.show(
@@ -438,6 +732,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           type: AdaptiveSnackBarType.error,
         );
         await _restoreNavigationState();
+        setState(() {
+          _scanBootstrapEntry = null;
+          _scanResolving = false;
+        });
+      }
+    } finally {
+      if (mounted && _scanBootstrapEntry != null) {
+        setState(() {
+          _scanResolving = false;
+          _scanBootstrapEntry = null;
+        });
       }
     }
   }
@@ -600,13 +905,25 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       setState(() { _cardResults = []; });
       return;
     }
-    final q = query.toLowerCase();
-    final filtered = _allCards.where((card) {
-      final player = card.player.toLowerCase();
-      return player.contains(q);
-    }).toList();
+    final raw = query.trim().toLowerCase();
+    if (raw.isEmpty) {
+      setState(() => _cardResults = List<MasterCard>.from(_allCards));
+      return;
+    }
+    final q = raw.replaceFirst(RegExp(r'^#'), '');
     setState(() {
-      _cardResults = filtered;
+      _cardResults = _allCards.where((card) {
+        final player = card.player.toLowerCase();
+        if (player.contains(raw) || player.contains(q)) return true;
+        final numRaw = (card.cardNumber ?? '').trim().toLowerCase();
+        if (numRaw.isEmpty) return false;
+        final numNorm = numRaw.replaceFirst(RegExp(r'^#'), '');
+        if (numNorm == q || numNorm.contains(q) || q.contains(numNorm)) return true;
+        final qi = int.tryParse(q);
+        final ni = int.tryParse(numNorm);
+        if (qi != null && ni != null && qi == ni) return true;
+        return false;
+      }).toList();
     });
   }
 
@@ -659,6 +976,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     SetParallel? parallel,
     ReleaseRecord? release,
     SetRecord? set,
+    bool openedFromScanResults = false,
   }) async {
     final resolvedId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
       catalogVariantId: card.id,
@@ -719,6 +1037,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
               catalogMasterIdOverride: resolvedId,
               catalogParallelOverride: parallel,
             ),
+        openedFromScanResults: openedFromScanResults,
       ),
     );
   }
@@ -1178,7 +1497,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     Widget? secondary;
     double secondaryHeight = 0;
 
-    if (_restoringState) {
+    if (_restoringState || (_scanBootstrapEntry != null && _scanResolving)) {
       return (
         child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
         heightEstimate: segmentEst,
@@ -1330,7 +1649,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         context,
         useBlurBackground: true,
         leading: (_catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse) ||
-                 (_mode == _CatalogMode.search && _searchSelectedCard == null)
+                 (_mode == _CatalogMode.search && _searchSelectedCard == null) ||
+                 (_scanBootstrapEntry != null && _scanResolving)
             ? null
             : AppBarGlassCircleButton(
                 onPressed: _handleStepBack,
@@ -1347,7 +1667,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         ),
       ),
       bodyBuilder: (context, contentTopInset) {
-        if (_restoringState) {
+        if (_restoringState || (_scanBootstrapEntry != null && _scanResolving)) {
           return Padding(
             padding: EdgeInsets.only(top: contentTopInset),
             child: const Center(child: CardFanLoader()),

@@ -56,13 +56,24 @@ class CardVaultApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => CupertinoTheme(
-        data: const CupertinoThemeData(
-          primaryColor: AppTheme.primary,
-          brightness: Brightness.light,
-        ),
-        child: child!,
+      builder: (context, child) => Builder(
+        builder: (context) => _CupertinoTypographyBridge(child: child!),
       ),
+    );
+  }
+}
+
+/// Applies [AppTheme.cupertinoShellTheme] below [MaterialApp]'s [Theme] so
+/// `Theme.of(context).brightness` is correct for Cupertino text defaults.
+class _CupertinoTypographyBridge extends StatelessWidget {
+  const _CupertinoTypographyBridge({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoTheme(
+      data: AppTheme.cupertinoShellTheme(Theme.of(context).brightness),
+      child: child,
     );
   }
 }

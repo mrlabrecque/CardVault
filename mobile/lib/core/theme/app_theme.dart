@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,6 +20,34 @@ class AppTheme {
   static const border        = grayLight;
   static const textMain      = Color(0xFF1F2937);
   static const textMuted     = grayDark;
+
+  /// Cupertino typography for widgets that read [CupertinoTheme.of] (e.g.
+  /// [CupertinoTextField] inside [AdaptiveTextField]). Uses Oswald while keeping
+  /// Apple default sizes/letterSpacing/colors for the current [brightness].
+  ///
+  /// **Limits:** [AdaptiveListTile] on iOS hardcodes `TextStyle` without consulting
+  /// this theme. iOS 26+ native platform-view buttons use the system typeface.
+  static CupertinoThemeData cupertinoShellTheme(Brightness brightness) {
+    final base = CupertinoThemeData(brightness: brightness, primaryColor: primary);
+    final t = base.textTheme;
+    TextStyle oswald(TextStyle s) => GoogleFonts.oswald(textStyle: s);
+    return CupertinoThemeData(
+      brightness: brightness,
+      primaryColor: primary,
+      textTheme: CupertinoTextThemeData(
+        primaryColor: primary,
+        textStyle: oswald(t.textStyle),
+        actionTextStyle: oswald(t.actionTextStyle),
+        actionSmallTextStyle: oswald(t.actionSmallTextStyle),
+        tabLabelTextStyle: oswald(t.tabLabelTextStyle),
+        navTitleTextStyle: oswald(t.navTitleTextStyle),
+        navLargeTitleTextStyle: oswald(t.navLargeTitleTextStyle),
+        navActionTextStyle: oswald(t.navActionTextStyle),
+        pickerTextStyle: oswald(t.pickerTextStyle),
+        dateTimePickerTextStyle: oswald(t.dateTimePickerTextStyle),
+      ),
+    );
+  }
 
   /// Solid-color bars (e.g. burgundy app bar): transparent fill + circular ink on press.
   static ButtonStyle _iconButtonOnSolidBarStyle() {

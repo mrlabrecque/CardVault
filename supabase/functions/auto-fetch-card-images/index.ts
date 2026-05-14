@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     // Find cards with cardsight_card_id but no image_url
     const { data: cards, error: queryError } = await supabase
       .from('set_cards')
-      .select('id, cardsight_card_id')
+      .select('id, cardsight_card_id, set_id')
       .not('cardsight_card_id', 'is', null)
       .is('image_url', null)
       .limit(BATCH_SIZE);
@@ -51,8 +51,10 @@ Deno.serve(async (req) => {
 
       const card = cards[i];
       const publicUrl = await fetchUploadAndSetMasterImage(supabase, {
-        masterCardId: card.id,
-        cardsightCardId: card.cardsight_card_id,
+        setCardId: card.id as string,
+        setId: card.set_id as string,
+        cardsightCardId: card.cardsight_card_id as string,
+        catalogVariantId: null,
       });
 
       processed++;

@@ -28,11 +28,22 @@ Page<void> _page(Widget child) => MaterialPage(child: child);
 /// `go_router` / map literals often yield `Map<String, Object?>`, not `Map<String, dynamic>`.
 CatalogScanEntry? _catalogScanEntryFromExtra(Object? extra) {
   if (extra is! Map) return null;
-  final detection = extra['detection'];
-  final sportRaw = extra['sport'];
-  if (detection is! ImageScanMatchResult) return null;
+  final map = Map<String, dynamic>.from(extra as Map);
+  final sportRaw = map['sport'];
   final sport = sportRaw is String ? sportRaw : '';
-  return CatalogScanEntry(detection: detection, sport: sport);
+  final detectionRaw = map['detection'];
+  if (detectionRaw is ImageScanMatchResult) {
+    return CatalogScanEntry(detection: detectionRaw, sport: sport);
+  }
+  if (detectionRaw is Map) {
+    try {
+      final parsed = ImageScanMatchResult.fromJson(
+        Map<String, dynamic>.from(detectionRaw as Map),
+      );
+      return CatalogScanEntry(detection: parsed, sport: sport);
+    } catch (_) {}
+  }
+  return null;
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -94,6 +105,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   sport: args.sport,
                   onAddToCollection: args.onAddToCollection,
                   onAddToWishlist: args.onAddToWishlist,
+                  openedFromScanResults: args.openedFromScanResults,
                 ),
               );
             },

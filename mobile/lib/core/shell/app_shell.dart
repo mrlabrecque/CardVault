@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../scan_immersive.dart';
 import '../theme/app_theme.dart';
 import '../utils/platform_utils.dart';
 
@@ -27,18 +28,25 @@ class AppShell extends ConsumerWidget {
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIdx = _selectedIndex(location);
 
-    if (isIOS) {
-      return IOSAppShell(
-        selectedIndex: selectedIdx,
-        onTabSelected: (i) => context.go(_paths[i]),
-        child: child,
-      );
-    }
+    return ValueListenableBuilder<bool>(
+      valueListenable: scanImmersiveMode,
+      builder: (context, hideTabBar, _) {
+        if (isIOS) {
+          return IOSAppShell(
+            selectedIndex: selectedIdx,
+            onTabSelected: (i) => context.go(_paths[i]),
+            hideTabBar: hideTabBar,
+            child: child,
+          );
+        }
 
-    return AndroidAppShell(
-      selectedIndex: selectedIdx,
-      onTabSelected: (i) => context.go(_paths[i]),
-      child: child,
+        return AndroidAppShell(
+          selectedIndex: selectedIdx,
+          onTabSelected: (i) => context.go(_paths[i]),
+          hideTabBar: hideTabBar,
+          child: child,
+        );
+      },
     );
   }
 }
@@ -49,11 +57,13 @@ class IOSAppShell extends StatefulWidget {
     required this.child,
     required this.selectedIndex,
     required this.onTabSelected,
+    this.hideTabBar = false,
   });
 
   final Widget child;
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
+  final bool hideTabBar;
 
   @override
   State<IOSAppShell> createState() => _IOSAppShellState();
@@ -65,7 +75,9 @@ class _IOSAppShellState extends State<IOSAppShell> {
     return AdaptiveScaffold(
       minimizeBehavior: TabBarMinimizeBehavior.automatic,
       body: widget.child,
-      bottomNavigationBar: AdaptiveBottomNavigationBar(
+      bottomNavigationBar: widget.hideTabBar
+          ? null
+          : AdaptiveBottomNavigationBar(
         items: const [
           AdaptiveNavigationDestination(
             icon: 'house.fill',
@@ -108,11 +120,13 @@ class AndroidAppShell extends StatelessWidget {
     required this.child,
     required this.selectedIndex,
     required this.onTabSelected,
+    this.hideTabBar = false,
   });
 
   final Widget child;
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
+  final bool hideTabBar;
 
   static const _androidDestinations = <NavigationDestination>[
     NavigationDestination(
@@ -146,7 +160,9 @@ class AndroidAppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: hideTabBar
+          ? null
+          : NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: onTabSelected,
         backgroundColor: AppTheme.primary,

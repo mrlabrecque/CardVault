@@ -4,6 +4,10 @@ import 'package:flutter/widgets.dart';
 class ChromeMetrics {
   const ChromeMetrics._();
 
+  /// Bottom inset for scroll / actions above the shell tab bar (Material [NavigationBar]
+  /// and native iOS tab heights are in this ballpark).
+  static const double shellTabBarReserveHeight = 72;
+
   /// Vertical space between sticky chrome and first scroll content.
   static const double contentTopGap = 12;
   static const double contentTopGapTight = 0;

@@ -1,3 +1,5 @@
+import 'dart:convert' show jsonDecode;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
@@ -6,6 +8,23 @@ import '../models/comp.dart';
 import '../utils/guide_grade_prices.dart';
 import '../utils/guide_catalog_match_query.dart';
 import 'cards_service.dart' show MasterCard;
+
+/// `functions.invoke` may return a parsed [Map] or a JSON [String] depending on client/runtime.
+Map<String, dynamic>? _functionInvokeBodyAsMap(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) return Map<String, dynamic>.from(raw);
+  if (raw is String) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    try {
+      final o = jsonDecode(t);
+      if (o is Map<String, dynamic>) return o;
+      if (o is Map) return Map<String, dynamic>.from(o);
+    } catch (_) {}
+  }
+  return null;
+}
 
 class CompsService {
   CompsService(this._supabase);
@@ -488,12 +507,13 @@ class CompsService {
         'fetch-card-image',
         body: {'masterCardId': masterCardId},
       );
-      if (res.status == 200) {
-        final data = res.data as Map<String, dynamic>?;
-        return data?['image_url'] as String?;
-      }
-      return null;
-    } catch (e) {
+      if (res.status != 200) return null;
+      final data = _functionInvokeBodyAsMap(res.data);
+      final rawUrl = data?['image_url'];
+      if (rawUrl == null) return null;
+      final s = rawUrl.toString().trim();
+      return s.isEmpty ? null : s;
+    } catch (_) {
       return null;
     }
   }
