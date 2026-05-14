@@ -780,12 +780,26 @@ class _ChCandidateTile extends StatelessWidget {
   final Color muted;
   final VoidCallback onTap;
 
+  /// CardHedge image similarity as a whole-number percent (no decimals / raw label).
   static String _confidenceLabel(CardHedgeImageSearchHit h) {
-    final raw = h.similarityLabel?.trim();
-    if (raw != null && raw.isNotEmpty) return raw;
+    double? pct;
     final s = h.similarityScore;
-    if (s > 0) return '${(s * 100).round()}%';
-    return '—';
+    if (s > 0) {
+      pct = s <= 1 ? s * 100 : s;
+    } else {
+      final raw = h.similarityLabel?.trim();
+      if (raw != null && raw.isNotEmpty) {
+        final n = double.tryParse(raw.replaceAll('%', '').trim());
+        if (n != null) {
+          pct = n <= 1 ? n * 100 : n;
+        } else {
+          return raw;
+        }
+      }
+    }
+    if (pct == null) return '—';
+    final r = pct.round().clamp(0, 100);
+    return '$r%';
   }
 
   static Color _confidenceColor(CardHedgeImageSearchHit h) {
@@ -842,7 +856,7 @@ class _ChCandidateTile extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'confidence',
+                    'MATCH',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: muted,
                       fontWeight: FontWeight.w600,
