@@ -26,7 +26,8 @@ import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sticky_chrome_scaffold.dart';
 import '../wishlist/wishlist_screen.dart' show wishlistProvider;
 import '../wishlist/card_sheet.dart';
-import '../scan/scan_screen.dart';
+import '../scan/scan_catalog_bridge.dart';
+import '../scan/scan_models.dart';
 import 'master_card_detail_screen.dart';
 import 'widgets/active_state_indicator.dart';
 import 'widgets/card_detail_view.dart';
@@ -562,27 +563,20 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         });
         _searchCards(primaryQ);
 
-        String normalizeParallelName(String name) =>
-            name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
         final scanParallel = card.parallel;
-        SetParallel? matchedParallel;
-        if (scanParallel != null && scanParallel.name.isNotEmpty) {
-          final target = normalizeParallelName(scanParallel.name);
-          for (final p in _parallels) {
-            final candidate = normalizeParallelName(p.name);
-            if (candidate == target ||
-                candidate.contains(target) ||
-                target.contains(candidate)) {
-              matchedParallel = p;
-              break;
-            }
-          }
-        }
+        final matchedParallel = pickCatalogParallel(
+          parallels: _parallels,
+          scanParallel: scanParallel,
+          cardHedgeVariant: detection.cardHedgeVariant,
+        );
+        final label = catalogParallelDisplayLabel(
+          resolved: matchedParallel,
+          scanParallel: scanParallel,
+          cardHedgeVariant: detection.cardHedgeVariant,
+        );
         setState(() {
           _selectedParallel = matchedParallel;
-          if (scanParallel != null && scanParallel.name.isNotEmpty) {
-            _parallelName = scanParallel.name;
-          }
+          _parallelName = label;
         });
 
         if (mounted) {
@@ -630,10 +624,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       return;
     }
 
-    final hasRelease =
-        card.releaseId != null && card.releaseId!.trim().isNotEmpty;
-    final hasSet = card.setId != null && card.setId!.trim().isNotEmpty;
-    if (!hasRelease || !hasSet) {
+    final vaultRelease = card.releaseId?.trim();
+    final vaultSet = card.setId?.trim();
+    final hasVaultPair =
+        (vaultRelease?.isNotEmpty ?? false) && (vaultSet?.isNotEmpty ?? false);
+    final spineRelease = card.cardsightReleaseId?.trim();
+    final spineSet = card.cardsightSetId?.trim();
+    final hasSpinePair =
+        (spineRelease?.isNotEmpty ?? false) && (spineSet?.isNotEmpty ?? false);
+
+    if (!hasVaultPair && !hasSpinePair) {
       await _openCatalogFromScanPartial(detection, sport);
       return;
     }
@@ -646,13 +646,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           ? card.releaseName!
           : (card.manufacturer ?? 'Unknown Release');
 
+      final catalogReleaseId = hasVaultPair ? vaultRelease! : spineRelease!;
+      final catalogSetId = hasVaultPair ? vaultSet! : spineSet!;
+
       final csResult = CatalogSearchCardResult(
         id: scanId,
         name: card.name ?? '',
         number: card.number,
-        setId: card.setId!.trim(),
+        setId: catalogSetId,
         setName: card.setName ?? '',
-        releaseId: card.releaseId!.trim(),
+        releaseId: catalogReleaseId,
         attributes: const [],
       );
 
@@ -663,19 +666,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         releaseSegmentId: card.segmentId ?? '',
       );
 
-      // Scan payload already has display metadata; avoid extra DB reads for
-      // release/set rows and full checklist. Lazy import above returns vault
-      // [setId], parallels, and [masterCardId].
-      final release = ReleaseRecord(
-        id: card.releaseId!.trim(),
-        name: releaseName,
-        year: year,
-        sport: _catalogSportFromScanSlug(sport),
-      );
-      final set = SetRecord(
-        id: resolved.setId,
-        name: (card.setName?.trim().isNotEmpty == true) ? card.setName!.trim() : 'Set',
-      );
+      final rs = await svc.getReleaseAndSetForSetId(resolved.setId);
+      final release = rs.release;
+      final set = rs.set;
+
       final master = MasterCard(
         id: resolved.masterCardId,
         player: (card.name ?? '').trim(),
@@ -684,38 +678,44 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       );
 
       final scanParallel = card.parallel;
-      String normalizeParallelName(String name) =>
-          name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-      SetParallel? matchedParallel;
-      if (scanParallel != null && scanParallel.name.isNotEmpty) {
-        final target = normalizeParallelName(scanParallel.name);
-        for (final p in resolved.parallels) {
-          final candidate = normalizeParallelName(p.name);
-          if (candidate == target || candidate.contains(target) || target.contains(candidate)) {
-            matchedParallel = p;
-            break;
-          }
-        }
+      final matchedParallel = pickCatalogParallel(
+        parallels: resolved.parallels,
+        scanParallel: scanParallel,
+        cardHedgeVariant: detection.cardHedgeVariant,
+      );
+      final parallelLabel = catalogParallelDisplayLabel(
+        resolved: matchedParallel,
+        scanParallel: scanParallel,
+        cardHedgeVariant: detection.cardHedgeVariant,
+      );
+      SetParallel? effectiveParallel = matchedParallel;
+      if (matchedParallel != null &&
+          scanParallel != null &&
+          matchedParallel.serialMax == null &&
+          scanParallel.numberedTo != null) {
+        effectiveParallel = SetParallel(
+          id: matchedParallel.id,
+          name: matchedParallel.name,
+          serialMax: scanParallel.numberedTo,
+          isAuto: matchedParallel.isAuto,
+        );
       }
-      final parallelLabel = scanParallel?.name ?? 'Base';
-      final effectiveParallel = switch ((matchedParallel, scanParallel)) {
-        (SetParallel p, ParallelInfo s) when p.serialMax == null && s.numberedTo != null => SetParallel(
-            id: p.id,
-            name: p.name,
-            serialMax: s.numberedTo,
-            isAuto: p.isAuto,
-          ),
-        (SetParallel p, _) => p,
-        (_, ParallelInfo s) when s.name.isNotEmpty => SetParallel(
-            id: s.id.isNotEmpty ? s.id : '__scan_parallel__',
-            name: s.name,
-            serialMax: s.numberedTo,
-          ),
-        _ => null,
-      };
 
       if (!mounted) return;
-      unawaited(ref.read(compsServiceProvider).fetchCardImage(master.id));
+      final resolvedVariantId = await svc.ensureCatalogVariant(
+        catalogVariantId: master.id,
+        parallelId: effectiveParallel?.id,
+      );
+      if (!mounted) return;
+      final chId = detection.cardHedgeCardId?.trim();
+      if (chId != null && chId.isNotEmpty) {
+        await ref.read(compsServiceProvider).persistCardHedgeHydratedFromCardId(
+              masterVariantId: resolvedVariantId,
+              guidePriceCardId: chId,
+            );
+      }
+      if (!mounted) return;
+      unawaited(ref.read(compsServiceProvider).fetchCardImage(resolvedVariantId));
       await _openMasterCardDetail(
         card: master,
         parallelName: parallelLabel,

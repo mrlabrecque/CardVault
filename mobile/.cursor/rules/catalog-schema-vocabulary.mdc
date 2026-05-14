@@ -1,0 +1,30 @@
+---
+description: Supabase catalog schema vocabulary — use these names in code, comments, and UI copy
+globs: lib/**/*.dart
+alwaysApply: true
+---
+
+# Catalog vocabulary (CardVault)
+
+When talking about how scan/catalog/import flows map to the database, **always** use these table/row terms. Do **not** use vague phrases like “checklist line” unless quoting an external API field name.
+
+| Term | Meaning |
+|------|--------|
+| **`releases`** | Product / season (CardSight release keyed by `cardsight_id` when imported). |
+| **`sets`** | One checklist under a release (`release_id`, optional `cardsight_id`). |
+| **`set_parallels`** | Parallel definitions for that set (name, `serial_max`, etc.). |
+| **`set_cards`** | One card slot in the set: player, card number, `cardsight_card_id`, base image on the row. |
+| **`master_card_definitions`** | One row per **(set_card, parallel)** — links `set_card_id` + `parallel_id`; holds variant flags, images, `cardhedge_id`, etc. |
+
+**Relationships**
+
+- A **`set_card`** is the shared “base row” for a player/# in a **`set`**.
+- Each parallel variant is a **`master_card_definitions`** row pointing at that **`set_card`** and a **`set_parallels`** row.
+- The **`set_card_base_variants`** view exposes a convenient `id` (a **`master_card_definitions.id`**) per `set_card` at the base parallel for search/navigation.
+
+**Avoid**
+
+- “Checklist line” → say **`set_card`** (and clarify **`master_card_definitions`** when meaning a specific parallel variant).
+- “Checklist” as a generic UI label for DB-sourced parallels → prefer **`set_parallels`** or plain language like “parallels from your catalog” if the table name is too technical for users.
+
+External JSON may still use keys like `checklistId` from CardSight — that is an upstream name, not our vocabulary for new copy.

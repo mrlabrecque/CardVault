@@ -10,6 +10,7 @@ import '../features/collection/master_card_detail_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
+import '../features/scan/scan_models.dart';
 import '../features/scan/scan_screen.dart';
 import '../features/tools/tools_screen.dart';
 import '../features/collection/catalog_screen.dart';

@@ -247,6 +247,18 @@ class LazyImportResult {
   );
 }
 
+/// How scan / catalog-search release+set ids map to this vault (see [classifyScanCatalogAnchor]).
+enum ScanCatalogAnchorKind {
+  /// No direct PK or `cardsight_id` match yet — use [resolveCardFromCatalog] so [lazyImportCatalog]
+  /// can create the release/set when CardSight returns valid catalog keys.
+  none,
+  /// `releases.id` + `sets.id` are our PKs — use [resolveVaultAnchoredScanCard] so we never pass
+  /// vault UUIDs into [lazyImportCatalog] as if they were CardSight ids.
+  vaultPrimaryKeys,
+  /// Ids are CardSight keys that match `releases.cardsight_id` / `sets.cardsight_id`.
+  cardsightIds,
+}
+
 class CatalogSearchCardResult {
   const CatalogSearchCardResult({
     required this.id,
@@ -311,6 +323,31 @@ class AddCardFormData {
   final bool isGraded;
   final String grader;
   final String? gradeValue;
+}
+
+/// Payload from `catalog-ensure-from-scan-selection` edge function.
+class CatalogEnsureFromScanResult {
+  const CatalogEnsureFromScanResult({
+    required this.masterCardDefinitionsId,
+    required this.setId,
+    required this.releaseId,
+    this.parallelId,
+  });
+
+  final String masterCardDefinitionsId;
+  final String setId;
+  final String releaseId;
+  final String? parallelId;
+
+  factory CatalogEnsureFromScanResult.fromJson(Map<String, dynamic> j) {
+    final p = j['parallelId']?.toString().trim();
+    return CatalogEnsureFromScanResult(
+      masterCardDefinitionsId: (j['masterCardDefinitionsId'] ?? '').toString(),
+      setId: (j['setId'] ?? '').toString(),
+      releaseId: (j['releaseId'] ?? '').toString(),
+      parallelId: (p != null && p.isNotEmpty) ? p : null,
+    );
+  }
 }
 
 class CardsService {
@@ -518,6 +555,43 @@ class CardsService {
     if (res.status != 200) throw Exception('Import cards failed: ${res.status}');
   }
 
+  /// Server-side: lazy-import spine, import cards, upsert parallel if needed, hydrate CardHedge prices.
+  /// Returns null when the edge call fails or returns an error payload.
+  Future<CatalogEnsureFromScanResult?> ensureCatalogFromScanSelection({
+    required String cardsightReleaseId,
+    required String cardsightSetId,
+    required String cardsightCardId,
+    required String releaseName,
+    required int releaseYear,
+    String releaseSegmentId = '',
+    String? cardHedgeCardId,
+    String? cardHedgeVariant,
+    String? parallelName,
+  }) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-ensure-from-scan-selection',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        'cardsightSetId': cardsightSetId,
+        'cardsightCardId': cardsightCardId,
+        'releaseName': releaseName,
+        'releaseYear': releaseYear,
+        'releaseSegmentId': releaseSegmentId,
+        if (cardHedgeCardId != null && cardHedgeCardId.trim().isNotEmpty) 'cardHedgeCardId': cardHedgeCardId.trim(),
+        if (cardHedgeVariant != null && cardHedgeVariant.trim().isNotEmpty) 'cardHedgeVariant': cardHedgeVariant.trim(),
+        if (parallelName != null && parallelName.trim().isNotEmpty) 'parallelName': parallelName.trim(),
+      },
+    );
+    if (res.status != 200) return null;
+    final raw = res.data;
+    if (raw is! Map) return null;
+    final map = Map<String, dynamic>.from(raw);
+    if (map['error'] != null) return null;
+    final mid = map['masterCardDefinitionsId']?.toString().trim();
+    if (mid == null || mid.isEmpty) return null;
+    return CatalogEnsureFromScanResult.fromJson(map);
+  }
+
   Future<List<MasterCard>> searchMasterCards(String setId, String query, {int offset = 0, int limit = 50}) async {
     var q = _supabase
         .from('set_card_base_variants')
@@ -531,7 +605,7 @@ class CardsService {
   }
 
   /// Loads any catalog variant by `master_card_definitions.id` (not limited to Base —
-  /// unlike [set_card_base_variants], which exposes one row per checklist line).
+  /// unlike [set_card_base_variants], which exposes one row per `set_card` at base parallel).
   Future<MasterCard?> fetchMasterCardById(String id) async {
     final data = await _supabase
         .from('master_card_definitions')
@@ -565,7 +639,7 @@ class CardsService {
     );
   }
 
-  /// Resolves [catalogVariantId] (any variant of a checklist line) to the row for [parallelId],
+  /// Resolves [catalogVariantId] (any `master_card_definitions` row for that `set_card`) to the row for [parallelId],
   /// inserting a new `master_card_definitions` row when needed.
   Future<String> ensureCatalogVariant({
     required String catalogVariantId,
@@ -674,30 +748,176 @@ class CardsService {
     return [];
   }
 
-  /// Resolve a catalog card: lazy-import set + parallels, then find or import the card
+  /// Whether [releaseId] + [setId] from a scan already identify a row in this vault.
+  ///
+  /// [ScanCatalogAnchorKind.vaultPrimaryKeys]: use [resolveVaultAnchoredScanCard] from scan navigation
+  /// so vault UUIDs are not sent to [lazyImportCatalog].
+  ///
+  /// [ScanCatalogAnchorKind.cardsightIds] or [ScanCatalogAnchorKind.none]: use [resolveCardFromCatalog],
+  /// which may [lazyImportCatalog] to create missing releases/sets from CardSight.
+  Future<ScanCatalogAnchorKind> classifyScanCatalogAnchor({
+    required String releaseId,
+    required String setId,
+  }) async {
+    final r = releaseId.trim();
+    final s = setId.trim();
+    if (r.isEmpty || s.isEmpty) return ScanCatalogAnchorKind.none;
+
+    final direct = await _supabase
+        .from('sets')
+        .select('id')
+        .eq('id', s)
+        .eq('release_id', r)
+        .maybeSingle();
+    if (direct != null) return ScanCatalogAnchorKind.vaultPrimaryKeys;
+
+    final rel = await _supabase
+        .from('releases')
+        .select('id')
+        .eq('cardsight_id', r)
+        .maybeSingle();
+    if (rel == null) return ScanCatalogAnchorKind.none;
+    final rid = rel['id'] as String;
+    final byCs = await _supabase
+        .from('sets')
+        .select('id')
+        .eq('release_id', rid)
+        .eq('cardsight_id', s)
+        .maybeSingle();
+    if (byCs != null) return ScanCatalogAnchorKind.cardsightIds;
+
+    return ScanCatalogAnchorKind.none;
+  }
+
+  /// Resolve a scanned card when [classifyScanCatalogAnchor] returned [ScanCatalogAnchorKind.vaultPrimaryKeys].
+  /// Skips [lazyImportCatalog] (which keys off CardSight ids and can attach the wrong release/set).
+  ///
+  /// When there is no matching [set_cards] row yet, [importCardsForSet] uses CardSight ids from
+  /// [releases.cardsight_id] / [sets.cardsight_id], or [cardsightReleaseIdForImport] /
+  /// [cardsightSetIdForImport] when those columns are not set.
   Future<({String masterCardId, String setId, List<SetParallel> parallels})>
-      resolveCardFromCatalog({
-    required CatalogSearchCardResult card,
+      resolveVaultAnchoredScanCard({
+    required String vaultReleaseId,
+    required String vaultSetId,
+    required String scanCatalogCardId,
+    String? cardsightReleaseIdForImport,
+    String? cardsightSetIdForImport,
+  }) async {
+    final parallels = await getParallels(vaultSetId);
+    final scanId = scanCatalogCardId.trim();
+    if (scanId.isEmpty) {
+      throw Exception('Missing card id from scan');
+    }
+
+    Future<String?> baseVariantIdForSetCard(String setCardId) async {
+      final v = await _supabase
+          .from('set_card_base_variants')
+          .select('id')
+          .eq('set_card_id', setCardId)
+          .maybeSingle();
+      return v?['id'] as String?;
+    }
+
+    final byMasterInSet = await _supabase
+        .from('set_card_base_variants')
+        .select('id')
+        .eq('id', scanId)
+        .eq('set_id', vaultSetId)
+        .maybeSingle();
+    if (byMasterInSet != null) {
+      return (masterCardId: byMasterInSet['id'] as String, setId: vaultSetId, parallels: parallels);
+    }
+
+    Future<({String masterCardId, String setId, List<SetParallel> parallels})?> tryByCardsight() async {
+      final sc = await _supabase
+          .from('set_cards')
+          .select('id')
+          .eq('set_id', vaultSetId)
+          .eq('cardsight_card_id', scanId)
+          .maybeSingle();
+      if (sc == null) return null;
+      final bid = await baseVariantIdForSetCard(sc['id'] as String);
+      if (bid == null) return null;
+      return (masterCardId: bid, setId: vaultSetId, parallels: parallels);
+    }
+
+    final first = await tryByCardsight();
+    if (first != null) return first;
+
+    final setRow = await _supabase
+        .from('sets')
+        .select('cardsight_id')
+        .eq('id', vaultSetId)
+        .maybeSingle();
+    final releaseRow = await _supabase
+        .from('releases')
+        .select('cardsight_id')
+        .eq('id', vaultReleaseId)
+        .maybeSingle();
+    final csRel = (releaseRow?['cardsight_id'] as String?)?.trim().isNotEmpty == true
+        ? (releaseRow!['cardsight_id'] as String).trim()
+        : (cardsightReleaseIdForImport?.trim().isNotEmpty == true
+            ? cardsightReleaseIdForImport!.trim()
+            : null);
+    final csSet = (setRow?['cardsight_id'] as String?)?.trim().isNotEmpty == true
+        ? (setRow!['cardsight_id'] as String).trim()
+        : (cardsightSetIdForImport?.trim().isNotEmpty == true
+            ? cardsightSetIdForImport!.trim()
+            : null);
+    if (csSet == null || csSet.isEmpty || csRel == null || csRel.isEmpty) {
+      throw Exception(
+        'No set_card yet for this scan, and no CardSight release/set ids available to import set_cards.',
+      );
+    }
+
+    await importCardsForSet(
+      cardsightReleaseId: csRel,
+      cardsightSetId: csSet,
+      setId: vaultSetId,
+    );
+
+    final second = await tryByCardsight();
+    if (second != null) return second;
+
+    throw Exception('set_card not found for this scan after CardSight import.');
+  }
+
+  /// Ensures the CardSight spine exists: [releases], [sets], [set_parallels] via [lazyImportCatalog],
+  /// then the scanned [set_cards] row and [master_card_definitions] (via [importCardsForSet] when the
+  /// `set_cards` row is missing). Each `master_card_definitions` row ties a `set_card` to a parallel.
+  ///
+  /// Returns the base-parallel [master_card_definitions.id] exposed by [set_card_base_variants] for UI navigation.
+  Future<({String masterCardId, String setId, List<SetParallel> parallels})>
+      ensureCardSightSpineAndScanCardResolved({
+    required String cardsightReleaseId,
+    required String cardsightSetId,
+    required String cardsightCardId,
     required String releaseName,
     required int releaseYear,
     String? releaseSegmentId,
   }) async {
-    // Step 1: Lazy-import set + parallels
+    final cr = cardsightReleaseId.trim();
+    final cs = cardsightSetId.trim();
+    final cc = cardsightCardId.trim();
+    if (cr.isEmpty || cs.isEmpty || cc.isEmpty) {
+      throw Exception('Missing CardSight release, set, or card id');
+    }
+
     final importResult = await lazyImportCatalog(
-      cardsightReleaseId: card.releaseId,
+      cardsightReleaseId: cr,
       releaseName: releaseName,
       releaseYear: releaseYear.toString(),
       releaseSegmentId: releaseSegmentId ?? '',
-      cardsightSetId: card.setId,
+      cardsightSetId: cs,
     );
     final setId = importResult.setId;
     final parallels = importResult.parallels;
 
-    // Step 2: Check if card already exists in DB (set_cards by external catalog card id)
     final existingSc = await _supabase
         .from('set_cards')
         .select('id')
-        .eq('cardsight_card_id', card.id)
+        .eq('set_id', setId)
+        .eq('cardsight_card_id', cc)
         .maybeSingle();
 
     if (existingSc != null) {
@@ -711,21 +931,21 @@ class CardsService {
       }
     }
 
-    // Step 3: Import all cards for this set, then look up the card
     await importCardsForSet(
-      cardsightReleaseId: card.releaseId,
-      cardsightSetId: card.setId,
+      cardsightReleaseId: cr,
+      cardsightSetId: cs,
       setId: setId,
     );
 
     final foundSc = await _supabase
         .from('set_cards')
         .select('id')
-        .eq('cardsight_card_id', card.id)
+        .eq('set_id', setId)
+        .eq('cardsight_card_id', cc)
         .maybeSingle();
 
     if (foundSc == null) {
-      throw Exception('Card not found in catalog after import');
+      throw Exception('set_card not found for this CardSight card after import.');
     }
 
     final v = await _supabase
@@ -735,6 +955,24 @@ class CardsService {
         .single();
 
     return (masterCardId: v['id'] as String, setId: setId, parallels: parallels);
+  }
+
+  /// Resolve a catalog card: lazy-import set + parallels, then find or import the card
+  Future<({String masterCardId, String setId, List<SetParallel> parallels})>
+      resolveCardFromCatalog({
+    required CatalogSearchCardResult card,
+    required String releaseName,
+    required int releaseYear,
+    String? releaseSegmentId,
+  }) async {
+    return ensureCardSightSpineAndScanCardResolved(
+      cardsightReleaseId: card.releaseId,
+      cardsightSetId: card.setId,
+      cardsightCardId: card.id,
+      releaseName: releaseName,
+      releaseYear: releaseYear,
+      releaseSegmentId: releaseSegmentId,
+    );
   }
 
   Future<LazyImportResult> lazyImportCatalog({
@@ -822,7 +1060,7 @@ class CardsService {
     late String catalogVariantId;
     if (formMasterId == null) {
       if (form.setId == null) {
-        throw Exception('setId is required when creating a checklist card');
+        throw Exception('setId is required when creating a set_card from the form');
       }
       final parallels = await getParallels(form.setId!);
       if (parallels.isEmpty) {

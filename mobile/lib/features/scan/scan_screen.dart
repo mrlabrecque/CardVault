@@ -16,6 +16,7 @@ import '../../core/services/cards_service.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/utils/usd_field.dart';
+import '../../core/models/cardhedge_image_search.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
@@ -25,337 +26,9 @@ import '../../core/widgets/glass_nav_bar.dart';
 import '../collection/master_card_detail_screen.dart';
 import '../wishlist/card_sheet.dart';
 import '../wishlist/wishlist_screen.dart' show wishlistProvider;
+import 'scan_catalog_bridge.dart';
+import 'scan_models.dart';
 import 'widgets/scan_camera_page.dart';
-
-// Catalog detection result model
-class ImageScanMatchResult {
-  final String confidence; // High, Medium, Low
-  final ScannedCatalogCard card;
-  final GradingInfo? grading;
-  /// Normalized 0–1 when the API returns a numeric field; otherwise null.
-  final double? matchScore;
-
-  ImageScanMatchResult({
-    required this.confidence,
-    required this.card,
-    this.grading,
-    this.matchScore,
-  });
-
-  static double? _parseMatchScore(Map<String, dynamic> json) {
-    const keys = [
-      'matchScore',
-      'score',
-      'confidenceScore',
-      'similarity',
-      'probability',
-    ];
-    for (final k in keys) {
-      final v = json[k];
-      if (v is num) {
-        final d = v.toDouble();
-        if (d >= 0 && d <= 1) return d;
-        if (d > 1 && d <= 100) return (d / 100).clamp(0.0, 1.0);
-      }
-    }
-    return null;
-  }
-
-  factory ImageScanMatchResult.fromJson(Map<String, dynamic> json) {
-    final cardRaw = json['card'];
-    final cardMap = cardRaw is Map<String, dynamic>
-        ? Map<String, dynamic>.from(cardRaw)
-        : Map<String, dynamic>.from(cardRaw as Map? ?? {});
-    // Some responses put player on the detection object instead of inside `card`.
-    final hasName = cardMap['name'] != null && cardMap['name'].toString().trim().isNotEmpty;
-    if (!hasName) {
-      for (final k in ['name', 'player', 'playerName', 'athlete', 'subject']) {
-        final v = json[k];
-        if (v != null && v.toString().trim().isNotEmpty) {
-          cardMap['name'] = v;
-          break;
-        }
-      }
-    }
-    ScannedCatalogCard.mergeEnvelopeIntoCardMap(cardMap, json);
-    return ImageScanMatchResult(
-      confidence: json['confidence']?.toString() ?? 'Low',
-      card: ScannedCatalogCard.fromJson(cardMap),
-      grading: json['grading'] != null
-          ? GradingInfo.fromJson(
-              Map<String, dynamic>.from(json['grading'] as Map),
-            )
-          : null,
-      matchScore: _parseMatchScore(json),
-    );
-  }
-
-  /// Human-readable confidence for UI (prefers numeric % when available).
-  String get confidenceLabel {
-    final s = matchScore;
-    if (s != null) return '${(s * 100).round()}%';
-    return confidence;
-  }
-
-  ImageScanMatchResult copyWith({ScannedCatalogCard? card}) {
-    return ImageScanMatchResult(
-      confidence: confidence,
-      card: card ?? this.card,
-      grading: grading,
-      matchScore: matchScore,
-    );
-  }
-}
-
-class ScannedCatalogCard {
-  final String? id; // exact match only
-  final String? name; // player name (exact match only)
-  final String? number; // card number (exact match only)
-  final String? year;
-  final String? manufacturer;
-  final String? releaseName;
-  final String? setName;
-  final String? releaseId;
-  final String? setId;
-  final String? segmentId;
-  final ParallelInfo? parallel;
-  final String? imageUrl;
-
-  ScannedCatalogCard({
-    this.id,
-    this.name,
-    this.number,
-    this.year,
-    this.manufacturer,
-    this.releaseName,
-    this.setName,
-    this.releaseId,
-    this.setId,
-    this.segmentId,
-    this.parallel,
-    this.imageUrl,
-  });
-
-  ScannedCatalogCard copyWith({String? imageUrl}) {
-    return ScannedCatalogCard(
-      id: id,
-      name: name,
-      number: number,
-      year: year,
-      manufacturer: manufacturer,
-      releaseName: releaseName,
-      setName: setName,
-      releaseId: releaseId,
-      setId: setId,
-      segmentId: segmentId,
-      parallel: parallel,
-      imageUrl: imageUrl ?? this.imageUrl,
-    );
-  }
-
-  factory ScannedCatalogCard.fromJson(Map<String, dynamic> json) {
-    return ScannedCatalogCard(
-      id: _pickString(json, const ['id', 'cardId', 'card_id', 'masterCardId', 'master_card_id']),
-      name: _pickString(json, const [
-        'name',
-        'player',
-        'playerName',
-        'player_name',
-        'athlete',
-        'subject',
-        'playerLastName',
-      ]),
-      number: _pickString(json, const [
-        'number',
-        'cardNumber',
-        'card_number',
-        'cardNo',
-        'card_no',
-      ]),
-      year: json['year']?.toString(),
-      manufacturer: json['manufacturer']?.toString(),
-      releaseName: _pickString(json, const [
-        'releaseName',
-        'release_name',
-        'releaseTitle',
-        'release_title',
-      ]),
-      setName: _pickString(json, const [
-        'setName',
-        'set_name',
-        'checklistName',
-        'checklist_name',
-      ]),
-      releaseId: _pickString(json, const [
-        'releaseId',
-        'release_id',
-        'cardsightReleaseId',
-        'releaseUUID',
-      ]),
-      setId: _pickString(json, const [
-        'setId',
-        'set_id',
-        'checklistId',
-        'checklist_id',
-        'cardsightSetId',
-      ]),
-      segmentId: _pickString(json, const ['segmentId', 'segment_id', 'segment']),
-      parallel: json['parallel'] != null
-          ? ParallelInfo.fromJson(
-              Map<String, dynamic>.from(json['parallel'] as Map),
-            )
-          : null,
-      imageUrl: _pickString(json, const [
-        'imageUrl',
-        'image_url',
-        'thumbnailUrl',
-        'thumbnail',
-        'image',
-      ]),
-    );
-  }
-
-  /// Copies release/set (and related) fields from the detection envelope or nested
-  /// `release` / `set` objects into [card] when those keys are missing on `card`.
-  static void mergeEnvelopeIntoCardMap(
-    Map<String, dynamic> card,
-    Map<String, dynamic> detection,
-  ) {
-    void putIfEmpty(String key, String? value) {
-      if (value == null || value.isEmpty) return;
-      final cur = card[key];
-      if (cur != null && cur.toString().trim().isNotEmpty) return;
-      card[key] = value;
-    }
-
-    void pickFrom(Map<String, dynamic> src, String dest, List<String> keys) {
-      putIfEmpty(dest, _pickString(src, keys));
-    }
-
-    pickFrom(detection, 'releaseId', const [
-      'releaseId',
-      'release_id',
-      'cardsightReleaseId',
-      'releaseUUID',
-    ]);
-    pickFrom(detection, 'setId', const [
-      'setId',
-      'set_id',
-      'checklistId',
-      'checklist_id',
-      'cardsightSetId',
-    ]);
-    pickFrom(detection, 'releaseName', const [
-      'releaseName',
-      'release_name',
-      'releaseTitle',
-    ]);
-    pickFrom(detection, 'setName', const [
-      'setName',
-      'set_name',
-      'checklistName',
-    ]);
-    pickFrom(detection, 'segmentId', const ['segmentId', 'segment_id', 'segment']);
-
-    final rel = detection['release'];
-    if (rel is Map) {
-      final m = Map<String, dynamic>.from(rel);
-      pickFrom(m, 'releaseId', const ['id', 'releaseId', 'uuid']);
-      pickFrom(m, 'releaseName', const ['name', 'title', 'displayName']);
-    }
-    final st = detection['set'];
-    if (st is Map) {
-      final m = Map<String, dynamic>.from(st);
-      pickFrom(m, 'setId', const ['id', 'setId', 'checklistId', 'uuid']);
-      pickFrom(m, 'setName', const ['name', 'title', 'displayName']);
-    }
-  }
-
-  /// Identify APIs use inconsistent keys; use the first non-empty string.
-  static String? _pickString(Map<String, dynamic> json, List<String> keys) {
-    for (final k in keys) {
-      final v = json[k];
-      if (v == null) continue;
-      final s = v.toString().trim();
-      if (s.isNotEmpty) return s;
-    }
-    return null;
-  }
-}
-
-class ParallelInfo {
-  final String id;
-  final String name;
-  final int? numberedTo;
-
-  ParallelInfo({required this.id, required this.name, this.numberedTo});
-
-  factory ParallelInfo.fromJson(Map<String, dynamic> json) {
-    return ParallelInfo(
-      id: json['id'] ?? '',
-      name: json['name'] ?? 'Base',
-      numberedTo: json['numberedTo'],
-    );
-  }
-}
-
-class GradingInfo {
-  final String confidence;
-  final GradingCompany company;
-  /// e.g. PSA numeric label from `grading.grade.value`
-  final String? gradeValue;
-  /// e.g. "GEM MINT" from `grading.grade.condition`
-  final String? gradeCondition;
-
-  GradingInfo({
-    required this.confidence,
-    required this.company,
-    this.gradeValue,
-    this.gradeCondition,
-  });
-
-  /// One line for UI: `PSA · 10 · GEM MINT`
-  String get slabSummary {
-    final parts = <String>[company.name];
-    final v = gradeValue?.trim();
-    final c = gradeCondition?.trim();
-    if (v != null && v.isNotEmpty) parts.add(v);
-    if (c != null && c.isNotEmpty) parts.add(c);
-    return parts.join(' · ');
-  }
-
-  factory GradingInfo.fromJson(Map<String, dynamic> json) {
-    String? gradeValue;
-    String? gradeCondition;
-    final gradeRaw = json['grade'];
-    if (gradeRaw is Map) {
-      final g = Map<String, dynamic>.from(gradeRaw);
-      final v = g['value']?.toString().trim();
-      final cond = g['condition']?.toString().trim();
-      if (v != null && v.isNotEmpty) gradeValue = v;
-      if (cond != null && cond.isNotEmpty) gradeCondition = cond;
-    }
-    return GradingInfo(
-      confidence: json['confidence']?.toString() ?? 'Low',
-      company: GradingCompany.fromJson(
-        Map<String, dynamic>.from(json['company'] as Map? ?? {}),
-      ),
-      gradeValue: gradeValue,
-      gradeCondition: gradeCondition,
-    );
-  }
-}
-
-class GradingCompany {
-  final String? id;
-  final String name;
-
-  GradingCompany({this.id, required this.name});
-
-  factory GradingCompany.fromJson(Map<String, dynamic> json) {
-    return GradingCompany(id: json['id'], name: json['name'] ?? 'Unknown');
-  }
-}
 
 class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({super.key});
@@ -371,12 +44,33 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   final _supabase = Supabase.instance.client;
   static const _scanFunctionName = 'identify-card';
   static const _invokeTimeout = Duration(seconds: 75);
+  /// Optional: `--dart-define=SCAN_IDENTIFY_STRATEGY=cardhedge` → forwarded to `identify-card`
+  /// (same values as Supabase env `SCAN_IDENTIFY_STRATEGY`).
+  static const _kScanIdentifyStrategy = String.fromEnvironment(
+    'SCAN_IDENTIFY_STRATEGY',
+    defaultValue: '',
+  );
 
   _ScanState _state = _ScanState.sportPicker;
   String _selectedSport = '';
   List<ImageScanMatchResult> _detections = const [];
   /// Pretty-printed JSON for each row in [_detections] (same order after sort).
   List<String> _detectionRawJson = const [];
+  /// Per-row `vision_merge_debug` from `identify-card` (CardHedge ↔ CardSight).
+  List<String> _detectionMergeDebugJson = const [];
+  /// e.g. `merge · strategy: auto` from `identify-card` response.
+  String _identifyVisionMeta = '';
+  /// From `identify-card` when `identify_mode` is `merge` (empty otherwise).
+  String _identifyMode = '';
+  /// Full CardHedge image-search rows for merge UI (see `cardhedge_candidates` on edge).
+  List<CardHedgeImageSearchHit> _mergeChCandidates = const [];
+  /// Selected `card_id` for [_mergeChCandidates] (row highlight only).
+  String? _selectedMergeChCardId;
+  /// When set, user chose a catalog [SetParallel] not surfaced by CardHedge (clears CH guide id).
+  SetParallel? _selectedCatalogParallelExtra;
+  /// [set_parallels] rows for the spine [ScannedCatalogCard.setId] minus those likely covered by CH variants.
+  List<SetParallel> _mergeCatalogParallelsExtras = const [];
+  bool _mergeCatalogParallelsLoading = false;
   String? _errorMessage;
   bool _openingCatalogDetail = false;
 
@@ -419,10 +113,18 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   }
 
   Future<FunctionResponse> _invokeIdentify(String base64) {
+    final body = <String, dynamic>{
+      'imageBase64': base64,
+      'sport': _selectedSport,
+      'enrichChCandidates': true,
+    };
+    if (_kScanIdentifyStrategy.trim().isNotEmpty) {
+      body['identifyStrategy'] = _kScanIdentifyStrategy.trim();
+    }
     return _supabase.functions
         .invoke(
           _scanFunctionName,
-          body: {'imageBase64': base64, 'sport': _selectedSport},
+          body: body,
         )
         .timeout(_invokeTimeout);
   }
@@ -541,6 +243,218 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     );
   }
 
+  bool get _mergeSpinePicker =>
+      _identifyMode == 'merge' &&
+      _mergeChCandidates.isNotEmpty &&
+      _detections.isNotEmpty;
+
+  String? get _resolvedMergeChSelection {
+    if (_selectedCatalogParallelExtra != null) return null;
+    final s = _selectedMergeChCardId?.trim();
+    if (s != null && s.isNotEmpty) return s;
+    return null;
+  }
+
+  bool get _mergeSpineHasCatalogSetId =>
+      _detections.isNotEmpty &&
+      (_detections.first.card.setId?.trim().isNotEmpty ?? false);
+
+  static String _normParallelToken(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  /// Whether a CardHedge [variant] (or description) likely refers to the same parallel as [parallelName].
+  static bool _chTextCoversDbParallel(String? chText, String parallelName) {
+    final v = _normParallelToken(chText ?? '');
+    final p = _normParallelToken(parallelName);
+    if (p.isEmpty) return false;
+    if (v.isEmpty) return false;
+    if (v == p) return true;
+    if (v.length >= 5 && p.length >= 5 && (v.contains(p) || p.contains(v))) return true;
+    return false;
+  }
+
+  static bool _chHitsCoverParallel(List<CardHedgeImageSearchHit> hits, SetParallel parallel) {
+    for (final h in hits) {
+      if (_chTextCoversDbParallel(h.variant, parallel.name)) return true;
+      if (_chTextCoversDbParallel(h.description, parallel.name)) return true;
+    }
+    return false;
+  }
+
+  Future<void> _loadMergeCatalogParallelsNotInCh(
+    String setId,
+    List<CardHedgeImageSearchHit> chHits,
+  ) async {
+    try {
+      final all = await ref.read(cardsServiceProvider).getParallels(setId);
+      if (!mounted) return;
+      final extras =
+          all.where((p) => !_chHitsCoverParallel(chHits, p)).toList(growable: false);
+      setState(() {
+        _mergeCatalogParallelsExtras = extras;
+        _mergeCatalogParallelsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _mergeCatalogParallelsExtras = const [];
+        _mergeCatalogParallelsLoading = false;
+      });
+    }
+  }
+
+  /// CardSight spine only: no parallel, no CardHedge fields (non-interactive “Set match” panel).
+  ImageScanMatchResult _spineForSetMatchPanel() {
+    final spine = _detections.first;
+    return spine.copyWith(
+      card: spine.card.copyWith(clearParallel: true),
+      clearCardHedge: true,
+    );
+  }
+
+  /// CardSight often omits `card.name`; CardHedge image-search hits usually include `player`.
+  String? _firstChPlayerName() {
+    for (final h in _mergeChCandidates) {
+      final p = h.player?.trim();
+      if (p != null && p.isNotEmpty) return p;
+    }
+    return null;
+  }
+
+  /// Spine + one CardHedge hit for [_goToCardDetails] after the user picks a parallel row.
+  ImageScanMatchResult _detectionWithChHit(CardHedgeImageSearchHit hit) {
+    final spine = _detections.first;
+    final v = hit.variant?.trim();
+    final parallelFromCh =
+        (v != null && v.isNotEmpty) ? ParallelInfo(id: '', name: v) : spine.card.parallel;
+    final img = hit.image?.trim();
+    final hp = hit.player?.trim();
+    final sn = spine.card.name?.trim();
+    final mergedName = (sn != null && sn.isNotEmpty) ? spine.card.name : (hp != null && hp.isNotEmpty ? hp : spine.card.name);
+    final hCr = hit.cardsightReleaseId?.trim();
+    final hCs = hit.cardsightSetId?.trim();
+    return spine.copyWith(
+      card: spine.card.copyWith(
+        parallel: parallelFromCh,
+        imageUrl: (img != null && img.isNotEmpty) ? img : spine.card.imageUrl,
+        name: mergedName,
+        cardsightReleaseId: (hCr != null && hCr.isNotEmpty) ? hCr : spine.card.cardsightReleaseId,
+        cardsightSetId: (hCs != null && hCs.isNotEmpty) ? hCs : spine.card.cardsightSetId,
+      ),
+      cardHedgeCardId: hit.cardId,
+      cardHedgeVariant: hit.variant,
+      cardHedgeSetLabel: hit.setLabel,
+      cardHedgeImageSimilarity: hit.similarityScore,
+    );
+  }
+
+  Widget _buildMergeCardHedgeSection(Color onSurface, Color muted) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Parallels (CardHedge)',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Tap the variant that matches your card to open it in the catalog.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted, height: 1.3),
+        ),
+        const SizedBox(height: 12),
+        for (final h in _mergeChCandidates) ...[
+          _ChCandidateTile(
+            hit: h,
+            variantOnly: true,
+            selected: _selectedCatalogParallelExtra == null &&
+                _resolvedMergeChSelection != null &&
+                _resolvedMergeChSelection == h.cardId,
+            onSurface: onSurface,
+            muted: muted,
+            onTap: () {
+              setState(() {
+                _selectedMergeChCardId = h.cardId;
+                _selectedCatalogParallelExtra = null;
+              });
+              unawaited(_goToCardDetails(_detectionWithChHit(h)));
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  /// [set_parallels] extras and loading — shown below the CardHedge list, not inside the CardSight tile.
+  Widget _buildMergeCatalogExtrasSection(Color onSurface, Color muted) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_mergeCatalogParallelsLoading)
+          const Padding(
+            padding: EdgeInsets.only(top: 4, bottom: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        if (!_mergeCatalogParallelsLoading && _mergeSpinePicker && !_mergeSpineHasCatalogSetId)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Could not create catalog rows for this scan (missing CardSight linkage or ensure failed). Try again or pick another CardHedge match.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted, height: 1.3),
+            ),
+          ),
+        if (!_mergeCatalogParallelsLoading && _mergeCatalogParallelsExtras.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Divider(height: 1, color: muted.withValues(alpha: 0.2)),
+          const SizedBox(height: 12),
+          Text(
+            'More parallels in this set',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Parallels from your catalog not shown in the CardHedge list. Tap to open the card with that parallel.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted, height: 1.3),
+          ),
+          const SizedBox(height: 10),
+          for (final p in _mergeCatalogParallelsExtras) ...[
+            _CatalogParallelOptionTile(
+              parallel: p,
+              selected: _selectedCatalogParallelExtra?.id == p.id,
+              onSurface: onSurface,
+              muted: muted,
+              onTap: () {
+                final spine = _detections.first;
+                final det = spine.copyWith(
+                  card: spine.card.copyWith(
+                    parallel: ParallelInfo(
+                      id: p.id,
+                      name: p.name,
+                      numberedTo: p.serialMax,
+                    ),
+                  ),
+                  clearCardHedge: true,
+                );
+                setState(() {
+                  _selectedCatalogParallelExtra = p;
+                  _selectedMergeChCardId = null;
+                });
+                unawaited(_goToCardDetails(det));
+              },
+            ),
+            const SizedBox(height: 6),
+          ],
+        ],
+      ],
+    );
+  }
+
   Future<void> _runIdentifyFromBytes(Uint8List raw) async {
     try {
       final jpeg =
@@ -579,6 +493,19 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         throw Exception(msg is String ? msg : msg.toString());
       }
 
+      final identifyMode = data['identify_mode']?.toString() ?? '';
+      final identifyStrat = data['identify_strategy_requested']?.toString() ?? '';
+      final orderRaw = data['vision_upstream_order'];
+      String? orderStr;
+      if (orderRaw is List) {
+        orderStr = orderRaw.map((e) => e.toString()).join(' → ');
+      }
+      final visionMeta = [
+        if (identifyMode.isNotEmpty) 'mode: $identifyMode',
+        if (identifyStrat.isNotEmpty) 'strategy: $identifyStrat',
+        if (orderStr != null && orderStr.isNotEmpty) 'order: $orderStr',
+      ].join(' · ');
+
       final detectionsRaw = data['detections'] as List<dynamic>? ?? [];
 
       if (detectionsRaw.isEmpty) {
@@ -593,25 +520,51 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       }
 
       final encoder = JsonEncoder.withIndent('  ');
-      final pairs = <({ImageScanMatchResult m, String raw})>[];
+      final pairs = <({ImageScanMatchResult m, String raw, String merge})>[];
       for (final e in detectionsRaw) {
         final map = Map<String, dynamic>.from(e as Map);
+        final md = map['vision_merge_debug'];
+        final mergeStr = md != null ? encoder.convert(md) : '';
         pairs.add((
           m: ImageScanMatchResult.fromJson(map),
           raw: encoder.convert(map),
+          merge: mergeStr,
         ));
       }
       pairs.sort((a, b) => _detectionCompare(a.m, b.m));
 
       var matches = pairs.map((p) => p.m).toList();
       final rawJson = pairs.map((p) => p.raw).toList();
+      final mergeJson = pairs.map((p) => p.merge).toList();
+
+      var chCandidates = const <CardHedgeImageSearchHit>[];
+      if (identifyMode == 'merge') {
+        final rawCh = data['cardhedge_candidates'] ?? data['cardhedge_hits_sample'];
+        if (rawCh is List) {
+          chCandidates = rawCh
+              .map((e) {
+                if (e is! Map) return null;
+                return CardHedgeImageSearchHit.fromJson(
+                  Map<String, dynamic>.from(e),
+                );
+              })
+              .whereType<CardHedgeImageSearchHit>()
+              .where((h) => h.cardId.isNotEmpty)
+              .toList();
+        }
+      }
+
+      if (identifyMode == 'merge' && matches.isNotEmpty) {
+        matches = await _hydrateTopMatchVaultFromCardSight(matches, chCandidates);
+      }
+
       if (matches.isNotEmpty) {
-        final topId = matches.first.card.id;
+        final top = matches.first;
+        final topId = top.card.id?.trim();
         if (topId != null && topId.isNotEmpty) {
           final url = await ref.read(compsServiceProvider).fetchCardImage(topId);
           if (!mounted) return;
           if (url != null && url.trim().isNotEmpty) {
-            final top = matches.first;
             matches = [
               top.copyWith(card: top.card.copyWith(imageUrl: url.trim())),
               ...matches.skip(1),
@@ -620,12 +573,28 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         }
       }
 
+      final setIdForExtras =
+          (identifyMode == 'merge' && matches.isNotEmpty) ? matches.first.card.setId?.trim() : null;
+      final extrasLoading =
+          setIdForExtras != null && setIdForExtras.isNotEmpty;
+
       if (mounted) {
         _update(() {
           _state = _ScanState.result;
           _detections = matches;
           _detectionRawJson = rawJson;
+          _detectionMergeDebugJson = mergeJson;
+          _identifyVisionMeta = visionMeta;
+          _identifyMode = identifyMode;
+          _mergeChCandidates = chCandidates;
+          _selectedMergeChCardId = null;
+          _selectedCatalogParallelExtra = null;
+          _mergeCatalogParallelsExtras = const [];
+          _mergeCatalogParallelsLoading = extrasLoading;
         });
+      }
+      if (mounted && extrasLoading) {
+        unawaited(_loadMergeCatalogParallelsNotInCh(setIdForExtras, chCandidates));
       }
     } on FunctionException catch (e) {
       _setIdentifyFunctionError(e);
@@ -653,6 +622,14 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       _selectedSport = '';
       _detections = const [];
       _detectionRawJson = const [];
+      _detectionMergeDebugJson = const [];
+      _identifyVisionMeta = '';
+      _identifyMode = '';
+      _mergeChCandidates = const [];
+      _selectedMergeChCardId = null;
+      _selectedCatalogParallelExtra = null;
+      _mergeCatalogParallelsExtras = const [];
+      _mergeCatalogParallelsLoading = false;
       _errorMessage = null;
     });
   }
@@ -666,6 +643,14 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     _update(() {
       _detections = const [];
       _detectionRawJson = const [];
+      _detectionMergeDebugJson = const [];
+      _identifyVisionMeta = '';
+      _identifyMode = '';
+      _mergeChCandidates = const [];
+      _selectedMergeChCardId = null;
+      _selectedCatalogParallelExtra = null;
+      _mergeCatalogParallelsExtras = const [];
+      _mergeCatalogParallelsLoading = false;
       _errorMessage = null;
       _state = kIsWeb ? _ScanState.sportPicker : _ScanState.camera;
     });
@@ -693,60 +678,326 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
   }
 
-  Future<void> _goToCardDetails(ImageScanMatchResult detection) async {
-    final card = detection.card;
-    final hasId = card.id != null && card.id!.trim().isNotEmpty;
-    final hasRelease = card.releaseId != null && card.releaseId!.trim().isNotEmpty;
-    final hasSet = card.setId != null && card.setId!.trim().isNotEmpty;
+  /// Best CardHedge row that already has a resolved CardSight release+set spine.
+  static CardHedgeImageSearchHit? _bestChHitWithSpineFrom(List<CardHedgeImageSearchHit> ch) {
+    if (ch.isEmpty) return null;
+    CardHedgeImageSearchHit? best;
+    var bestSim = -1.0;
+    for (final h in ch) {
+      final cr = h.cardsightReleaseId?.trim();
+      final cs = h.cardsightSetId?.trim();
+      if (cr == null || cr.isEmpty || cs == null || cs.isEmpty) continue;
+      final s = h.similarityScore;
+      if (s > bestSim) {
+        bestSim = s;
+        best = h;
+      }
+    }
+    return best;
+  }
 
-    if (!hasId || !hasRelease || !hasSet) {
+  /// Prefer CardHedge-enriched `cardsightReleaseId` / `cardsightSetId` over CardSight vision
+  /// (vision often mis-picks league/product; CH spine is keyed to the matched listing).
+  static ImageScanMatchResult _overlayChSpineOnDetection(
+    ImageScanMatchResult detection,
+    List<CardHedgeImageSearchHit> chCandidates,
+  ) {
+    if (chCandidates.isEmpty) return detection;
+
+    CardHedgeImageSearchHit? pick;
+    final hid = detection.cardHedgeCardId?.trim();
+    if (hid != null && hid.isNotEmpty) {
+      for (final h in chCandidates) {
+        if (h.cardId == hid) {
+          pick = h;
+          break;
+        }
+      }
+    }
+
+    if (pick != null) {
+      final cr0 = pick.cardsightReleaseId?.trim();
+      final cs0 = pick.cardsightSetId?.trim();
+      if (cr0 == null || cr0.isEmpty || cs0 == null || cs0.isEmpty) {
+        pick = _bestChHitWithSpineFrom(chCandidates);
+      }
+    } else {
+      pick = _bestChHitWithSpineFrom(chCandidates);
+    }
+
+    if (pick == null) return detection;
+    final cr = pick.cardsightReleaseId!.trim();
+    final cs = pick.cardsightSetId!.trim();
+    if (cr.isEmpty || cs.isEmpty) return detection;
+
+    return detection.copyWith(
+      card: detection.card.copyWith(cardsightReleaseId: cr, cardsightSetId: cs),
+    );
+  }
+
+  /// Prefer CardHedge-enriched spine using current merge candidate list.
+  ImageScanMatchResult _effectiveDetectionForDbResolve(ImageScanMatchResult detection) {
+    return _overlayChSpineOnDetection(detection, _mergeChCandidates);
+  }
+
+  /// After identify (merge mode), create missing Vault `releases` / `sets` / `set_parallels` /
+  /// `set_cards` via `catalog-ensure-from-scan-selection` so the UI has a real `set_id` for parallels.
+  Future<List<ImageScanMatchResult>> _hydrateTopMatchVaultFromCardSight(
+    List<ImageScanMatchResult> matches,
+    List<CardHedgeImageSearchHit> chCandidates,
+  ) async {
+    if (matches.isEmpty) return matches;
+    final top = chCandidates.isEmpty
+        ? matches.first
+        : _overlayChSpineOnDetection(matches.first, chCandidates);
+    final rest = matches.skip(1).toList();
+    final c = top.card;
+    final cid = c.id?.trim();
+    final sr = c.cardsightReleaseId?.trim();
+    final ss = c.cardsightSetId?.trim();
+    final hasVaultSet = c.setId != null && c.setId!.trim().isNotEmpty;
+    final hasVaultRelease = c.releaseId != null && c.releaseId!.trim().isNotEmpty;
+    if (hasVaultSet && hasVaultRelease) {
+      return [top, ...rest];
+    }
+    if (cid == null || cid.isEmpty || sr == null || sr.isEmpty || ss == null || ss.isEmpty) {
+      return [top, ...rest];
+    }
+    if (!mounted) return [top, ...rest];
+    try {
+      final svc = ref.read(cardsServiceProvider);
+      final year = int.tryParse(c.year ?? '') ?? DateTime.now().year;
+      final releaseName = (c.releaseName?.trim().isNotEmpty == true)
+          ? c.releaseName!
+          : (c.manufacturer ?? 'Unknown Release');
+      final ensured = await svc.ensureCatalogFromScanSelection(
+        cardsightReleaseId: sr,
+        cardsightSetId: ss,
+        cardsightCardId: cid,
+        releaseName: releaseName,
+        releaseYear: year,
+        releaseSegmentId: c.segmentId ?? _selectedSport,
+        cardHedgeCardId: top.cardHedgeCardId,
+        cardHedgeVariant: top.cardHedgeVariant,
+        parallelName: c.parallel?.name,
+      );
+      if (ensured == null || !mounted) return [top, ...rest];
+      return [
+        top.copyWith(
+          card: c.copyWith(
+            setId: ensured.setId,
+            releaseId: ensured.releaseId,
+          ),
+        ),
+        ...rest,
+      ];
+    } catch (_) {
+      return [top, ...rest];
+    }
+  }
+
+  Future<void> _goToCardDetails(ImageScanMatchResult detection) async {
+    final det = _effectiveDetectionForDbResolve(detection);
+    final card = det.card;
+    final scanCatalogCardId = card.id?.trim();
+    final hasCardId = scanCatalogCardId != null && scanCatalogCardId.isNotEmpty;
+
+    final vaultRelease = card.releaseId?.trim();
+    final vaultSet = card.setId?.trim();
+    final hasVaultPair =
+        (vaultRelease?.isNotEmpty ?? false) && (vaultSet?.isNotEmpty ?? false);
+
+    final spineRelease = card.cardsightReleaseId?.trim();
+    final spineSet = card.cardsightSetId?.trim();
+    final hasSpinePair =
+        (spineRelease?.isNotEmpty ?? false) && (spineSet?.isNotEmpty ?? false);
+
+    // Need a CardSight catalog card id to import `set_cards` / variants. Release+set may be
+    // vault UUIDs only, CardSight spine ids only, or both (see [CardsService]).
+    if (!hasCardId) {
       if (!mounted) return;
-      context.push(
-        '/catalog',
-        extra: <String, dynamic>{
-          'detection': detection,
-          'sport': _selectedSport,
-        },
+      AdaptiveSnackBar.show(
+        context,
+        message:
+            'This scan has no catalog card ID yet, so the app cannot load the checklist row. Try merge mode with CardSight + CardHedge, or scan again with a clearer front photo.',
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+    if (!hasVaultPair && !hasSpinePair) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message:
+            'Could not resolve this product to your catalog (missing release/set linkage). Try again, or check that this release exists in your Vault.',
+        type: AdaptiveSnackBarType.error,
       );
       return;
     }
 
+    final svc = ref.read(cardsServiceProvider);
     setState(() => _openingCatalogDetail = true);
     try {
-      final svc = ref.read(cardsServiceProvider);
-      final scanId = card.id!.trim();
       final year = int.tryParse(card.year ?? '') ?? DateTime.now().year;
       final releaseName = (card.releaseName?.trim().isNotEmpty == true)
           ? card.releaseName!
           : (card.manufacturer ?? 'Unknown Release');
 
-      final csResult = CatalogSearchCardResult(
-        id: scanId,
-        name: card.name ?? '',
-        number: card.number,
-        setId: card.setId!.trim(),
-        setName: card.setName ?? '',
-        releaseId: card.releaseId!.trim(),
-        attributes: const [],
-      );
+      final csR = card.cardsightReleaseId?.trim();
+      final csS = card.cardsightSetId?.trim();
+      if (csR != null &&
+          csR.isNotEmpty &&
+          csS != null &&
+          csS.isNotEmpty) {
+        final ensured = await svc.ensureCatalogFromScanSelection(
+          cardsightReleaseId: csR,
+          cardsightSetId: csS,
+          cardsightCardId: scanCatalogCardId,
+          releaseName: releaseName,
+          releaseYear: year,
+          releaseSegmentId: card.segmentId ?? _selectedSport,
+          cardHedgeCardId: det.cardHedgeCardId,
+          cardHedgeVariant: det.cardHedgeVariant,
+          parallelName: card.parallel?.name,
+        );
+        if (ensured != null && mounted) {
+          final rs = await svc.getReleaseAndSetForSetId(ensured.setId);
+          final release = rs.release;
+          final set = rs.set;
+          final detailYear = release.year ?? year;
+          final parallels = await svc.getParallels(ensured.setId);
+          SetParallel? effectiveParallel;
+          final epId = ensured.parallelId?.trim();
+          if (epId != null && epId.isNotEmpty) {
+            for (final p in parallels) {
+              if (p.id == epId) {
+                effectiveParallel = p;
+                break;
+              }
+            }
+          }
+          effectiveParallel ??= pickCatalogParallel(
+            parallels: parallels,
+            scanParallel: card.parallel,
+            cardHedgeVariant: det.cardHedgeVariant,
+          );
+          final parallelLabel = catalogParallelDisplayLabel(
+            resolved: effectiveParallel,
+            scanParallel: card.parallel,
+            cardHedgeVariant: det.cardHedgeVariant,
+          );
+          final resolvedId = ensured.masterCardDefinitionsId;
+          if (!mounted) return;
+          final resolvedMaster = await svc.fetchMasterCardById(resolvedId);
+          if (!mounted) return;
+          final displayCard = resolvedMaster ??
+              MasterCard(
+                id: resolvedId,
+                player: (card.name ?? '').trim(),
+                cardNumber: (card.number?.trim().isNotEmpty == true) ? card.number : null,
+                isRookie: false,
+                isAuto: effectiveParallel?.isAuto ?? false,
+                isPatch: false,
+                isSSP: false,
+                serialMax: effectiveParallel?.serialMax,
+                imageUrl: (card.imageUrl?.trim().isNotEmpty == true) ? card.imageUrl : null,
+                guidePriceCardId: det.cardHedgeCardId?.trim().isNotEmpty == true
+                    ? det.cardHedgeCardId!.trim()
+                    : null,
+                gain: null,
+              );
+          unawaited(ref.read(compsServiceProvider).fetchCardImage(displayCard.id));
+          await context.push<void>(
+            '/catalog/master',
+            extra: MasterCardDetailArgs(
+              masterCard: MasterCard(
+                id: displayCard.id,
+                player: displayCard.player,
+                cardNumber: displayCard.cardNumber,
+                isRookie: displayCard.isRookie,
+                isAuto: displayCard.isAuto || (effectiveParallel?.isAuto ?? false),
+                isPatch: displayCard.isPatch,
+                isSSP: displayCard.isSSP,
+                serialMax: effectiveParallel?.serialMax ?? displayCard.serialMax,
+                imageUrl: displayCard.imageUrl,
+                guidePriceCardId: displayCard.guidePriceCardId,
+                gain: displayCard.gain,
+              ),
+              parallelName: parallelLabel,
+              parallelSerialMax: effectiveParallel?.serialMax,
+              parallelIsAuto: effectiveParallel?.isAuto ?? false,
+              releaseName: release.name,
+              setName: set.name,
+              year: detailYear,
+              sport: release.sport ?? _catalogSportFromScanSlug(_selectedSport),
+              onAddToCollection: () => _showScanAddToCollectionSheet(
+                    displayCard: displayCard,
+                    resolvedVariantId: resolvedId,
+                    parallel: effectiveParallel,
+                    parallelLabel: parallelLabel,
+                    set: set,
+                    release: release,
+                  ),
+              onAddToWishlist: () => _showScanAddToWishlistSheet(
+                    displayCard: displayCard,
+                    resolvedVariantId: resolvedId,
+                    parallel: effectiveParallel,
+                    parallelLabel: parallelLabel,
+                    set: set,
+                    release: release,
+                  ),
+              openedFromScanResults: false,
+            ),
+          );
+          return;
+        }
+      }
 
-      final resolved = await svc.resolveCardFromCatalog(
-        card: csResult,
-        releaseName: releaseName,
-        releaseYear: year,
-        releaseSegmentId: card.segmentId ?? '',
-      );
+      late final ({String masterCardId, String setId, List<SetParallel> parallels}) resolved;
 
-      final release = ReleaseRecord(
-        id: card.releaseId!.trim(),
-        name: releaseName,
-        year: year,
-        sport: _catalogSportFromScanSlug(_selectedSport),
-      );
-      final set = SetRecord(
-        id: resolved.setId,
-        name: (card.setName?.trim().isNotEmpty == true) ? card.setName!.trim() : 'Set',
-      );
+      if (hasVaultPair) {
+        final vRel = vaultRelease!;
+        final vSet = vaultSet!;
+        final anchor = await svc.classifyScanCatalogAnchor(
+          releaseId: vRel,
+          setId: vSet,
+        );
+        final cardsightReleaseForImport =
+            (spineRelease != null && spineRelease.isNotEmpty) ? spineRelease : vRel;
+        final cardsightSetForImport =
+            (spineSet != null && spineSet.isNotEmpty) ? spineSet : vSet;
+
+        resolved = anchor == ScanCatalogAnchorKind.vaultPrimaryKeys
+            ? await svc.resolveVaultAnchoredScanCard(
+                vaultReleaseId: vRel,
+                vaultSetId: vSet,
+                scanCatalogCardId: scanCatalogCardId,
+                cardsightReleaseIdForImport: spineRelease,
+                cardsightSetIdForImport: spineSet,
+              )
+            : await svc.ensureCardSightSpineAndScanCardResolved(
+                cardsightReleaseId: cardsightReleaseForImport,
+                cardsightSetId: cardsightSetForImport,
+                cardsightCardId: scanCatalogCardId,
+                releaseName: releaseName,
+                releaseYear: year,
+                releaseSegmentId: card.segmentId ?? '',
+              );
+      } else {
+        resolved = await svc.ensureCardSightSpineAndScanCardResolved(
+          cardsightReleaseId: spineRelease!,
+          cardsightSetId: spineSet!,
+          cardsightCardId: scanCatalogCardId,
+          releaseName: releaseName,
+          releaseYear: year,
+          releaseSegmentId: card.segmentId ?? '',
+        );
+      }
+
+      final rs = await svc.getReleaseAndSetForSetId(resolved.setId);
+      final release = rs.release;
+      final set = rs.set;
+      final detailYear = release.year ?? year;
       final master = MasterCard(
         id: resolved.masterCardId,
         player: (card.name ?? '').trim(),
@@ -755,41 +1006,44 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       );
 
       final scanParallel = card.parallel;
-      String normalizeParallelName(String name) =>
-          name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-      SetParallel? matchedParallel;
-      if (scanParallel != null && scanParallel.name.isNotEmpty) {
-        final target = normalizeParallelName(scanParallel.name);
-        for (final p in resolved.parallels) {
-          final candidate = normalizeParallelName(p.name);
-          if (candidate == target || candidate.contains(target) || target.contains(candidate)) {
-            matchedParallel = p;
-            break;
-          }
-        }
+      final matchedParallel = pickCatalogParallel(
+        parallels: resolved.parallels,
+        scanParallel: scanParallel,
+        cardHedgeVariant: det.cardHedgeVariant,
+      );
+      final parallelLabel = catalogParallelDisplayLabel(
+        resolved: matchedParallel,
+        scanParallel: scanParallel,
+        cardHedgeVariant: det.cardHedgeVariant,
+      );
+      SetParallel? effectiveParallel = matchedParallel;
+      if (matchedParallel != null &&
+          scanParallel != null &&
+          matchedParallel.serialMax == null &&
+          scanParallel.numberedTo != null) {
+        effectiveParallel = SetParallel(
+          id: matchedParallel.id,
+          name: matchedParallel.name,
+          serialMax: scanParallel.numberedTo,
+          isAuto: matchedParallel.isAuto,
+        );
       }
-      final parallelLabel = scanParallel?.name ?? 'Base';
-      final effectiveParallel = switch ((matchedParallel, scanParallel)) {
-        (SetParallel p, ParallelInfo s) when p.serialMax == null && s.numberedTo != null => SetParallel(
-            id: p.id,
-            name: p.name,
-            serialMax: s.numberedTo,
-            isAuto: p.isAuto,
-          ),
-        (SetParallel p, _) => p,
-        (_, ParallelInfo s) when s.name.isNotEmpty => SetParallel(
-            id: s.id.isNotEmpty ? s.id : '__scan_parallel__',
-            name: s.name,
-            serialMax: s.numberedTo,
-          ),
-        _ => null,
-      };
 
       if (!mounted) return;
       final resolvedId = await svc.ensureCatalogVariant(
         catalogVariantId: master.id,
         parallelId: effectiveParallel?.id,
       );
+      if (!mounted) return;
+
+      final chId = det.cardHedgeCardId?.trim();
+      if (chId != null && chId.isNotEmpty) {
+        await ref.read(compsServiceProvider).persistCardHedgeHydratedFromCardId(
+              masterVariantId: resolvedId,
+              guidePriceCardId: chId,
+            );
+      }
+
       if (!mounted) return;
       final resolvedMaster = await svc.fetchMasterCardById(resolvedId);
       if (!mounted) return;
@@ -830,8 +1084,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
           parallelIsAuto: effectiveParallel?.isAuto ?? false,
           releaseName: release.name,
           setName: set.name,
-          year: release.year,
-          sport: release.sport,
+          year: detailYear,
+          sport: release.sport ?? _catalogSportFromScanSlug(_selectedSport),
           onAddToCollection: () => _showScanAddToCollectionSheet(
                 displayCard: displayCard,
                 resolvedVariantId: resolvedId,
@@ -851,19 +1105,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
           openedFromScanResults: false,
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: 'Could not open this card. Try the catalog.',
+        message: 'Could not load this card: $e',
         type: AdaptiveSnackBarType.error,
-      );
-      context.push(
-        '/catalog',
-        extra: <String, dynamic>{
-          'detection': detection,
-          'sport': _selectedSport,
-        },
       );
     } finally {
       if (mounted) setState(() => _openingCatalogDetail = false);
@@ -1256,33 +1503,124 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                   horizontal: 20,
                   bottom: 8,
                 ),
-                child: Text(
-                  '${_detections.length} possible ${_detections.length == 1 ? 'match' : 'matches'} · tap a row for details',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: muted,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _mergeSpinePicker
+                          ? 'Set match is informational — pick a parallel below to open the card in the catalog.'
+                          : '${_detections.length} possible ${_detections.length == 1 ? 'match' : 'matches'} · tap a row for details',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: muted,
+                          ),
+                    ),
+                    if (_identifyVisionMeta.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _identifyVisionMeta,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: muted.withValues(alpha: 0.85),
+                              fontFamily: 'monospace',
+                              fontSize: 10,
+                            ),
                       ),
+                    ],
+                  ],
                 ),
               ),
               Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  itemCount: _detections.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final m = _detections[index];
-                    return _MatchResultTile(
-                      match: m,
-                      isHero: index == 0,
-                      rawDetectionJson: index < _detectionRawJson.length
-                          ? _detectionRawJson[index]
-                          : '{}',
-                      tint: _confidenceTint(m),
-                      onSurface: onSurface,
-                      muted: muted,
-                      onOpen: () => unawaited(_goToCardDetails(m)),
-                    );
-                  },
-                ),
+                child: _mergeSpinePicker
+                    ? ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        children: [
+                          _SetMatchPanel(
+                            match: _spineForSetMatchPanel(),
+                            fallbackPlayerName: _firstChPlayerName(),
+                            rawDetectionJson: _detectionRawJson.isNotEmpty
+                                ? _detectionRawJson.first
+                                : '{}',
+                            mergeDebugJson: _detectionMergeDebugJson.isNotEmpty
+                                ? _detectionMergeDebugJson.first
+                                : '',
+                            tint: _confidenceTint(_detections.first),
+                            onSurface: onSurface,
+                            muted: muted,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildMergeCardHedgeSection(onSurface, muted),
+                          const SizedBox(height: 8),
+                          _buildMergeCatalogExtrasSection(onSurface, muted),
+                          if (_detections.length > 1)
+                            Theme(
+                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                              child: ExpansionTile(
+                                tilePadding: EdgeInsets.zero,
+                                childrenPadding: const EdgeInsets.only(bottom: 8),
+                                title: Text(
+                                  'Other CardSight matches (${_detections.length - 1})',
+                                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                        color: muted,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                                children: [
+                                  for (var i = 1; i < _detections.length; i++)
+                                    ListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(
+                                        (_detections[i].card.name?.trim().isNotEmpty == true)
+                                            ? _detections[i].card.name!.trim()
+                                            : 'Match ${i + 1}',
+                                        style: TextStyle(
+                                          color: onSurface,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        [
+                                          if (_detections[i].card.setName != null &&
+                                              _detections[i].card.setName!.trim().isNotEmpty)
+                                            _detections[i].card.setName!.trim(),
+                                          _detections[i].confidenceLabel,
+                                        ].join(' · '),
+                                        style: TextStyle(color: muted, fontSize: 12),
+                                      ),
+                                      trailing: Icon(
+                                        Icons.chevron_right_rounded,
+                                        color: muted,
+                                        size: 22,
+                                      ),
+                                      onTap: () =>
+                                          unawaited(_goToCardDetails(_detections[i])),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        itemCount: _detections.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final m = _detections[index];
+                          return _MatchResultTile(
+                            match: m,
+                            isHero: index == 0,
+                            rawDetectionJson: index < _detectionRawJson.length
+                                ? _detectionRawJson[index]
+                                : '{}',
+                            mergeDebugJson: index < _detectionMergeDebugJson.length
+                                ? _detectionMergeDebugJson[index]
+                                : '',
+                            tint: _confidenceTint(m),
+                            onSurface: onSurface,
+                            muted: muted,
+                            onOpen: () => unawaited(_goToCardDetails(m)),
+                          );
+                        },
+                      ),
               ),
               Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -1321,6 +1659,440 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// One CardHedge image-search row in merge results (selectable list below the CardSight tile).
+class _ChCandidateTile extends StatelessWidget {
+  const _ChCandidateTile({
+    required this.hit,
+    this.variantOnly = false,
+    required this.selected,
+    required this.onSurface,
+    required this.muted,
+    required this.onTap,
+  });
+
+  final CardHedgeImageSearchHit hit;
+  final bool variantOnly;
+  final bool selected;
+  final Color onSurface;
+  final Color muted;
+  final VoidCallback onTap;
+
+  static String _confidenceLabel(CardHedgeImageSearchHit h) {
+    final raw = h.similarityLabel?.trim();
+    if (raw != null && raw.isNotEmpty) return raw;
+    final s = h.similarityScore;
+    if (s > 0) return '${(s * 100).round()}%';
+    return '—';
+  }
+
+  static Color _confidenceColor(CardHedgeImageSearchHit h) {
+    final s = h.similarityScore;
+    if (s >= 0.72) return const Color(0xFF059669);
+    if (s >= 0.48) return const Color(0xFFD97706);
+    if (s > 0) return const Color(0xFFDC2626);
+    return const Color(0xFF64748B);
+  }
+
+  Widget _buildVariantPick(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final border = selected ? AppTheme.primary : muted.withValues(alpha: 0.28);
+    final bg = selected
+        ? AppTheme.primary.withValues(alpha: 0.08)
+        : scheme.surfaceContainerHighest.withValues(alpha: 0.35);
+    final v = hit.variant?.trim();
+    final d = hit.description?.trim();
+    final title = (v != null && v.isNotEmpty)
+        ? v
+        : (d != null && d.isNotEmpty)
+            ? d
+            : 'Base';
+    final img = hit.image?.trim();
+    final confColor = _confidenceColor(hit);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border, width: selected ? 2 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(
+                    selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                    size: 22,
+                    color: selected ? AppTheme.primary : muted.withValues(alpha: 0.55),
+                  ),
+                  const SizedBox(width: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 40,
+                      height: 56,
+                      child: (img != null && img.isNotEmpty)
+                          ? CachedNetworkImage(
+                              imageUrl: img,
+                              fit: BoxFit.cover,
+                              fadeInDuration: const Duration(milliseconds: 150),
+                              placeholder: (_, _) => ColoredBox(
+                                color: scheme.surfaceContainerHighest,
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppTheme.primary.withValues(alpha: 0.7),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (_, _, _) => ColoredBox(
+                                color: scheme.surfaceContainerHighest,
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  size: 24,
+                                  color: muted.withValues(alpha: 0.45),
+                                ),
+                              ),
+                            )
+                          : ColoredBox(
+                              color: scheme.surfaceContainerHighest,
+                              child: Icon(
+                                Icons.image_not_supported_outlined,
+                                size: 24,
+                                color: muted.withValues(alpha: 0.45),
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _confidenceLabel(hit),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: confColor,
+                              fontWeight: FontWeight.w800,
+                              height: 1.1,
+                            ),
+                      ),
+                      Text(
+                        'confidence',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: muted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (hit.prices.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (var i = 0; i < hit.prices.length && i < 6; i++)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHigh.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: muted.withValues(alpha: 0.22)),
+                        ),
+                        child: Text(
+                          '${hit.prices[i].grade}  \$${hit.prices[i].price.round()}',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: onSurface,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
+                        ),
+                      ),
+                    if (hit.prices.length > 6)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2, top: 2),
+                        child: Text(
+                          '+${hit.prices.length - 6}',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: muted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (variantOnly) return _buildVariantPick(context);
+    final scheme = Theme.of(context).colorScheme;
+    final border = selected ? AppTheme.primary : muted.withValues(alpha: 0.28);
+    final bg = selected
+        ? AppTheme.primary.withValues(alpha: 0.08)
+        : scheme.surfaceContainerHighest.withValues(alpha: 0.35);
+    final title = (hit.player?.trim().isNotEmpty == true) ? hit.player!.trim() : 'Unknown player';
+    final subParts = <String>[
+      if (hit.number?.trim().isNotEmpty == true) '#${hit.number!.trim()}',
+      if (hit.variant?.trim().isNotEmpty == true) hit.variant!.trim(),
+      if (hit.setLabel?.trim().isNotEmpty == true) hit.setLabel!.trim(),
+    ];
+    final img = hit.image?.trim();
+    final confColor = _confidenceColor(hit);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border, width: selected ? 2 : 1),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                size: 22,
+                color: selected ? AppTheme.primary : muted.withValues(alpha: 0.55),
+              ),
+              const SizedBox(width: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 48,
+                  height: 64,
+                  child: (img != null && img.isNotEmpty)
+                      ? CachedNetworkImage(
+                          imageUrl: img,
+                          fit: BoxFit.cover,
+                          fadeInDuration: const Duration(milliseconds: 150),
+                          placeholder: (_, _) => ColoredBox(
+                            color: scheme.surfaceContainerHighest,
+                            child: Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.primary.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (_, _, _) => ColoredBox(
+                            color: scheme.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              size: 28,
+                              color: muted.withValues(alpha: 0.45),
+                            ),
+                          ),
+                        )
+                      : ColoredBox(
+                          color: scheme.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            size: 28,
+                            color: muted.withValues(alpha: 0.45),
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    if (subParts.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subParts.join(' · '),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: muted,
+                              height: 1.25,
+                            ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      hit.cardId,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: muted,
+                            fontFamily: 'monospace',
+                            fontSize: 10,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _confidenceLabel(hit),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: confColor,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+                  ),
+                  Text(
+                    'confidence',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: muted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One [set_parallels] row for merge UI when CardHedge did not surface that parallel name.
+class _CatalogParallelOptionTile extends StatelessWidget {
+  const _CatalogParallelOptionTile({
+    required this.parallel,
+    required this.selected,
+    required this.onSurface,
+    required this.muted,
+    required this.onTap,
+  });
+
+  final SetParallel parallel;
+  final bool selected;
+  final Color onSurface;
+  final Color muted;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final border = selected ? AppTheme.primary : muted.withValues(alpha: 0.28);
+    final bg = selected
+        ? AppTheme.primary.withValues(alpha: 0.08)
+        : scheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final serial = parallel.serialMax;
+    final sub = <String>[
+      if (serial != null) '/$serial',
+      if (parallel.isAuto) 'Auto',
+    ];
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: border, width: selected ? 2 : 1),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                size: 22,
+                color: selected ? AppTheme.primary : muted.withValues(alpha: 0.55),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      parallel.name,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    if (sub.isNotEmpty)
+                      Text(
+                        sub.join(' · '),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                'set_parallels',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1367,11 +2139,241 @@ class _RawJsonScrollBoxState extends State<_RawJsonScrollBox> {
   }
 }
 
+/// CardSight set spine only — not tappable; parallel choice is via CardHedge rows below.
+class _SetMatchPanel extends StatelessWidget {
+  const _SetMatchPanel({
+    required this.match,
+    this.fallbackPlayerName,
+    required this.rawDetectionJson,
+    required this.mergeDebugJson,
+    required this.tint,
+    required this.onSurface,
+    required this.muted,
+  });
+
+  final ImageScanMatchResult match;
+  /// Used when [ScannedCatalogCard.name] is empty (e.g. from CardHedge `player` on image-search hits).
+  final String? fallbackPlayerName;
+  final String rawDetectionJson;
+  final String mergeDebugJson;
+  final Color tint;
+  final Color onSurface;
+  final Color muted;
+
+  static const _mono = TextStyle(
+    fontFamily: 'monospace',
+    fontSize: 11,
+    height: 1.35,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final card = match.card;
+    final fb = fallbackPlayerName?.trim();
+    final title = (card.name?.trim().isNotEmpty == true)
+        ? card.name!.trim()
+        : (fb != null && fb.isNotEmpty)
+            ? fb
+            : 'Unknown player';
+    final parts = <String>[
+      if (card.year != null && card.year!.isNotEmpty) card.year!,
+      if (card.releaseName != null && card.releaseName!.isNotEmpty) card.releaseName!,
+      if (card.setName != null && card.setName!.isNotEmpty) card.setName!,
+    ];
+    final subtitle = parts.isEmpty ? 'No release / set text on match' : parts.join(' · ');
+
+    final confidenceLine = match.matchScore != null
+        ? '${match.confidenceLabel} · ${match.confidence}'
+        : match.confidence;
+
+    final idLines = <String>[
+      if (card.releaseId?.trim().isNotEmpty == true) 'releaseId: ${card.releaseId}',
+      if (card.setId?.trim().isNotEmpty == true) 'setId: ${card.setId}',
+      if (card.cardsightReleaseId?.trim().isNotEmpty == true)
+        'cardsightReleaseId: ${card.cardsightReleaseId}',
+      if (card.cardsightSetId?.trim().isNotEmpty == true) 'cardsightSetId: ${card.cardsightSetId}',
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: tint.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Set match',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: muted,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: muted,
+                              height: 1.25,
+                            ),
+                      ),
+                      if (card.number?.trim().isNotEmpty == true) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '#${card.number!.trim()}',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: muted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                      if (idLines.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          idLines.join('\n'),
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: muted,
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                                height: 1.35,
+                              ),
+                        ),
+                      ],
+                      if (match.grading != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Slab: ${match.grading!.slabSummary}',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: muted,
+                              ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: tint.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: tint.withValues(alpha: 0.65)),
+                  ),
+                  child: Text(
+                    confidenceLine,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: tint,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: muted.withValues(alpha: 0.2)),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: Text(
+                'Vision merge (CardHedge ↔ detection)',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: muted.withValues(alpha: 0.25)),
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: _RawJsonScrollBox(
+                      text: mergeDebugJson.trim().isEmpty
+                          ? 'No `vision_merge_debug` for this row.\n\n'
+                              'Deploy the latest `identify-card` edge function for server-side CardHedge merge + debug payload.\n\n'
+                              'Raw detection JSON is in the section below.'
+                          : mergeDebugJson,
+                      textStyle: _mono.copyWith(color: onSurface),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: Text(
+                'Raw detection JSON (debug)',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: muted.withValues(alpha: 0.25)),
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 220),
+                    child: _RawJsonScrollBox(
+                      text: rawDetectionJson,
+                      textStyle: _mono.copyWith(color: onSurface),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MatchResultTile extends StatelessWidget {
   const _MatchResultTile({
     required this.match,
     this.isHero = false,
     required this.rawDetectionJson,
+    required this.mergeDebugJson,
     required this.tint,
     required this.onSurface,
     required this.muted,
@@ -1381,6 +2383,7 @@ class _MatchResultTile extends StatelessWidget {
   final ImageScanMatchResult match;
   final bool isHero;
   final String rawDetectionJson;
+  final String mergeDebugJson;
   final Color tint;
   final Color onSurface;
   final Color muted;
@@ -1460,6 +2463,17 @@ class _MatchResultTile extends StatelessWidget {
                                   height: 1.25,
                                 ),
                           ),
+                          if (match.cardHedgeCardId != null && match.cardHedgeCardId!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'CardHedge · ${match.cardHedgeCardId}',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: muted,
+                                    fontFamily: 'monospace',
+                                    fontSize: 10,
+                                  ),
+                            ),
+                          ],
                           if (card.parallel != null) ...[
                             const SizedBox(height: 8),
                             Text(
@@ -1521,7 +2535,41 @@ class _MatchResultTile extends StatelessWidget {
               tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               title: Text(
-                'Raw detection (debug)',
+                'Vision merge (CardHedge ↔ detection)',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: muted.withValues(alpha: 0.25)),
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: _RawJsonScrollBox(
+                      text: mergeDebugJson.trim().isEmpty
+                          ? 'No `vision_merge_debug` for this row.\n\n'
+                              'Deploy the latest `identify-card` edge function for server-side CardHedge merge + debug payload.\n\n'
+                              'Raw detection JSON is in the section below.'
+                          : mergeDebugJson,
+                      textStyle: _mono.copyWith(color: onSurface),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: Text(
+                'Raw detection JSON (debug)',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       color: muted,
                       fontWeight: FontWeight.w600,

@@ -4,6 +4,7 @@
  * Returns `persisted_master` snapshot for the client (no extra refetch).
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { hydratePersistFieldsFromCardHedgeCardId } from '../_shared/cardhedge_hydrate_variant.ts';
 import { fetchCatalogMasterSnapshot, persistGuidePricesOntoMaster } from '../_shared/cardhedge_persist_master.ts';
 import { verifyUserJwt } from '../_shared/supabase_user_jwt.ts';
 
@@ -41,6 +42,8 @@ Deno.serve(async (req) => {
     sales7d?: unknown;
     sales30d?: unknown;
     gain?: unknown;
+    /** When true with [guidePriceCardId] and no usable [prices], fetch CardHedge `card-details` (+ prices backfill). */
+    hydrateFromCardHedge?: boolean;
   };
   try {
     body = await req.json();
@@ -56,6 +59,34 @@ Deno.serve(async (req) => {
     (typeof body.cardhedgeId === 'string' ? body.cardhedgeId.trim() : '') ||
     undefined;
 
+  const apiKey =
+    Deno.env.get('CARDHEDGE_API_KEY')?.trim() ||
+    Deno.env.get('CARDHEDGER_API_KEY')?.trim() ||
+    '';
+
+  let pricesIn = body.prices;
+  let sales7In = body.sales7d;
+  let sales30In = body.sales30d;
+  let gainIn = body.gain;
+  let imageIn = body.imageUrl;
+
+  const pricesArr = Array.isArray(pricesIn) ? pricesIn : [];
+  const hydrate = Boolean(body.hydrateFromCardHedge);
+  if (
+    hydrate &&
+    guidePriceCardId &&
+    apiKey &&
+    pricesArr.length === 0
+  ) {
+    const h = await hydratePersistFieldsFromCardHedgeCardId(apiKey, guidePriceCardId);
+    if (h.prices && h.prices.length > 0) pricesIn = h.prices;
+    if (sales7In === undefined || sales7In === null) sales7In = h.sales7d ?? undefined;
+    if (sales30In === undefined || sales30In === null) sales30In = h.sales30d ?? undefined;
+    if (gainIn === undefined || gainIn === null) gainIn = h.gain ?? undefined;
+    const imgTrim = typeof imageIn === 'string' ? imageIn.trim() : '';
+    if ((!imgTrim || imgTrim.length === 0) && h.imageUrl) imageIn = h.imageUrl;
+  }
+
   const admin = createClient(supabaseUrl, serviceKey);
 
   const { data: row, error: qErr } = await admin
@@ -69,11 +100,11 @@ Deno.serve(async (req) => {
   const { storedImageUrl } = await persistGuidePricesOntoMaster(admin, {
     masterVariantId,
     guidePriceCardId,
-    imageUrl: body.imageUrl,
-    prices: body.prices,
-    sales7d: body.sales7d,
-    sales30d: body.sales30d,
-    gain: body.gain,
+    imageUrl: imageIn,
+    prices: pricesIn,
+    sales7d: sales7In,
+    sales30d: sales30In,
+    gain: gainIn,
   });
 
   const persisted_master = await fetchCatalogMasterSnapshot(admin, masterVariantId);

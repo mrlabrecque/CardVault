@@ -3,6 +3,7 @@ import 'dart:convert' show jsonDecode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
+import '../models/cardhedge_image_search.dart';
 import '../models/guide_catalog_match.dart';
 import '../models/comp.dart';
 import '../utils/guide_grade_prices.dart';
@@ -545,6 +546,60 @@ class CompsService {
       out.add({'grade': grade, 'price': price});
     }
     return out.isEmpty ? null : out;
+  }
+
+  /// CardHedge visual similarity search (same photo as CardSight identify). Returns [] on failure.
+  Future<List<CardHedgeImageSearchHit>> cardHedgeImageSearch({
+    required String imageBase64Jpeg,
+    int k = 12,
+  }) async {
+    try {
+      final res = await _supabase.functions.invoke(
+        'cardhedge-image-search',
+        body: {'image_base64': imageBase64Jpeg, 'k': k},
+      );
+      if (res.status != 200) return const [];
+      final map = _functionInvokeBodyAsMap(res.data);
+      if (map == null) return const [];
+      final hitsRaw = map['hits'];
+      if (hitsRaw is! List) return const [];
+      final out = <CardHedgeImageSearchHit>[];
+      for (final e in hitsRaw) {
+        if (e is! Map) continue;
+        final h = CardHedgeImageSearchHit.fromJson(Map<String, dynamic>.from(e));
+        if (h.cardId.isNotEmpty) out.add(h);
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Links [guidePriceCardId] to the variant and hydrates prices/sales from CardHedge `card-details`.
+  Future<MasterCard?> persistCardHedgeHydratedFromCardId({
+    required String masterVariantId,
+    required String guidePriceCardId,
+  }) async {
+    final tid = masterVariantId.trim();
+    final gid = guidePriceCardId.trim();
+    if (tid.isEmpty || gid.isEmpty) return null;
+    try {
+      final res = await _supabase.functions.invoke(
+        'cardhedge-persist-variant',
+        body: {
+          'masterVariantId': tid,
+          'guidePriceCardId': gid,
+          'hydrateFromCardHedge': true,
+        },
+      );
+      if (res.status != 200) return null;
+      final map = _functionInvokeBodyAsMap(res.data);
+      final pm = map?['persisted_master'];
+      if (pm is! Map) return null;
+      return MasterCard.fromJson(Map<String, dynamic>.from(pm));
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Persists a guide-price catalog match onto the variant via Edge `cardhedge-persist-variant`.
