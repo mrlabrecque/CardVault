@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
+import '../models/cardhedge_image_search.dart';
 import '../models/user_card.dart';
 import '../utils/guide_grade_prices.dart';
 
@@ -20,6 +21,177 @@ double? _tryParseDouble(dynamic value) {
   if (value is String) return double.tryParse(value);
   if (value is num) return value.toDouble();
   return null;
+}
+
+String _chNormKey(String? s) {
+  if (s == null) return '';
+  return s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+}
+
+bool _chNumbersRoughMatch(String? a, String? b) {
+  if (a == null || b == null) return false;
+  final na = a.replaceFirst(RegExp(r'^#'), '').trim().toLowerCase();
+  final nb = b.replaceFirst(RegExp(r'^#'), '').trim().toLowerCase();
+  if (na.isEmpty || nb.isEmpty) return false;
+  if (na == nb) return true;
+  final ia = int.tryParse(na);
+  final ib = int.tryParse(nb);
+  if (ia != null && ib != null && ia == ib) return true;
+  return false;
+}
+
+bool _chPlayersRoughMatch(String a, String b) {
+  final dp = a.toLowerCase().trim();
+  final hp = b.toLowerCase().trim();
+  if (dp.isEmpty || hp.isEmpty) return false;
+  if (hp.contains(dp) || dp.contains(hp)) return true;
+  final dTok = dp.split(RegExp(r'\s+')).where((e) => e.length > 2).toSet();
+  final hTok = hp.split(RegExp(r'\s+')).where((e) => e.length > 2).toSet();
+  return dTok.intersection(hTok).isNotEmpty;
+}
+
+/// Catalog parallel string for a CardHedge row — same as [CardHedgeImageSearchHit.displayParallelName]
+/// (null/blank `variant` is already **Base** on the model).
+String _chEffectiveParallelHint(CardHedgeImageSearchHit hit) {
+  final s = hit.displayParallelName.trim();
+  return s.isEmpty ? 'Base' : s;
+}
+
+SetParallel? _chPickParallel(List<SetParallel> parallels, String? parallelHint) {
+  if (parallels.isEmpty) return null;
+  final raw = parallelHint?.trim();
+  final eff = (raw == null || raw.isEmpty) ? 'Base' : raw;
+  // "Base" = catalog **default paper** variant: matches Postgres `_default_parallel_for_set`,
+  // the `set_card_base_variants` view, and `catalog-import-cards` `pickBaseParallelId`.
+  // There is not always a `set_parallels` row literally named "Base"; `master_card_definitions.parallel_id`
+  // is NOT NULL and points at whichever parallel is default (often lowest `sort_order`).
+  if (eff.toLowerCase() == 'base') {
+    const baseSynonyms = <String>{
+      'base',
+      'base set',
+      'base parallel',
+      'base card',
+      'baseset',
+      'baseparallel',
+    };
+    for (final p in parallels) {
+      final raw = p.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      if (baseSynonyms.contains(raw)) return p;
+    }
+    // Ordered by sort_order in [getParallels]; avoid guessing a named parallel.
+    return parallels.isNotEmpty ? parallels.first : null;
+  }
+  final target = _chNormKey(eff);
+  if (target.isNotEmpty) {
+    SetParallel? exact;
+    final fuzzy = <SetParallel>[];
+    for (final p in parallels) {
+      final n = _chNormKey(p.name);
+      if (n == target) {
+        exact = p;
+        break;
+      }
+      if (n.contains(target) || target.contains(n)) fuzzy.add(p);
+    }
+    if (exact != null) return exact;
+    if (fuzzy.length == 1) return fuzzy.first;
+    if (fuzzy.length > 1) {
+      fuzzy.sort((a, b) => _chNormKey(b.name).length.compareTo(_chNormKey(a.name).length));
+      return fuzzy.first;
+    }
+  }
+  for (final p in parallels) {
+    if (p.name.trim().toLowerCase() == 'base') return p;
+  }
+  return parallels.first;
+}
+
+SetRecord? _chPickSet(List<SetRecord> sets, String setNameHint) {
+  if (sets.isEmpty) return null;
+  final hint = setNameHint.trim();
+  if (hint.isEmpty) return sets.length == 1 ? sets.first : null;
+  final t = _chNormKey(hint);
+  SetRecord? best;
+  var bestScore = -1;
+  for (final s in sets) {
+    final n = _chNormKey(s.name);
+    var score = 0;
+    if (n == t) {
+      score = 100;
+    } else if (n.contains(t) || t.contains(n)) {
+      score = 50;
+    } else if (s.name.toLowerCase().contains(hint.toLowerCase())) {
+      score = 25;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = s;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
+String? _chPickSetCardId(List<Map<String, dynamic>> rows, String player, String? number) {
+  String? bestId;
+  var bestScore = -1;
+  final numPresent = number != null && number.trim().isNotEmpty;
+  for (final r in rows) {
+    final pid = r['id'] as String?;
+    if (pid == null) continue;
+    final p = (r['player'] as String?)?.trim() ?? '';
+    final cn = r['card_number'] as String?;
+    if (numPresent && !_chNumbersRoughMatch(cn, number)) continue;
+    var score = 0;
+    if (_chPlayersRoughMatch(p, player)) {
+      score += 8;
+    } else if (p.toLowerCase().contains(player.toLowerCase())) {
+      score += 4;
+    }
+    if (_chNumbersRoughMatch(cn, number)) score += 12;
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = pid;
+    }
+  }
+  if (bestId == null) return null;
+  if (numPresent && bestScore < 12) return null;
+  if (!numPresent && bestScore < 8) return null;
+  return bestId;
+}
+
+bool _scanSportIsBasketball(String scanSport) {
+  final s = scanSport.trim().toLowerCase();
+  return s == 'basketball' || s == 'nba';
+}
+
+/// When the scan picker sport string is empty (common on some routes), infer from CardHedge [category]
+/// so release-year logic (e.g. basketball dual-year) still applies.
+String _effectiveChScanSport(String scanSport, CardHedgeImageSearchHit hit) {
+  if (scanSport.trim().isNotEmpty) return scanSport;
+  final c = (hit.category ?? '').toLowerCase();
+  if (c.contains('basketball') || c.contains('nba')) return 'Basketball';
+  if (c.contains('football')) return 'Football';
+  if (c.contains('baseball')) return 'Baseball';
+  if (c.contains('hockey') || c.contains('nhl')) return 'Hockey';
+  return scanSport;
+}
+
+List<ReleaseRecord> _mergeChReleaseRecords(Iterable<ReleaseRecord> a, Iterable<ReleaseRecord> b) {
+  final byId = <String, ReleaseRecord>{};
+  for (final r in a) {
+    byId[r.id] = r;
+  }
+  for (final r in b) {
+    byId[r.id] = r;
+  }
+  final list = byId.values.toList();
+  list.sort((x, y) {
+    final yx = x.year ?? 0;
+    final yy = y.year ?? 0;
+    if (yx != yy) return yy.compareTo(yx);
+    return x.name.compareTo(y.name);
+  });
+  return list;
 }
 
 /// Injects batched `current_prices` rows under `master_card_definitions` for [UserCard.fromJson].
@@ -350,6 +522,23 @@ class CatalogEnsureFromScanResult {
   }
 }
 
+/// Result of [CardsService.resolveCardHedgeHitForMasterDetail] for opening catalog master detail from scan.
+class ChScanCatalogResolveResult {
+  const ChScanCatalogResolveResult({
+    required this.resolvedMasterCardId,
+    required this.parallelName,
+    this.parallel,
+    this.release,
+    this.set,
+  });
+
+  final String resolvedMasterCardId;
+  final String parallelName;
+  final SetParallel? parallel;
+  final ReleaseRecord? release;
+  final SetRecord? set;
+}
+
 class CardsService {
   CardsService(this._supabase);
   final SupabaseClient _supabase;
@@ -538,21 +727,65 @@ class CardsService {
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  /// Looks up `releases.cardsight_id` for a CardSight set id already stored on `sets.cardsight_id`.
+  Future<String?> _cardsightReleaseIdFromCardsightSetId(String cardsightSetId) async {
+    final cs = cardsightSetId.trim();
+    if (cs.isEmpty) return null;
+    try {
+      final setRow = await _supabase.from('sets').select('release_id').eq('cardsight_id', cs).maybeSingle();
+      if (setRow == null) return null;
+      final rid = setRow['release_id'] as String?;
+      if (rid == null || rid.isEmpty) return null;
+      final relRow =
+          await _supabase.from('releases').select('cardsight_id').eq('id', rid).maybeSingle();
+      if (relRow == null) return null;
+      final out = (relRow['cardsight_id'] as String?)?.trim();
+      return (out != null && out.isNotEmpty) ? out : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Lazily imports all cards for a set from the catalog API and caches them in DB.
+  /// Returns request + HTTP status + parsed body for diagnostics.
+  Future<Map<String, dynamic>> importCardsForSetDetailed({
+    required String cardsightReleaseId,
+    required String cardsightSetId,
+    required String vaultSetId,
+  }) async {
+    final body = <String, dynamic>{
+      'cardsightReleaseId': cardsightReleaseId,
+      'cardsightSetId': cardsightSetId,
+      'setId': vaultSetId,
+    };
+    final res = await _supabase.functions.invoke('catalog-import-cards', body: body);
+    final data = res.data;
+    Object? serializable = data;
+    if (data is Map) {
+      serializable = Map<String, dynamic>.from(data);
+    }
+    return <String, dynamic>{
+      'request': body,
+      'httpStatus': res.status,
+      'responseBody': serializable,
+    };
+  }
+
   /// Lazily imports all cards for a set from the catalog API and caches them in DB.
   Future<void> importCardsForSet({
     required String cardsightReleaseId,
     required String cardsightSetId,
     required String setId,
   }) async {
-    final res = await _supabase.functions.invoke(
-      'catalog-import-cards',
-      body: {
-        'cardsightReleaseId': cardsightReleaseId,
-        'cardsightSetId': cardsightSetId,
-        'setId': setId,
-      },
+    final r = await importCardsForSetDetailed(
+      cardsightReleaseId: cardsightReleaseId,
+      cardsightSetId: cardsightSetId,
+      vaultSetId: setId,
     );
-    if (res.status != 200) throw Exception('Import cards failed: ${res.status}');
+    final status = r['httpStatus'];
+    if (status is! int || status != 200) {
+      throw Exception('Import cards failed: $status');
+    }
   }
 
   /// Server-side: lazy-import spine, import cards, upsert parallel if needed, hydrate CardHedge prices.
@@ -590,6 +823,507 @@ class CardsService {
     final mid = map['masterCardDefinitionsId']?.toString().trim();
     if (mid == null || mid.isEmpty) return null;
     return CatalogEnsureFromScanResult.fromJson(map);
+  }
+
+  Future<List<ReleaseRecord>> _releasesForChVault(
+    String releaseDisplayName,
+    int? year, {
+    String scanSport = '',
+  }) async {
+    final name = releaseDisplayName.trim();
+    if (name.isEmpty) return const [];
+    final basketballDual = year != null && _scanSportIsBasketball(scanSport);
+
+    List<ReleaseRecord> mapRows(dynamic data) {
+      if (data is! List) return const [];
+      return data.map((r) => ReleaseRecord.fromJson(r as Map<String, dynamic>)).toList();
+    }
+
+    dynamic namedReleaseQuery() => _supabase
+        .from('releases')
+        .select('id, name, year, sport, cardsight_id, sets(id, set_cards(count))')
+        .ilike('name', '%$name%');
+
+    try {
+      if (year == null) {
+        final data = await namedReleaseQuery().order('year', ascending: false).limit(25);
+        return mapRows(data);
+      }
+
+      if (basketballDual) {
+        final y = year;
+        final seasonSpan = '$y-${y + 1}';
+        final byCalYear =
+            await namedReleaseQuery().eq('year', y).order('year', ascending: false).limit(25);
+        final bySeasonInName = await namedReleaseQuery()
+            .ilike('name', '%$seasonSpan%')
+            .order('year', ascending: false)
+            .limit(25);
+        return _mergeChReleaseRecords(mapRows(byCalYear), mapRows(bySeasonInName));
+      }
+
+      final data =
+          await namedReleaseQuery().eq('year', year).order('year', ascending: false).limit(25);
+      return mapRows(data);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _setCardsForPlayerInSet(String setId, String player) async {
+    var safe = player.replaceAll('%', '').trim();
+    if (safe.isEmpty) return const [];
+    if (safe.length > 80) safe = safe.substring(0, 80);
+    try {
+      final data = await _supabase
+          .from('set_cards')
+          .select('id, player, card_number')
+          .eq('set_id', setId)
+          .ilike('player', '%$safe%')
+          .limit(80);
+      return (data as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<CatalogSearchCardResult?> _pickCatalogSearchCardForChHit(
+    CardHedgeImageSearchHit hit,
+    String cardsightReleaseId,
+  ) async {
+    final player = (hit.player ?? '').trim();
+    if (player.isEmpty) return null;
+    final results = await searchCardsInRelease(cardsightReleaseId, player, take: 40);
+    if (results.isEmpty) return null;
+    final preferSet = hit.cardsightSetId?.trim();
+    final num = hit.number?.trim();
+    final numPresent = num != null && num.isNotEmpty;
+
+    if (numPresent) {
+      final withNum = results.where((c) => _chNumbersRoughMatch(c.number, num)).toList();
+      if (withNum.isNotEmpty) {
+        final ps = preferSet;
+        if (ps != null && ps.isNotEmpty) {
+          final bySet = withNum.where((c) => c.setId == ps).toList();
+          if (bySet.isNotEmpty) return bySet.first;
+        }
+        return withNum.first;
+      }
+    }
+
+    CatalogSearchCardResult? best;
+    var bestScore = -1;
+    final firstTok = player
+        .split(RegExp(r'\s+'))
+        .firstWhere((e) => e.length > 2, orElse: () => player)
+        .toLowerCase();
+    for (final c in results) {
+      var score = 0;
+      if (preferSet != null && preferSet.isNotEmpty && c.setId == preferSet) score += 30;
+      if (_chPlayersRoughMatch(c.name, player)) {
+        score += 10;
+      } else if (c.name.toLowerCase().contains(firstTok)) {
+        score += 5;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /// Vault DB walk + optional `catalog-import-cards` when CardSight ids are known.
+  /// For on-device debugging when resolution feels hung.
+  Future<Map<String, dynamic>> debugVaultLookupForCardHedgeHit(
+    CardHedgeImageSearchHit hit, {
+    required String scanSport,
+  }) async {
+    final sw = Stopwatch()..start();
+    final releaseName = (hit.displayReleaseName ?? '').trim();
+    final setHint = hit.displaySetName.trim();
+    final year = hit.parsedListingYear;
+    final player = (hit.player ?? '').trim();
+    final parallelHint = _chEffectiveParallelHint(hit);
+    final sportEff = _effectiveChScanSport(scanSport, hit);
+    final basketballDual = year != null && _scanSportIsBasketball(sportEff);
+    final seasonSpan = switch ((basketballDual, year)) {
+      (true, final int y) => '$y-${y + 1}',
+      _ => null,
+    };
+
+    final out = <String, dynamic>{
+      'inputs': {
+        'scanSport': scanSport,
+        'effectiveScanSport': sportEff,
+        'displayReleaseName': releaseName,
+        'displaySetName': setHint,
+        'parsedListingYear': year,
+        'player': player,
+        'cardNumber': hit.number,
+        'parallelHint': parallelHint,
+        'cardsightReleaseId': hit.cardsightReleaseId,
+        'cardsightSetId': hit.cardsightSetId,
+        'cardsightCardId': hit.cardsightCardId,
+        'cardHedgeCardId': hit.cardId,
+      },
+      'releasesLookupPlan': {
+        'basketballDualYearQuery': basketballDual,
+        if (seasonSpan != null) 'seasonSpanInReleaseName': seasonSpan,
+        'description': basketballDual
+            ? 'Basketball: merge releases where year==$year OR name ilike %$seasonSpan% (with same release-name filter).'
+            : (year != null
+                ? 'Non-basketball or wrong sport for dual-year: filter year==$year only.'
+                : 'No calendar year filter on releases.'),
+      },
+      'note': 'Vault DB + catalog-import-cards when spine ids resolve. No catalog-search-cards / ensure.',
+    };
+
+    if (releaseName.isEmpty || player.isEmpty) {
+      out['vaultSkippedReason'] = 'need_non_empty_displayReleaseName_and_player';
+      out['elapsedMs'] = sw.elapsedMilliseconds;
+      return out;
+    }
+
+    try {
+      final rels = await _releasesForChVault(releaseName, year, scanSport: sportEff);
+      out['releasesQuery'] = {
+        'count': rels.length,
+        'filterYear': year,
+        'scanSport': scanSport,
+        'effectiveScanSport': sportEff,
+        'basketballDualYearQuery': basketballDual,
+        'releases': [
+          for (final r in rels)
+            {
+              'id': r.id,
+              'name': r.name,
+              'year': r.year,
+              'sport': r.sport,
+              'cardsight_id': r.catalogImportReleaseKey,
+            },
+        ],
+      };
+
+      final attempts = <Map<String, dynamic>>[];
+      for (final rel in rels.take(10)) {
+        final attempt = <String, dynamic>{
+          'releaseId': rel.id,
+          'releaseName': rel.name,
+          'releaseYear': rel.year,
+          'releaseCardsightId': rel.catalogImportReleaseKey,
+        };
+        try {
+          final sets = await getSetsForRelease(rel.id);
+          attempt['setsCount'] = sets.length;
+          attempt['setNames'] = sets.map((s) => s.name).toList();
+          final set = _chPickSet(sets, setHint);
+          if (set == null) {
+            attempt['set'] = null;
+            attempt['setPickReason'] =
+                sets.isEmpty ? 'no_sets_for_release' : 'no_set_name_match_for_hint';
+            attempts.add(attempt);
+            continue;
+          }
+          attempt['set'] = {
+            'id': set.id,
+            'name': set.name,
+            'card_count': set.cardCount,
+            'cardsight_id': set.catalogImportSetKey,
+          };
+
+          final parallels = await getParallels(set.id);
+          attempt['parallels'] = [
+            for (final p in parallels)
+              {'id': p.id, 'name': p.name, 'serial_max': p.serialMax, 'is_auto': p.isAuto},
+          ];
+          final parallel = _chPickParallel(parallels, parallelHint);
+          attempt['parallelPicked'] = parallel == null
+              ? null
+              : {
+                  'id': parallel.id,
+                  'name': parallel.name,
+                  'serial_max': parallel.serialMax,
+                  'is_auto': parallel.isAuto,
+                };
+          if (parallel == null) {
+            attempt['parallelPickReason'] = 'no_parallels_on_set';
+            attempts.add(attempt);
+            continue;
+          }
+
+          final scRows = await _setCardsForPlayerInSet(set.id, player);
+          attempt['setCardsQueriedCount'] = scRows.length;
+          attempt['setCardsSample'] = scRows.take(25).map(Map<String, dynamic>.from).toList();
+          final setCardId = _chPickSetCardId(scRows, player, hit.number);
+          attempt['pickedSetCardId'] = setCardId;
+          if (setCardId == null) {
+            attempt['setCardPickReason'] = scRows.isEmpty
+                ? 'no_set_cards_rows'
+                : 'no_row_passed_player_number_score_gate';
+            attempts.add(attempt);
+            continue;
+          }
+
+          final baseVar = await _supabase
+              .from('set_card_base_variants')
+              .select('id')
+              .eq('set_card_id', setCardId)
+              .maybeSingle();
+          attempt['set_card_base_variants'] =
+              baseVar == null ? null : Map<String, dynamic>.from(baseVar);
+          if (baseVar == null) {
+            attempt['baseVariantReason'] = 'no_base_variant_row_for_set_card_id';
+            attempts.add(attempt);
+            continue;
+          }
+          final baseMasterId = baseVar['id'] as String;
+          attempt['baseParallelMasterRowId'] = baseMasterId;
+          attempt['wouldCallEnsureCatalogVariant'] = {
+            'catalogVariantId': baseMasterId,
+            'parallelId': parallel.id,
+          };
+        } catch (e, st) {
+          attempt['error'] = e.toString();
+          attempt['stack'] = st.toString();
+        }
+        attempts.add(attempt);
+      }
+      out['vaultAttempts'] = attempts;
+
+      Map<String, dynamic> importSection;
+      final attemptsList = out['vaultAttempts'] as List<dynamic>? ?? [];
+      String? pickVaultSetId;
+      String? pickCsRel;
+      String? pickCsSet;
+      for (final raw in attemptsList) {
+        if (raw is! Map) continue;
+        final a = Map<String, dynamic>.from(raw);
+        final setRaw = a['set'];
+        if (setRaw is! Map) continue;
+        final sm = Map<String, dynamic>.from(setRaw);
+        final sid = sm['id']?.toString().trim();
+        if (sid == null || sid.isEmpty) continue;
+        final rCs = (a['releaseCardsightId'] ?? '').toString().trim();
+        final sCs = (sm['cardsight_id'] ?? '').toString().trim();
+        final useRel = rCs.isNotEmpty ? rCs : (hit.cardsightReleaseId ?? '').trim();
+        final useSet = sCs.isNotEmpty ? sCs : (hit.cardsightSetId ?? '').trim();
+        if (useRel.isEmpty || useSet.isEmpty) continue;
+        pickVaultSetId = sid;
+        pickCsRel = useRel;
+        pickCsSet = useSet;
+        break;
+      }
+
+      if (pickVaultSetId == null) {
+        importSection = {
+          'skipped': true,
+          'reason':
+              'No vault attempt with a picked set plus CardSight release+set ids (from DB columns or hit); did not invoke catalog-import-cards.',
+        };
+      } else {
+        final cr = pickCsRel;
+        final cs = pickCsSet;
+        if (cr == null || cs == null || cr.isEmpty || cs.isEmpty) {
+          importSection = {
+            'skipped': true,
+            'reason': 'Picked vault set row but spine ids were empty after merge with hit.',
+            'lookup': {'vaultSetId': pickVaultSetId},
+          };
+        } else {
+          try {
+            final report = await importCardsForSetDetailed(
+              cardsightReleaseId: cr,
+              cardsightSetId: cs,
+              vaultSetId: pickVaultSetId,
+            );
+            importSection = {
+              'skipped': false,
+              'pickedFrom': 'first_vault_attempt_with_set_row_and_resolved_cardsight_ids',
+              'lookup': {
+                'vaultSetId': pickVaultSetId,
+                'cardsightReleaseId': cr,
+                'cardsightSetId': cs,
+              },
+              'catalogImportCards': report,
+            };
+          } catch (e, st) {
+            importSection = {
+              'skipped': false,
+              'lookup': {
+                'vaultSetId': pickVaultSetId,
+                'cardsightReleaseId': cr,
+                'cardsightSetId': cs,
+              },
+              'invokeError': e.toString(),
+              'invokeStack': st.toString(),
+            };
+          }
+        }
+      }
+      out['importCardsForSet'] = importSection;
+    } catch (e, st) {
+      out['fatalError'] = e.toString();
+      out['fatalStack'] = st.toString();
+    }
+
+    out['elapsedMs'] = sw.elapsedMilliseconds;
+    return out;
+  }
+
+  /// Looks up [SetParallel] for a `master_card_definitions` row. [pals] must be from [getParallels]
+  /// for the vault set that owns [masterCardId].
+  Future<SetParallel?> _setParallelForMaster(String masterCardId, List<SetParallel> pals) async {
+    final row = await _supabase
+        .from('master_card_definitions')
+        .select('parallel_id')
+        .eq('id', masterCardId.trim())
+        .maybeSingle();
+    final pid = (row?['parallel_id'] as String?)?.trim();
+    if (pid == null || pid.isEmpty) return null;
+    for (final p in pals) {
+      if (p.id == pid) return p;
+    }
+    return null;
+  }
+
+  /// Walks vault `releases` → `sets` → `set_cards` → `set_parallels` → `master_card_definitions`,
+  /// then falls back to [ensureCatalogFromScanSelection] when CardSight spine ids can resolve the card.
+  Future<ChScanCatalogResolveResult?> resolveCardHedgeHitForMasterDetail(
+    CardHedgeImageSearchHit hit, {
+    String scanSport = '',
+  }) async {
+    final releaseName = (hit.displayReleaseName ?? '').trim();
+    final setHint = hit.displaySetName.trim();
+    final year = hit.parsedListingYear;
+    final player = (hit.player ?? '').trim();
+    final parallelHint = _chEffectiveParallelHint(hit);
+    final sportEff = _effectiveChScanSport(scanSport, hit);
+
+    Future<ChScanCatalogResolveResult?> finishFromEnsure(CatalogEnsureFromScanResult ens) async {
+      final rs = await getReleaseAndSetForSetId(ens.setId);
+      final pals = await getParallels(ens.setId);
+      final mid = ens.masterCardDefinitionsId.trim();
+
+      // [catalog-ensure-from-scan-selection] returns the final `master_card_definitions` id.
+      // Prefer that row's `parallel_id` so we never disagree with the server then let Scan's
+      // [ensureCatalogVariant] remap to a different variant.
+      SetParallel? par = await _setParallelForMaster(mid, pals);
+      if (par == null) {
+        final pid = ens.parallelId?.trim();
+        if (pid != null && pid.isNotEmpty) {
+          for (final p in pals) {
+            if (p.id == pid) {
+              par = p;
+              break;
+            }
+          }
+        }
+      }
+      par ??= _chPickParallel(pals, parallelHint);
+      final pname = par?.name ?? parallelHint;
+      return ChScanCatalogResolveResult(
+        resolvedMasterCardId: mid,
+        parallelName: pname,
+        parallel: par,
+        release: rs.release,
+        set: rs.set,
+      );
+    }
+
+    Future<ChScanCatalogResolveResult?> tryLazyImportPath() async {
+      var cr = hit.cardsightReleaseId?.trim();
+      var cs = hit.cardsightSetId?.trim();
+      var cc = hit.cardsightCardId?.trim();
+      if (player.isEmpty) return null;
+
+      if ((cr == null || cr.isEmpty) && cs != null && cs.isNotEmpty) {
+        final fromVault = await _cardsightReleaseIdFromCardsightSetId(cs);
+        if (fromVault != null && fromVault.isNotEmpty) cr = fromVault;
+      }
+
+      if (cc != null && cc.isNotEmpty) {
+        if (cr == null || cr.isEmpty) return null;
+        if (cs == null || cs.isEmpty) {
+          final results = await searchCardsInRelease(cr, player, take: 60);
+          CatalogSearchCardResult? row;
+          for (final c in results) {
+            if (c.id == cc) {
+              row = c;
+              break;
+            }
+          }
+          if (row == null) return null;
+          cs = row.setId;
+          cr = row.releaseId;
+        }
+      } else {
+        if (cr == null || cr.isEmpty) return null;
+        final picked = await _pickCatalogSearchCardForChHit(hit, cr);
+        if (picked == null) return null;
+        cc = picked.id.trim();
+        cs = (cs != null && cs.isNotEmpty) ? cs : picked.setId.trim();
+        cr = picked.releaseId.trim();
+      }
+
+      if (cr.isEmpty || cs.isEmpty || cc.isEmpty) return null;
+
+      final yn = year ?? DateTime.now().year;
+      final rn = releaseName.isNotEmpty ? releaseName : 'Unknown Release';
+
+      final ens = await ensureCatalogFromScanSelection(
+        cardsightReleaseId: cr,
+        cardsightSetId: cs,
+        cardsightCardId: cc,
+        releaseName: rn,
+        releaseYear: yn,
+        cardHedgeCardId: hit.cardId,
+        cardHedgeVariant: (hit.variant?.trim().isNotEmpty == true) ? hit.variant!.trim() : parallelHint,
+        parallelName: parallelHint,
+      );
+      if (ens == null) return null;
+      return finishFromEnsure(ens);
+    }
+
+    if (releaseName.isNotEmpty && player.isNotEmpty) {
+      final rels = await _releasesForChVault(releaseName, year, scanSport: sportEff);
+      for (final rel in rels) {
+        final sets = await getSetsForRelease(rel.id);
+        final set = _chPickSet(sets, setHint);
+        if (set == null) continue;
+        final parallels = await getParallels(set.id);
+        final parallel = _chPickParallel(parallels, parallelHint);
+        if (parallel == null) continue;
+        final scRows = await _setCardsForPlayerInSet(set.id, player);
+        final setCardId = _chPickSetCardId(scRows, player, hit.number);
+        if (setCardId == null) continue;
+        final baseVar = await _supabase
+            .from('set_card_base_variants')
+            .select('id')
+            .eq('set_card_id', setCardId)
+            .maybeSingle();
+        if (baseVar == null) continue;
+        final baseMasterId = baseVar['id'] as String;
+        try {
+          final masterId = await ensureCatalogVariant(
+            catalogVariantId: baseMasterId,
+            parallelId: parallel.id,
+          );
+          final parOut = await _setParallelForMaster(masterId, parallels) ?? parallel;
+          return ChScanCatalogResolveResult(
+            resolvedMasterCardId: masterId,
+            parallelName: parOut.name,
+            parallel: parOut,
+            release: rel,
+            set: set,
+          );
+        } catch (_) {
+          continue;
+        }
+      }
+    }
+
+    return tryLazyImportPath();
   }
 
   Future<List<MasterCard>> searchMasterCards(String setId, String query, {int offset = 0, int limit = 50}) async {

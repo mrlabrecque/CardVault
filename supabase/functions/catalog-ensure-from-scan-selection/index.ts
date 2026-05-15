@@ -48,6 +48,52 @@ function normParallelName(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/** Normalized names that mean the paper / default parallel when user intent is "Base". */
+const BASE_PARALLEL_SYNONYMS = new Set([
+  'base',
+  'base set',
+  'base parallel',
+  'base card',
+  'baseset',
+  'baseparallel',
+]);
+
+/**
+ * Resolves `set_parallels.id` for a display name. For intent "Base", never uses substring
+ * matching — `pn.includes("base")` false-positives on "Baseball", "Database", etc.
+ */
+function resolveParallelId(
+  rows: { id: string; name: string; serial_max: number | null; is_auto: boolean; sort_order: number | null }[],
+  parallelName: string,
+): string | null {
+  const rowsSorted = [...rows].sort(
+    (a, b) => (a.sort_order ?? 999999) - (b.sort_order ?? 999999) || a.name.localeCompare(b.name),
+  );
+  const target = normParallelName(parallelName);
+  if (!target) return null;
+
+  for (const p of rowsSorted) {
+    if (normParallelName(p.name) === target) return p.id;
+  }
+
+  if (target === 'base') {
+    for (const p of rowsSorted) {
+      const pn = normParallelName(p.name);
+      if (BASE_PARALLEL_SYNONYMS.has(pn)) return p.id;
+    }
+    // No row named Base / Base Set — same rule as Postgres `_default_parallel_for_set`,
+    // `set_card_base_variants`, and `catalog-import-cards` pickBaseParallelId: use the
+    // parallel with lowest sort_order (rowsSorted[0] after sort).
+    return rowsSorted[0]?.id ?? null;
+  }
+
+  for (const p of rowsSorted) {
+    const pn = normParallelName(p.name);
+    if (pn.includes(target) || target.includes(pn)) return p.id;
+  }
+  return null;
+}
+
 function serialMaxFromParallelName(name: string): number | null {
   const m = name.match(/\/\s*(\d{1,5})\b/);
   if (!m) return null;
@@ -121,18 +167,11 @@ Deno.serve(async (req) => {
     const { data: parRows } = await admin
       .from('set_parallels')
       .select('id, name, serial_max, is_auto, sort_order')
-      .eq('set_id', vaultSetId);
+      .eq('set_id', vaultSetId)
+      .order('sort_order', { ascending: true });
 
     const rows = (parRows ?? []) as { id: string; name: string; serial_max: number | null; is_auto: boolean; sort_order: number | null }[];
-    let parallelId: string | null = null;
-    const target = normParallelName(parallelName);
-    for (const p of rows) {
-      const pn = normParallelName(p.name);
-      if (pn === target || pn.includes(target) || target.includes(pn)) {
-        parallelId = p.id;
-        break;
-      }
-    }
+    let parallelId = resolveParallelId(rows, parallelName);
 
     if (!parallelId) {
       const serialFromName = serialMaxFromParallelName(parallelName);

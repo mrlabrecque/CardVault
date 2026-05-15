@@ -115,6 +115,7 @@ class CardHedgeImageSearchHit {
     this.prices = const [],
     this.cardsightReleaseId,
     this.cardsightSetId,
+    this.cardsightCardId,
     this.spineMatchConfidence,
     this.spineMatchSource,
   });
@@ -140,6 +141,8 @@ class CardHedgeImageSearchHit {
   final List<CardHedgeGuidePriceChip> prices;
   final String? cardsightReleaseId;
   final String? cardsightSetId;
+  /// CardSight checklist card id when the identify edge attaches it (optional).
+  final String? cardsightCardId;
   final double? spineMatchConfidence;
   final String? spineMatchSource;
 
@@ -181,10 +184,23 @@ class CardHedgeImageSearchHit {
         variant,
       );
 
-  /// Maps to **parallel** (CardHedge `variant`).
-  String? get displayParallelName {
+  /// Maps to **parallel** (CardHedge `variant`). Null or blank upstream means the paper
+  /// copy — we always surface that as **`Base`** so catalog resolution never sees a “missing” parallel.
+  String get displayParallelName {
     final v = variant?.trim();
-    return (v != null && v.isNotEmpty) ? v : null;
+    return (v != null && v.isNotEmpty) ? v : 'Base';
+  }
+
+  /// Year parsed from **`set_type`** / **`set`** (same rules as [CardInfoSection.fromCardHedgeHit]).
+  int? get parsedListingYear {
+    final setTypeTrimmed = setType?.trim();
+    final setLabelTrimmed = setLabel?.trim();
+    for (final src in [setTypeTrimmed, setLabelTrimmed]) {
+      if (src == null || src.isEmpty) continue;
+      final m = RegExp(r'\b(19|20)\d{2}\b').firstMatch(src);
+      if (m != null) return int.tryParse(m.group(0)!);
+    }
+    return null;
   }
 
   factory CardHedgeImageSearchHit.fromJson(Map<String, dynamic> j) {
@@ -202,6 +218,7 @@ class CardHedgeImageSearchHit {
     }
     final cr = j['cardsightReleaseId']?.toString().trim();
     final cs = j['cardsightSetId']?.toString().trim();
+    final ccid = (j['cardsightCardId'] ?? j['cardsight_card_id'])?.toString().trim();
     return CardHedgeImageSearchHit(
       cardId: (j['card_id'] ?? j['cardId'] ?? '').toString().trim(),
       similarityLabel: j['similarity']?.toString(),
@@ -225,6 +242,7 @@ class CardHedgeImageSearchHit {
       prices: chips,
       cardsightReleaseId: (cr != null && cr.isNotEmpty) ? cr : null,
       cardsightSetId: (cs != null && cs.isNotEmpty) ? cs : null,
+      cardsightCardId: (ccid != null && ccid.isNotEmpty) ? ccid : null,
       spineMatchConfidence: (j['spineMatchConfidence'] is num)
           ? (j['spineMatchConfidence'] as num).toDouble()
           : double.tryParse('${j['spineMatchConfidence']}'),

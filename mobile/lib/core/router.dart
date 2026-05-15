@@ -107,6 +107,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   onAddToCollection: args.onAddToCollection,
                   onAddToWishlist: args.onAddToWishlist,
                   openedFromScanResults: args.openedFromScanResults,
+                  openedFromScanSingleRoute: args.openedFromScanSingleRoute,
+                  resyncGuidePricesFromCatalog: args.resyncGuidePricesFromCatalog,
                 ),
               );
             },

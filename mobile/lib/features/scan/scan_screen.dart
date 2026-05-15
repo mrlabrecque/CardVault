@@ -7,6 +7,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +15,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/scan_immersive.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/cardhedge_image_search.dart';
+import '../../core/services/cards_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
@@ -25,6 +27,7 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
+import '../collection/master_card_detail_screen.dart';
 import 'scan_models.dart';
 import 'widgets/scan_camera_page.dart';
 
@@ -79,6 +82,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
   /// Selected `card_id` for [_mergeChCandidates] (row highlight only).
   String? _selectedMergeChCardId;
+  /// While resolving a CardHedge row to catalog, blocks double-taps and shows row progress.
+  String? _openingChCardId;
   String? _errorMessage;
 
   void _update(VoidCallback fn) {
@@ -98,6 +103,101 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   /// Bottom inset for the Scan results CTA (tighter than [_bodyBottomInsetOverTabBar]).
   double _scanAgainBottomPadding(BuildContext context) {
     return MediaQuery.paddingOf(context).bottom + 60;
+  }
+
+  Future<void> _openChHitMasterDetail(CardHedgeImageSearchHit hit) async {
+    if (_openingChCardId != null) return;
+    _update(() {
+      _selectedMergeChCardId = hit.cardId;
+      _openingChCardId = hit.cardId;
+    });
+    final svc = ref.read(cardsServiceProvider);
+    try {
+      final resolved = await svc.resolveCardHedgeHitForMasterDetail(
+        hit,
+        scanSport: _selectedSport,
+      );
+      if (!mounted) return;
+      if (resolved == null) {
+        AdaptiveSnackBar.show(
+          context,
+          message: 'Could not match this row to your catalog.',
+          type: AdaptiveSnackBarType.error,
+        );
+        return;
+      }
+      final parallel = resolved.parallel;
+      final cardPre = await svc.fetchMasterCardById(resolved.resolvedMasterCardId);
+      if (!mounted) return;
+      if (cardPre == null) {
+        AdaptiveSnackBar.show(
+          context,
+          message: 'Catalog card could not be loaded.',
+          type: AdaptiveSnackBarType.error,
+        );
+        return;
+      }
+      final resolvedId = await svc.ensureCatalogVariant(
+        catalogVariantId: cardPre.id,
+        parallelId: parallel?.id,
+      );
+      if (!mounted) return;
+      final displayCard =
+          await svc.fetchMasterCardById(resolvedId) ??
+          MasterCard(
+            id: resolvedId,
+            player: cardPre.player,
+            cardNumber: cardPre.cardNumber,
+            isRookie: cardPre.isRookie,
+            isAuto: cardPre.isAuto || (parallel?.isAuto ?? false),
+            isPatch: cardPre.isPatch,
+            isSSP: cardPre.isSSP,
+            serialMax: parallel?.serialMax ?? cardPre.serialMax,
+            imageUrl: cardPre.imageUrl,
+            guidePriceCardId: cardPre.guidePriceCardId,
+            gain: cardPre.gain,
+          );
+      if (!mounted) return;
+      await context.push<void>(
+        '/catalog/master',
+        extra: MasterCardDetailArgs(
+          masterCard: MasterCard(
+            id: displayCard.id,
+            player: displayCard.player,
+            cardNumber: displayCard.cardNumber,
+            isRookie: displayCard.isRookie,
+            isAuto: displayCard.isAuto || (parallel?.isAuto ?? false),
+            isPatch: displayCard.isPatch,
+            isSSP: displayCard.isSSP,
+            serialMax: parallel?.serialMax ?? displayCard.serialMax,
+            imageUrl: displayCard.imageUrl,
+            guidePriceCardId: displayCard.guidePriceCardId,
+            gain: displayCard.gain,
+          ),
+          parallelName: resolved.parallelName,
+          parallelSerialMax: parallel?.serialMax,
+          parallelIsAuto: parallel?.isAuto ?? false,
+          releaseName: resolved.release?.name,
+          setName: resolved.set?.name,
+          year: resolved.release?.year,
+          sport: resolved.release?.sport,
+          openedFromScanResults: true,
+          openedFromScanSingleRoute: true,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '$e',
+          type: AdaptiveSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) {
+        _update(() => _openingChCardId = null);
+      }
+    }
   }
 
   @override
@@ -598,7 +698,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
     final subtitle = Text(
       _mergeChCandidates.isNotEmpty
-          ? 'Listings ranked by match percentage. Tap a row to highlight it.'
+          ? 'Listings ranked by match percentage. Tap a row to open this card in your catalog.'
           : '${_detections.length} possible ${_detections.length == 1 ? 'match' : 'matches'}.',
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
@@ -645,11 +745,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                         hit: hit,
                         scanSport: _selectedSport,
                         selected: _selectedMergeChCardId == hit.cardId,
+                        opening: _openingChCardId == hit.cardId,
                         onSurface: onSurface,
                         muted: muted,
-                        onTap: () {
-                          setState(() => _selectedMergeChCardId = hit.cardId);
-                        },
+                        onTap: () => _openChHitMasterDetail(hit),
                       ),
                     );
                   },
@@ -768,6 +867,7 @@ class _ChCandidateTile extends StatelessWidget {
     required this.hit,
     required this.scanSport,
     required this.selected,
+    required this.opening,
     required this.onSurface,
     required this.muted,
     required this.onTap,
@@ -776,6 +876,7 @@ class _ChCandidateTile extends StatelessWidget {
   final CardHedgeImageSearchHit hit;
   final String scanSport;
   final bool selected;
+  final bool opening;
   final Color onSurface;
   final Color muted;
   final VoidCallback onTap;
@@ -919,10 +1020,29 @@ class _ChCandidateTile extends StatelessWidget {
         border: Border.all(color: border, width: selected ? 2 : 1),
       ),
       clipBehavior: Clip.antiAlias,
-      child: _wrapScanResultListTap(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: inner,
+      child: Stack(
+        children: [
+          _wrapScanResultListTap(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: inner,
+          ),
+          if (opening)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

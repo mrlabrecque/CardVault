@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/models/guide_catalog_match.dart';
 import '../../core/services/cards_service.dart';
@@ -20,6 +21,18 @@ import 'widgets/market_analysis_section.dart';
 /// (matches `ItemDetailScreen`).
 const double _kShellTabBarScrollInset = 100;
 
+/// Default paper / CH-null parallel labels — aligns with catalog Base row naming.
+bool _parallelLabelImpliesDefaultBase(String parallelName) {
+  final n = parallelName.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  return n.isEmpty ||
+      n == 'base' ||
+      n == 'base set' ||
+      n == 'base parallel' ||
+      n == 'base card' ||
+      n == 'baseset' ||
+      n == 'baseparallel';
+}
+
 /// Args bundle passed via `GoRouter` `extra` when pushing
 /// [MasterCardDetailScreen]. Using a typed DTO keeps the route definition in
 /// `router.dart` decoupled from the screen's parameter list.
@@ -36,6 +49,8 @@ class MasterCardDetailArgs {
     this.onAddToCollection,
     this.onAddToWishlist,
     this.openedFromScanResults,
+    this.openedFromScanSingleRoute,
+    this.resyncGuidePricesFromCatalog,
   });
 
   final MasterCard masterCard;
@@ -53,6 +68,16 @@ class MasterCardDetailArgs {
   /// from scan so the user returns to scan results. Nullable so hot reload /
   /// older [extra] payloads default to false instead of throwing.
   final bool? openedFromScanResults;
+
+  /// When true with [openedFromScanResults], only `/catalog/master` was pushed
+  /// (e.g. CardHedge row from Scan) — one pop returns to scan. When false/null,
+  /// catalog sat under this route (two pops).
+  final bool? openedFromScanSingleRoute;
+
+  /// When non-null, forces skipping linked [current_prices] cache and re-running
+  /// catalog CH search + persist for [masterCard.id]. When null, [MasterCardDetailScreen]
+  /// uses [openedFromScanResults] and default-base [parallelName] heuristics.
+  final bool? resyncGuidePricesFromCatalog;
 }
 
 /// Read-only detail for a `master_card_definitions` entry — the same shell
@@ -75,6 +100,8 @@ class MasterCardDetailScreen extends ConsumerStatefulWidget {
     this.onAddToCollection,
     this.onAddToWishlist,
     this.openedFromScanResults,
+    this.openedFromScanSingleRoute,
+    this.resyncGuidePricesFromCatalog,
   });
 
   final MasterCard masterCard;
@@ -88,6 +115,8 @@ class MasterCardDetailScreen extends ConsumerStatefulWidget {
   final VoidCallback? onAddToCollection;
   final VoidCallback? onAddToWishlist;
   final bool? openedFromScanResults;
+  final bool? openedFromScanSingleRoute;
+  final bool? resyncGuidePricesFromCatalog;
 
   @override
   ConsumerState<MasterCardDetailScreen> createState() =>
@@ -100,6 +129,22 @@ class _MasterCardDetailScreenState
   final GlobalKey _heroKey = GlobalKey();
 
   bool get _openedFromScanResults => widget.openedFromScanResults ?? false;
+
+  /// Scan pushed only master (no catalog under it) vs catalog+master from scan bootstrap.
+  bool get _openedFromScanSingleRoute => widget.openedFromScanSingleRoute ?? false;
+
+  /// Catalog from scan: pop master then catalog. Scan CH row: pop master only.
+  bool get _needsDoublePopFromScan =>
+      _openedFromScanResults && !_openedFromScanSingleRoute;
+
+  /// When true, skip linked [current_prices] + CardHedge id fast path and re-run
+  /// catalog search + persist so guide rows match the opened parallel.
+  bool get _resyncGuidePricesFromCatalog {
+    final o = widget.resyncGuidePricesFromCatalog;
+    if (o != null) return o;
+    if (widget.openedFromScanResults ?? false) return true;
+    return _parallelLabelImpliesDefaultBase(widget.parallelName);
+  }
 
   /// Loads linked `current_prices` from DB, or runs catalog search when the variant
   /// has no linked guide-price id or prices are not yet materialized.
@@ -142,7 +187,10 @@ class _MasterCardDetailScreenState
         oldWidget.year != widget.year ||
         oldWidget.sport != widget.sport ||
         (oldWidget.openedFromScanResults ?? false) !=
-            (widget.openedFromScanResults ?? false)) {
+            (widget.openedFromScanResults ?? false) ||
+        (oldWidget.openedFromScanSingleRoute ?? false) !=
+            (widget.openedFromScanSingleRoute ?? false) ||
+        oldWidget.resyncGuidePricesFromCatalog != widget.resyncGuidePricesFromCatalog) {
       setState(() {
         _guidePricesLoading = true;
         _guideMatchResult = null;
@@ -161,7 +209,9 @@ class _MasterCardDetailScreenState
     final working = _refreshedMaster ?? widget.masterCard;
     final linkedGuideId = working.guidePriceCardId?.trim();
 
-    if (linkedGuideId != null && linkedGuideId.isNotEmpty) {
+    if (!_resyncGuidePricesFromCatalog &&
+        linkedGuideId != null &&
+        linkedGuideId.isNotEmpty) {
       final dbPrices = await ref.read(compsServiceProvider).getMasterCardCurrentPrices(baseId);
       if (!mounted) return;
       final hasPrices = dbPrices.values.any((v) => v != null && v > 0);
@@ -303,12 +353,12 @@ class _MasterCardDetailScreenState
   }
 
   void _handleMasterDetailBack() {
-    final nav = Navigator.of(context);
-    if (_openedFromScanResults) {
-      nav.pop();
-      nav.pop();
-    } else {
-      nav.maybePop();
+    final router = GoRouter.of(context);
+    if (_needsDoublePopFromScan) {
+      router.pop();
+      router.pop();
+    } else if (router.canPop()) {
+      router.pop();
     }
   }
 
@@ -365,9 +415,9 @@ class _MasterCardDetailScreenState
         _guidePricesLoading || userCardsAsync.isLoading || wishlistAsync.isLoading;
 
     return PopScope(
-      canPop: !_openedFromScanResults,
+      canPop: !_needsDoublePopFromScan,
       onPopInvokedWithResult: (didPop, result) {
-        if (_openedFromScanResults && !didPop) {
+        if (_needsDoublePopFromScan && !didPop) {
           _handleMasterDetailBack();
         }
       },
