@@ -376,6 +376,56 @@ class CatalogRelease {
   String get displayName => '$year $name';
 }
 
+/// CardSight release row for admin catalog — merged with vault import status.
+class AdminCatalogReleaseRow {
+  const AdminCatalogReleaseRow({
+    required this.cardsightId,
+    required this.name,
+    this.year,
+    required this.inVault,
+    this.vaultReleaseId,
+    this.setCount = 0,
+    this.importedSetCount = 0,
+  });
+
+  final String cardsightId;
+  final String name;
+  final int? year;
+  final bool inVault;
+  final String? vaultReleaseId;
+  final int setCount;
+  final int importedSetCount;
+
+  factory AdminCatalogReleaseRow.fromJson(Map<String, dynamic> j) => AdminCatalogReleaseRow(
+    cardsightId: j['cardsightId'] as String,
+    name: j['name'] as String,
+    year: _tryParseInt(j['year']),
+    inVault: j['inVault'] as bool? ?? false,
+    vaultReleaseId: j['vaultReleaseId'] as String?,
+    setCount: _tryParseInt(j['setCount']) ?? 0,
+    importedSetCount: _tryParseInt(j['importedSetCount']) ?? 0,
+  );
+
+  String get displayName => year != null ? '$year $name' : name;
+
+  int resolvedYear() {
+    if (year != null && year! > 1900) return year!;
+    final m = RegExp(r'\b(19|20)\d{2}\b').firstMatch(name);
+    if (m != null) return int.parse(m.group(0)!);
+    return DateTime.now().year;
+  }
+
+  ReleaseRecord toReleaseRecord(String sport) => ReleaseRecord(
+    id: vaultReleaseId!,
+    name: name,
+    year: year,
+    sport: sport,
+    catalogImportReleaseKey: cardsightId,
+    setCount: setCount,
+    importedSetCount: importedSetCount,
+  );
+}
+
 class CatalogSetSummary {
   const CatalogSetSummary({required this.id, required this.name, this.parallelCount = 0, this.cardCount});
   final String id;
@@ -1732,18 +1782,125 @@ class CardsService {
 
   // ── Admin methods ─────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> bulkImportReleases({
-    required int year,
+  /// Lists CardSight releases for [segment] and marks which exist in vault (`releases.cardsight_id`).
+  Future<({List<AdminCatalogReleaseRow> releases, int missing})> listAdminCatalogReleases({
     required String segment,
-    int skip = 0,
   }) async {
-    final res = await _supabase.functions.invoke('catalog-bulk-import', body: {
-      'year': year,
+    final res = await _supabase.functions.invoke('catalog-releases-list', body: {
       'segment': segment,
-      'skip': skip,
     });
-    if (res.status != 200) throw Exception('Bulk import failed: ${res.status}');
-    return res.data as Map<String, dynamic>;
+    if (res.status != 200) throw Exception('Catalog list failed: ${res.status}');
+    final data = res.data as Map<String, dynamic>;
+    final list = (data['releases'] as List?) ?? [];
+    final missing = _tryParseInt(data['missing']) ?? 0;
+    return (
+      releases: list
+          .map((r) => AdminCatalogReleaseRow.fromJson(r as Map<String, dynamic>))
+          .toList(),
+      missing: missing,
+    );
+  }
+
+  static const _segmentToSport = {
+    'baseball': 'Baseball',
+    'basketball': 'Basketball',
+    'football': 'Football',
+    'soccer': 'Soccer',
+    'hockey': 'Hockey',
+  };
+
+  static String _sportForSegment(String segment) =>
+      _segmentToSport[segment.toLowerCase()] ?? segment;
+
+  static String _releaseSlug({
+    required int year,
+    required String name,
+    required String sport,
+    required String cardsightId,
+  }) {
+    final parts = [year.toString(), name, sport]
+        .map((v) => v.toLowerCase().trim().replaceAll(RegExp(r'\s+'), '-'))
+        .map((v) => v.replaceAll(RegExp(r'[^a-z0-9-]'), ''))
+        .where((s) => s.isNotEmpty);
+    final tail = cardsightId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toLowerCase();
+    final suffix = tail.length > 8 ? tail.substring(0, 8) : tail;
+    return '${parts.join('-')}-$suffix';
+  }
+
+  /// Imports release shells. [selected] upserts directly (fast, no CardSight round-trip).
+  /// Omit [selected] to fetch every release for [segment] via the bulk-import edge function.
+  Future<Map<String, dynamic>> bulkImportReleases({
+    required String segment,
+    int? year,
+    List<AdminCatalogReleaseRow>? selected,
+  }) async {
+    if (selected != null && selected.isNotEmpty) {
+      return _importSelectedReleaseShells(segment, selected);
+    }
+
+    final body = <String, dynamic>{'segment': segment};
+    if (year != null) body['year'] = year;
+    final res = await _supabase.functions.invoke('catalog-bulk-import', body: body);
+    if (res.status != 200) {
+      throw Exception(_functionErrorMessage(res, 'Bulk import failed'));
+    }
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> _importSelectedReleaseShells(
+    String segment,
+    List<AdminCatalogReleaseRow> selected,
+  ) async {
+    final sport = _sportForSegment(segment);
+    final ids = selected.map((r) => r.cardsightId).toList();
+
+    final existingRows = await _supabase
+        .from('releases')
+        .select('cardsight_id')
+        .inFilter('cardsight_id', ids);
+    final existingIds = {
+      for (final row in existingRows as List)
+        (row as Map<String, dynamic>)['cardsight_id'] as String,
+    };
+
+    final rows = selected.map((r) {
+      final y = r.resolvedYear();
+      return {
+        'name': r.name,
+        'year': y,
+        'sport': sport,
+        'release_type': 'Hobby',
+        'set_slug': _releaseSlug(
+          year: y,
+          name: r.name,
+          sport: sport,
+          cardsightId: r.cardsightId,
+        ),
+        'cardsight_id': r.cardsightId,
+      };
+    }).toList();
+
+    final upserted = await _supabase
+        .from('releases')
+        .upsert(rows, onConflict: 'cardsight_id')
+        .select('cardsight_id');
+
+    var imported = 0;
+    for (final row in upserted as List) {
+      final id = (row as Map<String, dynamic>)['cardsight_id'] as String;
+      if (!existingIds.contains(id)) imported++;
+    }
+
+    return {'imported': imported, 'total': selected.length};
+  }
+
+  String _functionErrorMessage(FunctionResponse res, String fallback) {
+    final data = res.data;
+    if (data is Map && data['error'] != null) {
+      return data['error'].toString();
+    }
+    if (data is String && data.isNotEmpty) return data;
+    return '$fallback (${res.status})';
   }
 
   Future<List<PendingParallel>> getPendingParallels() async {

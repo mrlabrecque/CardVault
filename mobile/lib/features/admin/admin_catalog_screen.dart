@@ -1,8 +1,9 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/services/cards_service.dart';
+import '../../core/utils/adaptive_ui.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
@@ -10,11 +11,7 @@ import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/glass_nav_bar.dart';
-
-final _years = List.generate(
-  2026 - 1980 + 1,
-  (i) => (2026 - i).toString(),
-);
+import '../../core/widgets/sticky_chrome_scaffold.dart';
 
 const _sports = [
   ('Baseball',    'baseball'),
@@ -53,13 +50,15 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
   _AdminStep _step = _AdminStep.releases;
 
   // ── Releases ──────────────────────────────────────────────────
-  String _year = DateTime.now().year.toString();
-  String _segment = 'baseball';
+  /// Empty until the admin picks a sport (avoids CardSight fetch on screen open).
+  String _segment = '';
   bool _importingReleases = false;
-  int _importSkip = 0;
 
-  List<ReleaseRecord> _releases = [];
+  List<AdminCatalogReleaseRow> _catalogReleases = [];
+  int _missingCount = 0;
   bool _loadingReleases = false;
+  bool _missingOnly = false;
+  final Set<String> _selectedIds = {};
   final _searchCtrl = TextEditingController();
 
   ReleaseRecord? _selectedRelease;
@@ -71,12 +70,6 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
   final _importingCards = <String>{};
 
   @override
-  void initState() {
-    super.initState();
-    _loadReleases();
-  }
-
-  @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
@@ -84,40 +77,82 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
 
   // ── Release methods ───────────────────────────────────────────
 
-  Future<void> _loadReleases() async {
-    setState(() { _loadingReleases = true; _releases = []; });
+  List<AdminCatalogReleaseRow> _filteredCatalogReleases() {
+    final q = _searchCtrl.text.toLowerCase().trim();
+    var list = _catalogReleases;
+    if (_missingOnly) list = list.where((r) => !r.inVault).toList();
+    if (q.isNotEmpty) {
+      list = list.where((r) => r.displayName.toLowerCase().contains(q)).toList();
+    }
+    return list;
+  }
+
+  List<AdminCatalogReleaseRow> _visibleMissing() =>
+      _filteredCatalogReleases().where((r) => !r.inVault).toList();
+
+  void _toggleSelection(AdminCatalogReleaseRow row) {
+    if (row.inVault) return;
+    setState(() {
+      if (_selectedIds.contains(row.cardsightId)) {
+        _selectedIds.remove(row.cardsightId);
+      } else {
+        _selectedIds.add(row.cardsightId);
+      }
+    });
+  }
+
+  void _selectAllVisibleMissing() {
+    setState(() {
+      for (final r in _visibleMissing()) {
+        _selectedIds.add(r.cardsightId);
+      }
+    });
+  }
+
+  void _clearSelection() => setState(_selectedIds.clear);
+
+  Future<void> _loadCatalogReleases() async {
+    if (_segment.isEmpty) return;
+    setState(() {
+      _loadingReleases = true;
+      _catalogReleases = [];
+      _selectedIds.clear();
+    });
     try {
-      final rows = await ref.read(cardsServiceProvider).browseReleases(
-        year: int.tryParse(_year),
-        sport: _segmentToSport[_segment],
-        offset: 0,
-        limit: 500,
+      final result = await ref.read(cardsServiceProvider).listAdminCatalogReleases(
+        segment: _segment,
       );
-      setState(() => _releases = rows);
+      setState(() {
+        _catalogReleases = result.releases;
+        _missingCount = result.missing;
+      });
     } finally {
       if (mounted) setState(() => _loadingReleases = false);
     }
   }
 
-  Future<void> _importReleases() async {
+  Future<void> _importReleases({List<AdminCatalogReleaseRow>? rows}) async {
+    final toImport = rows ??
+        _catalogReleases.where((r) => _selectedIds.contains(r.cardsightId)).toList();
+    if (toImport.isEmpty) return;
+
     setState(() => _importingReleases = true);
     try {
       final result = await ref.read(cardsServiceProvider).bulkImportReleases(
-        year: int.parse(_year),
         segment: _segment,
-        skip: _importSkip,
+        selected: toImport,
       );
       final imported = _tryParseInt(result['imported']) ?? 0;
-      final total    = _tryParseInt(result['total']) ?? 0; // used to detect full page (more batches available)
+      final total    = _tryParseInt(result['total']) ?? toImport.length;
       if (mounted) {
-        setState(() { if (imported > 0) _importSkip += 100; });
+        setState(_selectedIds.clear);
         AdaptiveSnackBar.show(context,
           message: imported > 0
-              ? '$imported new release${imported == 1 ? '' : 's'} added'
-              : total == 100 ? 'Already up to date — tap again to check next batch' : 'Already up to date',
+              ? '$imported new of $total release${total == 1 ? '' : 's'} imported'
+              : 'Already in vault ($total checked)',
           type: imported > 0 ? AdaptiveSnackBarType.success : AdaptiveSnackBarType.info,
         );
-        await _loadReleases();
+        await _loadCatalogReleases();
       }
     } catch (e) {
       if (mounted) {
@@ -128,9 +163,32 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
     }
   }
 
-  Future<void> _selectRelease(ReleaseRecord release) async {
+  Future<void> _confirmImportAllMissing() async {
+    final missing = _catalogReleases.where((r) => !r.inVault).toList();
+    if (missing.isEmpty) return;
+    final ok = await showAdaptiveDialog<bool>(
+      context: context,
+      title: 'Import all missing?',
+      content: 'Add ${missing.length} release shells for '
+          '${_segmentToSport[_segment] ?? _segment} that are not in the vault yet.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Import all',
+    );
+    if (ok == true && mounted) await _importReleases(rows: missing);
+  }
+
+  void _onReleaseRowTap(AdminCatalogReleaseRow row) {
+    if (!row.inVault) {
+      _toggleSelection(row);
+      return;
+    }
+    _openReleaseSets(row);
+  }
+
+  Future<void> _openReleaseSets(AdminCatalogReleaseRow row) async {
+    if (!row.inVault || row.vaultReleaseId == null) return;
     setState(() {
-      _selectedRelease = release;
+      _selectedRelease = row.toReleaseRecord(_segmentToSport[_segment] ?? '');
       _step = _AdminStep.sets;
       _sets = [];
     });
@@ -194,6 +252,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final navTop = StickyChromeScaffold.navToolbarExtent(context);
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: buildGlassNavBar(
@@ -202,62 +261,116 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
         title: Text('Catalog Admin', style: AppFonts.appBarTitle.copyWith(color: colors.onSurface)),
         actions: appBarShellTrailingActions(context),
       ),
-      body: switch (_step) {
-        _AdminStep.releases => _buildReleasesView(colors),
-        _AdminStep.sets     => _buildSetsView(colors),
-      },
+      body: Padding(
+        padding: EdgeInsets.only(top: navTop),
+        child: switch (_step) {
+          _AdminStep.releases => _buildReleasesView(colors),
+          _AdminStep.sets     => _buildSetsView(colors),
+        },
+      ),
     );
   }
 
   // ── Releases view ─────────────────────────────────────────────
 
   Widget _buildReleasesView(ColorScheme colors) {
+    final selectedCount = _selectedIds.length;
+    final visibleMissing = _visibleMissing();
     return Column(
       children: [
         // Filters + import button
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Column(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: AdaptiveDropdown<String>(
-                      value: _year,
-                      decoration: _inputDec('Year'),
-                      items: [
-                        const DropdownMenuItem(value: '', child: Text('All years')),
-                        ..._years.map((y) => DropdownMenuItem(value: y, child: Text(y))),
-                      ],
-                      onChanged: (v) {
-                        setState(() { _year = v!; _importSkip = 0; });
-                        _loadReleases();
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AdaptiveDropdown<String>(
-                      value: _segment,
-                      decoration: _inputDec('Sport'),
-                      items: [
-                        const DropdownMenuItem(value: '', child: Text('All sports')),
-                        ..._sports.map((s) => DropdownMenuItem(value: s.$2, child: Text(s.$1))),
-                      ],
-                      onChanged: (v) {
-                        setState(() { _segment = v!; _importSkip = 0; });
-                        _loadReleases();
-                      },
-                    ),
-                  ),
+              AdaptiveDropdown<String>(
+                value: _segment,
+                decoration: _inputDec('Sport'),
+                hint: 'Select sport',
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('Select sport')),
+                  ..._sports.map((s) => DropdownMenuItem(value: s.$2, child: Text(s.$1))),
                 ],
+                onChanged: (v) {
+                  final segment = v ?? '';
+                  setState(() {
+                    _segment = segment;
+                    _selectedIds.clear();
+                    if (segment.isEmpty) {
+                      _catalogReleases = [];
+                      _missingCount = 0;
+                      _missingOnly = false;
+                    }
+                  });
+                  if (segment.isNotEmpty) _loadCatalogReleases();
+                },
               ),
+              if (_catalogReleases.isNotEmpty && !_loadingReleases)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _missingCount > 0
+                              ? '$_missingCount of ${_catalogReleases.length} not in vault'
+                              : '${_catalogReleases.length} releases — all in vault',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.onSurface.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ),
+                      FilterChip(
+                        label: const Text('Missing only'),
+                        selected: _missingOnly,
+                        onSelected: (v) => setState(() => _missingOnly = v),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ),
+              if (visibleMissing.isNotEmpty && !_loadingReleases)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: _selectAllVisibleMissing,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          'Select visible (${visibleMissing.length})',
+                          style: TextStyle(fontSize: 12, color: colors.primary),
+                        ),
+                      ),
+                      if (selectedCount > 0) ...[
+                        Text(' · ', style: TextStyle(color: colors.onSurface.withValues(alpha: 0.35))),
+                        TextButton(
+                          onPressed: _clearSelection,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            'Clear ($selectedCount)',
+                            style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.55)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               const SizedBox(height: 12),
-                            AdaptiveTextField(
+              AdaptiveTextField(
                 controller: _searchCtrl,
                 onChanged: (_) => setState(() {}),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                placeholder: 'Filter releases…',
+                placeholder: 'Filter catalog by name or year…',
                 prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
                 suffixIcon: _searchCtrl.text.isNotEmpty
                     ? GestureDetector(
@@ -271,7 +384,7 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                 cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
                 decoration: InputDecoration(
                   labelText: 'Filter releases',
-                  hintText: 'Filter releases…',
+                  hintText: 'Filter catalog by name or year…',
                   hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
                   prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
                   suffixIcon: _searchCtrl.text.isNotEmpty
@@ -290,29 +403,39 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
-                child: AdaptiveButton.child(
-                  onPressed: (_importingReleases || _year.isEmpty || _segment.isEmpty) ? null : _importReleases,
-                  style: AdaptiveButtonStyle.filled,
-                  color: AppTheme.primary,
-                  child: DefaultTextStyle.merge(
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _importingReleases
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.download_outlined, size: 16, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(_year.isEmpty || _segment.isEmpty
-                              ? 'Select a year and sport to import'
-                              : _importSkip == 0 ? 'Import from catalog' : 'Load next batch (skip $_importSkip)'),
+                child: FilledButton(
+                  onPressed: (_importingReleases || selectedCount == 0)
+                      ? null
+                      : _importReleases,
+                  child: _importingReleases
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          selectedCount == 0
+                              ? 'Select releases to import'
+                              : 'Import selected ($selectedCount)',
                         ),
-                      ],
+                ),
+              ),
+              if (_missingCount > 0) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: AdaptiveButton.child(
+                    onPressed: _importingReleases ? null : _confirmImportAllMissing,
+                    style: AdaptiveButtonStyle.bordered,
+                    color: AppTheme.primary,
+                    padding: ChromeMetrics.adaptiveBorderedButtonPadding,
+                    child: DefaultTextStyle.merge(
+                      style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                      child: Text('Import all missing ($_missingCount)'),
                     ),
                   ),
                 ),
-              ),
+              ],
 
             ],
           ),
@@ -320,37 +443,77 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
         const Divider(height: 1),
         // Release list
         Expanded(
-          child: _loadingReleases && _releases.isEmpty
+          child: _segment.isEmpty
+              ? Center(
+                  child: Text(
+                    'Select a sport to load catalog releases\nand compare with the vault.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4)),
+                  ),
+                )
+              : _loadingReleases && _catalogReleases.isEmpty
               ? const Center(child: CardFanLoader())
               : Builder(builder: (context) {
-                  final q = _searchCtrl.text.toLowerCase();
-                  final filtered = q.isEmpty
-                      ? _releases
-                      : _releases.where((r) => r.displayName.toLowerCase().contains(q)).toList();
+                  final filtered = _filteredCatalogReleases();
                   if (filtered.isEmpty) {
                     return Center(
                       child: Text(
-                        _releases.isEmpty ? 'No releases in database.' : 'No results match your search.',
+                        _catalogReleases.isEmpty
+                            ? 'No releases returned from catalog for this sport.'
+                            : 'No results match your filters.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4)),
                       ),
                     );
                   }
                   return ListView.separated(
+                      padding: const EdgeInsets.only(
+                        bottom: ChromeMetrics.shellTabBarReserveHeight,
+                      ),
                       itemCount: filtered.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final r = filtered[i];
+                        final selected = _selectedIds.contains(r.cardsightId);
                         return AdaptiveListTile(
                           hideBottomDivider: true,
-                          leading: _StatusDot(imported: r.importedSetCount, total: r.setCount),
-                          title: Text(r.displayName,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                          subtitle: r.sport != null
-                              ? Text('${r.sport}  ·  ${r.setCount} sets', style: const TextStyle(fontSize: 12))
+                          leading: r.inVault
+                              ? _StatusDot(imported: r.importedSetCount, total: r.setCount)
+                              : SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: Checkbox(
+                                    value: selected,
+                                    onChanged: (_) => _toggleSelection(r),
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                          title: Text(
+                            r.displayName,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: r.inVault
+                                  ? null
+                                  : colors.onSurface.withValues(alpha: selected ? 1 : 0.85),
+                            ),
+                          ),
+                          subtitle: Text(
+                            r.inVault
+                                ? '${r.setCount} sets in vault'
+                                : selected ? 'Selected for import' : 'Tap to select',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: r.inVault
+                                  ? null
+                                  : colors.primary.withValues(alpha: selected ? 1 : 0.75),
+                            ),
+                          ),
+                          trailing: r.inVault
+                              ? const Icon(Icons.chevron_right, size: 18)
                               : null,
-                          trailing: const Icon(Icons.chevron_right, size: 18),
-                          onTap: () => _selectRelease(r),
+                          onTap: () => _onReleaseRowTap(r),
                         );
                       },
                     );
@@ -407,6 +570,9 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                       ),
                     )
                   : ListView.separated(
+                      padding: const EdgeInsets.only(
+                        bottom: ChromeMetrics.shellTabBarReserveHeight,
+                      ),
                       itemCount: _sets.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
@@ -453,7 +619,12 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
         ),
         if (_sets.isNotEmpty && _selectedRelease?.catalogImportReleaseKey != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              ChromeMetrics.shellTabBarReserveHeight,
+            ),
             child: SizedBox(
               width: double.infinity,
               child: AdaptiveButton.child(
