@@ -632,7 +632,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     segmentColor: colors.primary,
                     titleGain: card.masterDefinitionGain,
                     guidePriceCardId: card.embeddedMasterGuideCardId,
-                    guideGradePriceAverages: card.hasUsableGuideGradePricesForMarket
+                    guideRecentPrices: card.hasUsableGuideGradePricesForMarket
                         ? card.guideGradePricesForMarketSection
                         : null,
                     skipScraperSoldComps: card.hasUsableGuideGradePricesForMarket,

@@ -46,6 +46,15 @@ function normalizePriceSource(v: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 function parallelNameFromMaster(master: Record<string, unknown>): string {
   const sp = master.set_parallels as Record<string, unknown> | Record<string, unknown>[] | null | undefined;
   if (!sp) return 'Base';
@@ -217,7 +226,11 @@ Deno.serve(async (req) => {
     ok: true,
     count: items.length,
     cache_key: cacheKey,
-    comp_price: payload.comp_price ?? null,
-    count_used: payload.count_used ?? null,
+    comp_price: toFiniteNumber(payload.comp_price),
+    high: toFiniteNumber(payload.high),
+    low: toFiniteNumber(payload.low),
+    count_requested: toFiniteNumber(payload.count_requested),
+    count_used: toFiniteNumber(payload.count_used),
+    time_weighted: payload.time_weighted === true,
   });
 });

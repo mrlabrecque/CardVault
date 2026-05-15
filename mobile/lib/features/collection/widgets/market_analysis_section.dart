@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/utils/currency_format.dart';
+import '../../../core/utils/guide_grade_prices.dart';
 import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
@@ -21,7 +25,7 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
     required this.segmentColor,
     this.refreshVersion = 0,
     this.externalLoading = false,
-    this.guideGradePriceAverages,
+    this.guideRecentPrices,
     this.skipScraperSoldComps = false,
     this.showDbSoldCompsWhenAvailable = false,
     this.guidePriceCardId,
@@ -33,8 +37,8 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
   final Color segmentColor;
   final int refreshVersion;
   final bool externalLoading;
-  /// Keys [Raw], [PSA 10], [PSA 9]; null values render as N/A (same as scraper comps).
-  final Map<String, double?>? guideGradePriceAverages;
+  /// `current_prices` grade → price; labels are shown as returned from CardHedge / DB.
+  final Map<String, double?>? guideRecentPrices;
   final bool skipScraperSoldComps;
   /// When [skipScraperSoldComps] / guide sold-comps path is active, probe [card_sold_comps] for
   /// [initialGrade] and mount [CardCompsSection] without requiring a grade pill tap.
@@ -52,39 +56,52 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   int _segment = 0;
   int _guideSoldCompsNonce = 0;
   bool _guideSoldCompsLoading = false;
-  /// Grade whose comps are being fetched (spinner on pill before list mounts).
+  /// Grade shown in the header / grade sheet (before fetch completes).
+  late String _compsGradeSelection;
+  /// Grade whose comps are being fetched.
   String? _guideSoldCompsFetchingGrade;
   /// Shown after [CompsService.ensureGuideGradeComps] succeeds — avoids reading DB before rows exist.
   String? _guideSoldCompsGrade;
   /// When [showDbSoldCompsWhenAvailable], set if [card_sold_comps] already has rows for [initialGrade].
   String? _autoDbCompsGrade;
   int _dbCompsProbeGen = 0;
+  List<String> _cachedCompsGrades = const [];
+  double? _compsGradeLow;
+  double? _compsGradeHigh;
+  int _compsSelectedDays = 0;
 
   bool get _useGuideSoldCompsPath {
     if (widget.skipScraperSoldComps) return true;
-    final avgs = widget.guideGradePriceAverages;
+    final avgs = widget.guideRecentPrices;
     if (avgs == null) return false;
     return avgs.values.any((v) => v != null && v > 0);
   }
 
-  bool get _guideGradePillsTappable =>
-      widget.guidePriceCardId != null && widget.guidePriceCardId!.trim().isNotEmpty;
-
-  /// Which grade pill looks selected (includes in-flight tap target).
-  String? get _pillSelectionGrade =>
-      _guideSoldCompsGrade ??
-      (_guideSoldCompsLoading ? _guideSoldCompsFetchingGrade : null) ??
-      _autoDbCompsGrade;
-
-  /// Grade passed to [CardCompsSection] — omitted while a tap fetch runs so the child
+  /// Grade passed to [CardCompsSection] — omitted while a fetch runs so the child
   /// does not race the edge write and flash the empty-state info box.
   String? get _mountedCompsGrade =>
       _guideSoldCompsLoading ? null : (_guideSoldCompsGrade ?? _autoDbCompsGrade);
 
+  String _defaultCompsGrade() {
+    final g = widget.initialGrade.trim();
+    return g.isEmpty ? 'Raw' : g;
+  }
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(_tryAutoShowDbComps);
+    _compsGradeSelection = _defaultCompsGrade();
+    Future.microtask(() async {
+      await _refreshCachedCompsGrades();
+      if (mounted) await _tryAutoShowDbComps();
+    });
+  }
+
+  Future<void> _refreshCachedCompsGrades() async {
+    final id = widget.masterCardId.trim();
+    if (id.isEmpty) return;
+    final grades = await ref.read(compsServiceProvider).listCachedCompsGradesForMaster(id);
+    if (mounted) setState(() => _cachedCompsGrades = grades);
   }
 
   @override
@@ -95,8 +112,12 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         oldWidget.showDbSoldCompsWhenAvailable != widget.showDbSoldCompsWhenAvailable ||
         oldWidget.skipScraperSoldComps != widget.skipScraperSoldComps ||
         oldWidget.refreshVersion != widget.refreshVersion ||
-        oldWidget.guideGradePriceAverages != widget.guideGradePriceAverages) {
-      Future.microtask(_tryAutoShowDbComps);
+        oldWidget.guideRecentPrices != widget.guideRecentPrices) {
+      _compsGradeSelection = _defaultCompsGrade();
+      Future.microtask(() async {
+        await _refreshCachedCompsGrades();
+        if (mounted) await _tryAutoShowDbComps();
+      });
     }
   }
 
@@ -113,39 +134,116 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     final gen = ++_dbCompsProbeGen;
     final has = await ref.read(compsServiceProvider).hasSoldCompsForGrade(id, g);
     if (!mounted || gen != _dbCompsProbeGen) return;
-    setState(() => _autoDbCompsGrade = has ? g : null);
+    if (!has) {
+      setState(() {
+        _autoDbCompsGrade = null;
+        _compsGradeLow = null;
+        _compsGradeHigh = null;
+      });
+      return;
+    }
+    final range = await ref.read(compsServiceProvider).getSoldCompsPriceRangeForGrade(id, g);
+    if (!mounted || gen != _dbCompsProbeGen) return;
+    setState(() {
+      _autoDbCompsGrade = g;
+      _compsGradeSelection = g;
+      _compsGradeLow = range.low;
+      _compsGradeHigh = range.high;
+    });
   }
 
-  Future<void> _onGuideGradeTap(String grade) async {
-    if (!_guideGradePillsTappable) return;
+  Future<void> _loadCompsForGrade(String grade) async {
+    if (!_guideGradeMenuEnabled) return;
     final hid = widget.guidePriceCardId!.trim();
+    final g = grade.trim().isEmpty ? 'Raw' : grade.trim();
     setState(() {
+      _compsGradeSelection = g;
       _guideSoldCompsLoading = true;
-      _guideSoldCompsFetchingGrade = grade;
+      _guideSoldCompsFetchingGrade = g;
       _guideSoldCompsGrade = null;
+      _compsGradeLow = null;
+      _compsGradeHigh = null;
     });
-    final n = await ref.read(compsServiceProvider).ensureGuideGradeComps(
+    final result = await ref.read(compsServiceProvider).ensureGuideGradeComps(
           masterVariantId: widget.masterCardId,
           guidePriceCardId: hid,
-          grade: grade,
+          grade: g,
         );
+    if (!mounted) return;
+    await _refreshCachedCompsGrades();
     if (!mounted) return;
     setState(() {
       _guideSoldCompsLoading = false;
       _guideSoldCompsFetchingGrade = null;
-      if (n != null) {
-        _guideSoldCompsGrade = grade;
+      if (result != null) {
+        _guideSoldCompsGrade = g;
         _guideSoldCompsNonce++;
+        if (result.hasPriceRange) {
+          _compsGradeLow = result.low;
+          _compsGradeHigh = result.high;
+        } else if (result.saleCount > 0) {
+          // Fallback when API omits high/low but rows exist.
+          unawaited(_applyCompsRangeFromDb(g));
+        }
       }
     });
-    if (n == null && mounted) {
+    if (result == null && mounted) {
       AdaptiveSnackBar.show(
         context,
-        message: 'Could not load sold comps for $grade.',
+        message: 'Could not load sold comps for $g.',
         type: AdaptiveSnackBarType.error,
       );
     }
   }
+
+  Future<void> _applyCompsRangeFromDb(String grade) async {
+    final range = await ref
+        .read(compsServiceProvider)
+        .getSoldCompsPriceRangeForGrade(widget.masterCardId, grade);
+    if (!mounted) return;
+    if (range.low == null && range.high == null) return;
+    setState(() {
+      _compsGradeLow = range.low;
+      _compsGradeHigh = range.high;
+    });
+  }
+
+  List<AdaptivePopupMenuEntry> get _compsGradeMenuEntries {
+    final grades = mergeGuideCompsGradeOptions(
+      recentPrices: widget.guideRecentPrices,
+      cachedCompsGrades: _cachedCompsGrades,
+    );
+    return [
+      for (final g in grades)
+        AdaptivePopupMenuItem<String>(
+          value: g,
+          label: _compsGradeMenuLabel(g),
+        ),
+    ];
+  }
+
+  String _compsGradeMenuLabel(String grade) {
+    final selected = currentPricesGradeLooselyEqual(grade, _compsGradeSelection);
+    final saved = _cachedCompsGrades.any((c) => currentPricesGradeLooselyEqual(c, grade));
+    if (selected) return '✓ $grade';
+    if (saved) return '$grade (saved)';
+    return grade;
+  }
+
+  void _onCompsGradeMenuSelected(int index, AdaptivePopupMenuItem<String> entry) {
+    final picked = entry.value?.trim();
+    if (picked == null || picked.isEmpty) return;
+    if (currentPricesGradeLooselyEqual(picked, _compsGradeSelection) &&
+        _mountedCompsGrade != null) {
+      return;
+    }
+    unawaited(_loadCompsForGrade(picked));
+  }
+
+  bool get _guideGradeMenuEnabled =>
+      widget.guidePriceCardId != null && widget.guidePriceCardId!.trim().isNotEmpty;
+
+  bool get _hoistCompsDateFilter => _useGuideSoldCompsPath && _guideGradeMenuEnabled;
 
   static const double _kGainNoiseEps = 0.01;
 
@@ -208,12 +306,27 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     );
   }
 
+  bool get _showRecentPrices {
+    final prices = widget.guideRecentPrices;
+    if (prices == null) return false;
+    return guideGradeMapHasAnyPrice(prices);
+  }
+
+  List<MapEntry<String, double?>> get _recentPriceSlots =>
+      guideRecentPriceDisplaySlots(widget.guideRecentPrices ?? const {});
+
   @override
   Widget build(BuildContext context) {
+    final recentSlots = _recentPriceSlots;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildTitle(context),
+        if (_showRecentPrices) ...[
+          const SizedBox(height: 20),
+          _GuideRecentPricesSection(slots: recentSlots),
+        ],
         const SizedBox(height: 16),
         AppSegmentedControl(
           labels: const ['Sold Comps', 'For Sale'],
@@ -227,26 +340,33 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _GuideSoldCompsSummary(
-                      gradeAverages:
-                          widget.guideGradePriceAverages ?? const <String, double?>{},
-                      pillsTappable: _guideGradePillsTappable,
-                      loadingGrade: _guideSoldCompsLoading
-                          ? (_guideSoldCompsFetchingGrade ?? _guideSoldCompsGrade)
-                          : null,
-                      selectedGrade: _pillSelectionGrade,
-                      onGradeTap: _onGuideGradeTap,
-                    ),
+                    if (_guideGradeMenuEnabled) ...[
+                      _GuideSoldCompsGradeBar(
+                        gradeLabel: _guideSoldCompsLoading
+                            ? (_guideSoldCompsFetchingGrade ?? _compsGradeSelection)
+                            : _compsGradeSelection,
+                        low: _compsGradeLow,
+                        high: _compsGradeHigh,
+                        loading: _guideSoldCompsLoading,
+                        gradeMenuEntries: _compsGradeMenuEntries,
+                        onGradeMenuSelected: _onCompsGradeMenuSelected,
+                        selectedDays: _compsSelectedDays,
+                        onSelectedDaysChanged: (days) =>
+                            setState(() => _compsSelectedDays = days),
+                        onLoadComps: _mountedCompsGrade == null && !_guideSoldCompsLoading
+                            ? () => _loadCompsForGrade(_compsGradeSelection)
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (_guideSoldCompsLoading &&
                         _guideSoldCompsFetchingGrade != null) ...[
-                      const SizedBox(height: 12),
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 20),
                         child: Center(child: CardFanLoader(size: 72)),
                       ),
                     ],
                     if (_mountedCompsGrade != null) ...[
-                      const SizedBox(height: 12),
                       CardCompsSection(
                         key: ValueKey(
                           'market-comps-${widget.masterCardId}-$_mountedCompsGrade',
@@ -257,6 +377,10 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                             _guideSoldCompsGrade != null ? _guideSoldCompsNonce : widget.refreshVersion,
                         externalLoading: widget.externalLoading,
                         embeddedGuideSoldComps: true,
+                        selectedDays: _hoistCompsDateFilter ? _compsSelectedDays : null,
+                        onSelectedDaysChanged: _hoistCompsDateFilter
+                            ? (days) => setState(() => _compsSelectedDays = days)
+                            : null,
                       ),
                     ],
                   ],
@@ -276,174 +400,326 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   }
 }
 
-class _GuideSoldCompsSummary extends StatelessWidget {
-  const _GuideSoldCompsSummary({
-    required this.gradeAverages,
-    required this.pillsTappable,
-    required this.onGradeTap,
-    this.loadingGrade,
-    this.selectedGrade,
-  });
+/// CardHedge / `current_prices` snapshot — three equal slots, not sold-comp averages.
+class _GuideRecentPricesSection extends StatelessWidget {
+  const _GuideRecentPricesSection({required this.slots});
 
-  final Map<String, double?> gradeAverages;
-  final bool pillsTappable;
-  final Future<void> Function(String grade) onGradeTap;
-  final String? loadingGrade;
-  final String? selectedGrade;
-
-  double? _price(String key) => gradeAverages[key];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              _GuideSoldCompsGradePill(
-                label: 'Raw',
-                price: _price('Raw'),
-                selected: selectedGrade == 'Raw',
-                loading: loadingGrade == 'Raw',
-                onTap: pillsTappable ? () => onGradeTap('Raw') : null,
-              ),
-              const SizedBox(width: 8),
-              _GuideSoldCompsGradePill(
-                label: 'PSA 10',
-                price: _price('PSA 10'),
-                selected: selectedGrade == 'PSA 10',
-                loading: loadingGrade == 'PSA 10',
-                onTap: pillsTappable ? () => onGradeTap('PSA 10') : null,
-              ),
-              const SizedBox(width: 8),
-              _GuideSoldCompsGradePill(
-                label: 'PSA 9',
-                price: _price('PSA 9'),
-                selected: selectedGrade == 'PSA 9',
-                loading: loadingGrade == 'PSA 9',
-                onTap: pillsTappable ? () => onGradeTap('PSA 9') : null,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Same layout as sold-comps grade pills in [CardCompsSection].
-class _GuideSoldCompsGradePill extends StatelessWidget {
-  const _GuideSoldCompsGradePill({
-    required this.label,
-    required this.price,
-    this.onTap,
-    this.selected = false,
-    this.loading = false,
-  });
-
-  final String label;
-  final double? price;
-  final VoidCallback? onTap;
-  final bool selected;
-  final bool loading;
+  final List<MapEntry<String, double?>> slots;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final p = price;
-    final interactive = onTap != null;
-
-    final inner = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44),
+    return AdaptiveListCard(
+      margin: EdgeInsets.zero,
+      color: AppTheme.surfaceElev,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: colors.onSurface,
-                        ),
+            Text(
+              'Recent Prices',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    color: AppTheme.textMain,
                   ),
-                ),
-                if (loading) ...[
-                  const SizedBox(width: 6),
-                  if (isIOS)
-                    const CupertinoActivityIndicator(radius: 6)
-                  else
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colors.primary,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Latest guide values from CardHedge — not sold-comp averages.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                    height: 1.25,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Row(
+                children: [
+                  for (var i = 0; i < 3; i++) ...[
+                    if (i > 0)
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: AppTheme.border,
+                      ),
+                    Expanded(
+                      child: _GuideRecentPriceSlot(
+                        label: slots[i].key,
+                        price: slots[i].value,
                       ),
                     ),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              p != null && p > 0 ? formatUsd(p) : 'N/A',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colors.onSurface.withValues(alpha: 0.62),
-                  ),
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+}
 
-    final borderRadius = BorderRadius.circular(10);
-    final framed = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        border: Border.all(
-          color: selected ? colors.primary.withValues(alpha: 0.85) : Colors.transparent,
-          width: selected ? 2 : 0,
-        ),
+class _GuideRecentPriceSlot extends StatelessWidget {
+  const _GuideRecentPriceSlot({required this.label, required this.price});
+
+  final String label;
+  final double? price;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPrice = price != null && price! > 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                  height: 1.1,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            hasPrice ? formatUsd(price!) : 'N/A',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                  fontSize: 14,
+                  height: 1.1,
+                  color: hasPrice ? AppTheme.textMain : AppTheme.grayMedium,
+                ),
+          ),
+        ],
       ),
-      child: inner,
+    );
+  }
+}
+
+/// Sold comps grade header — distinct from [Recent Prices] (menu, not a second grade row).
+class _GuideSoldCompsGradeBar extends StatelessWidget {
+  const _GuideSoldCompsGradeBar({
+    required this.gradeLabel,
+    required this.gradeMenuEntries,
+    required this.onGradeMenuSelected,
+    required this.selectedDays,
+    required this.onSelectedDaysChanged,
+    this.low,
+    this.high,
+    this.loading = false,
+    this.onLoadComps,
+  });
+
+  final String gradeLabel;
+  final List<AdaptivePopupMenuEntry> gradeMenuEntries;
+  final void Function(int index, AdaptivePopupMenuItem<String> entry) onGradeMenuSelected;
+  final int selectedDays;
+  final ValueChanged<int> onSelectedDaysChanged;
+  final double? low;
+  final double? high;
+  final bool loading;
+  final VoidCallback? onLoadComps;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: _SoldCompsGradeTitleLine(
+                gradeLabel: gradeLabel,
+                low: low,
+                high: high,
+                gradeMenuEntries: gradeMenuEntries,
+                onGradeMenuSelected: onGradeMenuSelected,
+                menuEnabled: !loading,
+              ),
+            ),
+            const SizedBox(width: 8),
+            CompsDateRangeFilter(
+              selectedDays: selectedDays,
+              onChanged: onSelectedDaysChanged,
+              color: colors.primary,
+            ),
+            if (loading) ...[
+              const SizedBox(width: 8),
+              if (isIOS)
+                const CupertinoActivityIndicator(radius: 7)
+              else
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ],
+        ),
+        if (onLoadComps != null) ...[
+          const SizedBox(height: 10),
+          AdaptiveButton.child(
+            onPressed: onLoadComps,
+            style: AdaptiveButtonStyle.filled,
+            color: AppTheme.primary,
+            child: const Text(
+              'Load sold comps',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SoldCompsGradeTitleLine extends StatelessWidget {
+  const _SoldCompsGradeTitleLine({
+    required this.gradeLabel,
+    required this.gradeMenuEntries,
+    required this.onGradeMenuSelected,
+    this.low,
+    this.high,
+    this.menuEnabled = true,
+  });
+
+  final String gradeLabel;
+  final List<AdaptivePopupMenuEntry> gradeMenuEntries;
+  final void Function(int index, AdaptivePopupMenuItem<String> entry) onGradeMenuSelected;
+  final double? low;
+  final double? high;
+  final bool menuEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.2,
+          color: AppTheme.textMain,
+        );
+
+    final showRange = low != null && high != null && low! > 0 && high! > 0;
+
+    final gradePicker = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(gradeLabel, style: titleStyle),
+        const SizedBox(width: 2),
+        Icon(
+          isIOS ? CupertinoIcons.chevron_down : Icons.keyboard_arrow_down_rounded,
+          size: 14,
+          color: AppTheme.textMuted,
+        ),
+      ],
     );
 
-    Widget wrapInteractive(Widget child) {
-      if (!interactive) return child;
-      if (isIOS) {
-        return CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          pressedOpacity: 0.72,
-          borderRadius: borderRadius,
-          onPressed: loading ? null : onTap,
-          child: child,
-        );
-      }
-      return Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: loading ? null : onTap,
-          borderRadius: borderRadius,
-          splashFactory: NoSplash.splashFactory,
-          highlightColor: Colors.transparent,
-          splashColor: Colors.transparent,
-          child: child,
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        AbsorbPointer(
+          absorbing: !menuEnabled,
+          child: Opacity(
+            opacity: menuEnabled ? 1 : 0.5,
+            child: AdaptivePopupMenuButton.widget<String>(
+              items: gradeMenuEntries,
+              buttonStyle: PopupButtonStyle.plain,
+              tint: AppTheme.primary,
+              onSelected: onGradeMenuSelected,
+              child: gradePicker,
+            ),
+          ),
         ),
-      );
-    }
+        if (showRange) ...[
+          _CompsPriceBoundTag(
+            bound: _CompsPriceBound.low,
+            price: low!,
+          ),
+          _CompsPriceBoundTag(
+            bound: _CompsPriceBound.high,
+            price: high!,
+          ),
+        ],
+      ],
+    );
+  }
+}
 
-    return Expanded(
-      child: AdaptiveListCard(
-        margin: EdgeInsets.zero,
-        cornerRadius: 10,
-        child: interactive ? wrapInteractive(framed) : framed,
+enum _CompsPriceBound { low, high }
+
+class _CompsPriceBoundTag extends StatelessWidget {
+  const _CompsPriceBoundTag({
+    required this.bound,
+    required this.price,
+  });
+
+  final _CompsPriceBound bound;
+  final double price;
+
+  @override
+  Widget build(BuildContext context) {
+    final isHigh = bound == _CompsPriceBound.high;
+    final fg = isHigh ? const Color(0xFF166534) : const Color(0xFF9F1239);
+    final bg = isHigh ? const Color(0xFFDCFCE7) : const Color(0xFFFFE4E6);
+    final icon = isHigh
+        ? (isIOS ? CupertinoIcons.arrow_up : Icons.arrow_upward_rounded)
+        : (isIOS ? CupertinoIcons.arrow_down : Icons.arrow_downward_rounded);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            isHigh ? 'High' : 'Low',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: fg,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            formatUsd(price),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: fg,
+              height: 1.1,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ],
       ),
     );
   }

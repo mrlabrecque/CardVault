@@ -1,17 +1,141 @@
 import 'dart:async';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/utils/currency_format.dart';
+import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
-import '../../../core/widgets/app_segmented_control.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
 import 'market_listing_row.dart';
+
+String compsDateRangeFilterLabel(int selectedDays) => switch (selectedDays) {
+      7 => '7 days',
+      30 => '30 days',
+      _ => 'All time',
+    };
+
+/// Period filter for sold comps — popup menu styled like collection [FilterPill]s.
+class CompsDateRangeFilter extends StatelessWidget {
+  const CompsDateRangeFilter({
+    super.key,
+    required this.selectedDays,
+    required this.onChanged,
+    this.color,
+  });
+
+  /// `0` = all, `7` = 7 days, `30` = 30 days.
+  final int selectedDays;
+  final ValueChanged<int> onChanged;
+  final Color? color;
+
+  static const _options = <(int days, String label)>[
+    (7, 'Last 7 days'),
+    (30, 'Last 30 days'),
+    (0, 'All time'),
+  ];
+
+  List<AdaptivePopupMenuEntry> _menuEntries() {
+    return [
+      for (final (days, label) in _options)
+        AdaptivePopupMenuItem<int>(
+          value: days,
+          label: days == selectedDays ? '✓ $label' : label,
+          icon: 'calendar',
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = color ?? Theme.of(context).colorScheme.primary;
+    final label = compsDateRangeFilterLabel(selectedDays);
+    final isFiltered = selectedDays != 0;
+
+    return AdaptivePopupMenuButton.widget<int>(
+      items: _menuEntries(),
+      buttonStyle: PopupButtonStyle.plain,
+      tint: tint,
+      onSelected: (_, entry) {
+        final days = entry.value;
+        if (days == null || days == selectedDays) return;
+        onChanged(days);
+      },
+      child: _CompsPeriodFilterChip(
+        label: label,
+        isFiltered: isFiltered,
+        tint: tint,
+      ),
+    );
+  }
+}
+
+class _CompsPeriodFilterChip extends StatelessWidget {
+  const _CompsPeriodFilterChip({
+    required this.label,
+    required this.isFiltered,
+    required this.tint,
+  });
+
+  final String label;
+  final bool isFiltered;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final bgColor = isIOS
+        ? (isFiltered
+            ? tint.withValues(alpha: 0.16)
+            : CupertinoColors.secondarySystemFill.resolveFrom(context))
+        : (isFiltered ? tint.withValues(alpha: 0.12) : colors.surfaceContainerHighest);
+    final borderColor = isIOS
+        ? (isFiltered ? tint.withValues(alpha: 0.45) : Colors.transparent)
+        : (isFiltered ? tint.withValues(alpha: 0.35) : colors.outline.withValues(alpha: 0.35));
+    final textColor = isIOS
+        ? (isFiltered ? tint : CupertinoColors.label.resolveFrom(context))
+        : (isFiltered ? tint : colors.onSurface);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isIOS ? CupertinoIcons.calendar : Icons.calendar_today_outlined,
+            size: 14,
+            color: textColor.withValues(alpha: isFiltered ? 1 : 0.72),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            isIOS ? CupertinoIcons.chevron_down : Icons.keyboard_arrow_down_rounded,
+            size: 13,
+            color: textColor.withValues(alpha: 0.65),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -23,6 +147,9 @@ class CardCompsSection extends ConsumerStatefulWidget {
     /// When true (embedded guide sold-comps): no duplicate grade pills, no scraper loading
     /// copy, no auto Bright Data refresh when the table is empty.
     this.embeddedGuideSoldComps = false,
+    /// When set with [onSelectedDaysChanged], the date filter is rendered by the parent.
+    this.selectedDays,
+    this.onSelectedDaysChanged,
   });
 
   final String masterCardId;
@@ -30,6 +157,8 @@ class CardCompsSection extends ConsumerStatefulWidget {
   final int refreshVersion;
   final bool externalLoading;
   final bool embeddedGuideSoldComps;
+  final int? selectedDays;
+  final ValueChanged<int>? onSelectedDaysChanged;
 
   @override
   ConsumerState<CardCompsSection> createState() => _CardCompsSectionState();
@@ -89,6 +218,18 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   }
 
   bool get _isRefreshingUi => _loading || widget.externalLoading;
+
+  bool get _dateFilterRenderedByParent => widget.onSelectedDaysChanged != null;
+
+  int get _effectiveSelectedDays => widget.selectedDays ?? _selectedDays;
+
+  void _setSelectedDays(int days) {
+    if (widget.onSelectedDaysChanged != null) {
+      widget.onSelectedDaysChanged!(days);
+    } else {
+      setState(() => _selectedDays = days);
+    }
+  }
 
   String get _loadingStatusText {
     final idx = _loadingStatusIndex.clamp(0, _loadingStatusSteps.length - 1);
@@ -160,9 +301,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   }
 
   bool _isWithinDateRange(DateTime? soldAt) {
-    if (_selectedDays == 0) return true; // 'All' selected
+    if (_effectiveSelectedDays == 0) return true; // 'All' selected
     if (soldAt == null) return false;
-    final cutoff = DateTime.now().subtract(Duration(days: _selectedDays));
+    final cutoff = DateTime.now().subtract(Duration(days: _effectiveSelectedDays));
     return soldAt.isAfter(cutoff);
   }
 
@@ -369,37 +510,20 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               ),
             ),
           ),
-        // Date range filter
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              const Spacer(),
-              SizedBox(
-                width: 182,
-                child: AppSegmentedControl(
-                  preset: AppSegmentedControlPreset.compact,
-                  labels: const ['7d', '30d', 'All'],
-                  selectedIndex: switch (_selectedDays) {
-                    7 => 0,
-                    30 => 1,
-                    _ => 2,
-                  },
-                  onValueChanged: (index) {
-                    setState(() {
-                      _selectedDays = switch (index) {
-                        0 => 7,
-                        1 => 30,
-                        _ => 0,
-                      };
-                    });
-                  },
+        if (!_dateFilterRenderedByParent)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const Spacer(),
+                CompsDateRangeFilter(
+                  selectedDays: _effectiveSelectedDays,
+                  onChanged: _setSelectedDays,
                   color: colors.primary,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
 
         // Grade pills (hidden when parent owns grade selection, e.g. embedded guide path)
         if (!widget.embeddedGuideSoldComps)

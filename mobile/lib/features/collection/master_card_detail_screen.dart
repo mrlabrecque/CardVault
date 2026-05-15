@@ -336,23 +336,30 @@ class _MasterCardDetailScreenState
   double? _parseGuidePrice(dynamic raw) => parseGuidePriceField(raw);
 
   Map<String, double?> _gradeAveragesFromCard(GuideCatalogMatchedRow? match) {
-    final out = emptyGuideGradePriceMap();
+    final out = <String, double?>{};
     if (match == null) return out;
     final prices = match.prices;
     if (prices == null || prices.isEmpty) return out;
     for (final row in prices) {
       final gradeRaw = (row['grade'] ?? row['Grade'] ?? row['label'] ?? row['Label'] ?? row['name'] ?? row['Name'])
-              ?.toString() ??
+              ?.toString()
+              .trim() ??
           '';
-      final key = normalizeGuideDisplayGrade(gradeRaw);
-      if (key == null) continue;
+      if (gradeRaw.isEmpty) continue;
       final parsed = _parseGuidePrice(
         row['price'] ?? row['Price'] ?? row['value'] ?? row['Value'] ?? row['avg'] ?? row['Avg'],
       );
       if (parsed == null || parsed <= 0) continue;
-      out[key] = parsed;
+      String? existingKey;
+      for (final k in out.keys) {
+        if (currentPricesGradeLooselyEqual(k, gradeRaw)) {
+          existingKey = k;
+          break;
+        }
+      }
+      out[existingKey ?? gradeRaw] = parsed;
     }
-    return out;
+    return withCanonicalGuidePricePlaceholders(out);
   }
 
   @override
@@ -415,7 +422,7 @@ class _MasterCardDetailScreenState
     final heroImageUrl =
         (heroTrimmed != null && heroTrimmed.isNotEmpty) ? heroTrimmed : null;
 
-    final guideGradePriceAverages = _linkedGradePricesFromDb ?? _gradeAveragesFromCard(guideMatchRow);
+    final guideRecentPrices = _linkedGradePricesFromDb ?? _gradeAveragesFromCard(guideMatchRow);
 
     final userCardsAsync = ref.watch(userCardsProvider);
     final copyCount = userCardsAsync.whenData((all) {
@@ -596,7 +603,7 @@ class _MasterCardDetailScreenState
                       initialGrade: 'Raw',
                       segmentColor: colors.primary,
                       guidePriceCardId: masterCard.guidePriceCardId ?? _effectiveGuideMatchRow?.cardId,
-                      guideGradePriceAverages: guideGradePriceAverages,
+                      guideRecentPrices: guideRecentPrices,
                       skipScraperSoldComps: true,
                       showDbSoldCompsWhenAvailable: true,
                       titleGain: masterCard.gain,

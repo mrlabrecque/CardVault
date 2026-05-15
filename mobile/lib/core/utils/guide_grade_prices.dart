@@ -1,11 +1,23 @@
-/// Guide grade labels aligned with sold-comps pills and `current_prices.grade`.
-const List<String> kGuideDisplayGrades = ['Raw', 'PSA 10', 'PSA 9'];
+/// Preferred ordering when multiple `current_prices.grade` labels exist (not a fixed display set).
+const List<String> kPreferredGuidePriceGradeOrder = ['Raw', 'PSA 10', 'PSA 9'];
 
-Map<String, double?> emptyGuideGradePriceMap() => {
-      for (final k in kGuideDisplayGrades) k: null,
-    };
+/// Extra grades offered in the sold-comps picker (beyond recent-price slots).
+const List<String> kCommonGuideCompsGradeOptions = [
+  'Raw',
+  'PSA 10',
+  'PSA 9',
+  'PSA 8',
+  'PSA 7',
+  'BGS 10',
+  'BGS 9.5',
+  'BGS 9',
+  'SGC 10',
+  'CGC 10',
+];
 
-/// Maps API / DB grade strings onto [kGuideDisplayGrades]; returns null if unknown.
+Map<String, double?> emptyGuideGradePriceMap() => {};
+
+/// Maps common API / DB aliases onto canonical labels for sorting and slab matching.
 String? normalizeGuideDisplayGrade(String grade) {
   final g = grade.trim();
   if (g.isEmpty) return null;
@@ -21,8 +33,125 @@ String? normalizeGuideDisplayGrade(String grade) {
   }
   if (lower == 'psa 10' || lower == 'psa10') return 'PSA 10';
   if (lower == 'psa 9' || lower == 'psa9') return 'PSA 9';
-  if (kGuideDisplayGrades.contains(g)) return g;
-  return null;
+  return g;
+}
+
+/// Whether [map] already has a row for the canonical slot [Raw] / [PSA 10] / [PSA 9].
+bool canonicalGuidePriceSlotFilled(Map<String, double?> map, String canonical) {
+  for (final key in map.keys) {
+    final n = normalizeGuideDisplayGrade(key);
+    if (n == canonical) return true;
+    if (currentPricesGradeLooselyEqual(key, canonical)) return true;
+  }
+  return false;
+}
+
+int _guidePriceDisplaySortBucket(String grade) {
+  final canonical = normalizeGuideDisplayGrade(grade);
+  if (canonical == 'Raw') return 0;
+  if (canonical == 'PSA 10') return 1;
+  if (canonical == 'PSA 9') return 2;
+
+  final lower = grade.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  if (lower.contains('raw') ||
+      lower.contains('ungraded') ||
+      lower == 'nm' ||
+      lower.contains('near mint')) {
+    return 0;
+  }
+  if (RegExp(r'(^|[^\d])10([^\d]|$)').hasMatch(lower)) return 1;
+  if (RegExp(r'(^|[^\d])9([^\d]|$)').hasMatch(lower)) return 2;
+  return 3;
+}
+
+int compareGuidePriceGradeLabels(String a, String b) {
+  final ba = _guidePriceDisplaySortBucket(a);
+  final bb = _guidePriceDisplaySortBucket(b);
+  if (ba != bb) return ba.compareTo(bb);
+  return a.compareTo(b);
+}
+
+/// Merges recent-price labels, cached comps grades, and [kCommonGuideCompsGradeOptions].
+List<String> mergeGuideCompsGradeOptions({
+  Map<String, double?>? recentPrices,
+  Iterable<String> cachedCompsGrades = const [],
+}) {
+  final out = <String>[];
+  void add(String raw) {
+    final g = raw.trim();
+    if (g.isEmpty) return;
+    for (final existing in out) {
+      if (currentPricesGradeLooselyEqual(existing, g)) return;
+    }
+    out.add(g);
+  }
+
+  for (final slot in guideRecentPriceDisplaySlots(recentPrices ?? const {})) {
+    add(slot.key);
+  }
+  for (final g in cachedCompsGrades) {
+    add(g);
+  }
+  for (final g in kCommonGuideCompsGradeOptions) {
+    add(g);
+  }
+  out.sort(compareGuidePriceGradeLabels);
+  return out;
+}
+
+/// When fewer than three priced rows exist, adds null placeholders for missing
+/// [Raw] / [PSA 10] / [PSA 9] slots so the market UI always shows three boxes.
+Map<String, double?> withCanonicalGuidePricePlaceholders(Map<String, double?> parsed) {
+  final pricedCount =
+      parsed.entries.where((e) => e.value != null && e.value! > 0).length;
+  if (pricedCount >= 3) return parsed;
+
+  final out = Map<String, double?>.from(parsed);
+  final placeholdersNeeded = 3 - pricedCount;
+  var added = 0;
+  for (final canonical in kPreferredGuidePriceGradeOrder) {
+    if (added >= placeholdersNeeded) break;
+    if (!canonicalGuidePriceSlotFilled(out, canonical)) {
+      out.putIfAbsent(canonical, () => null);
+      added++;
+    }
+  }
+  return out;
+}
+
+/// Entries for display (includes N/A placeholders), sorted Raw → 10s → 9s → other.
+List<MapEntry<String, double?>> orderedGuidePriceEntries(Map<String, double?> prices) {
+  final padded = withCanonicalGuidePricePlaceholders(prices);
+  final entries = padded.entries.toList();
+  entries.sort((a, b) => compareGuidePriceGradeLabels(a.key, b.key));
+  return entries;
+}
+
+/// Exactly three slots for the Recent Prices row (pads or trims after sort).
+List<MapEntry<String, double?>> guideRecentPriceDisplaySlots(Map<String, double?> prices) {
+  final ordered = orderedGuidePriceEntries(prices);
+  if (ordered.length >= 3) return ordered.take(3).toList();
+
+  final slots = List<MapEntry<String, double?>>.from(ordered);
+  for (final canonical in kPreferredGuidePriceGradeOrder) {
+    if (slots.length >= 3) break;
+    final filled = slots.any(
+      (e) => canonicalGuidePriceSlotFilled({e.key: e.value}, canonical),
+    );
+    if (!filled) slots.add(MapEntry(canonical, null));
+  }
+  return slots.take(3).toList();
+}
+
+/// Priced rows only — for comps grade picker and similar.
+List<MapEntry<String, double>> orderedGuidePriceEntriesWithValues(Map<String, double?> prices) {
+  final out = <MapEntry<String, double>>[];
+  for (final e in orderedGuidePriceEntries(prices)) {
+    final p = e.value;
+    if (p == null || p <= 0) continue;
+    out.add(MapEntry(e.key, p));
+  }
+  return out;
 }
 
 double? parseGuidePriceField(dynamic raw) {
@@ -46,44 +175,34 @@ double? parsePostgresNumeric(dynamic raw) {
   return null;
 }
 
-/// Picks the guide / `current_prices` row for the user's slab, matching
-/// [CompsService._valueForGrade] (Raw vs PSA 9 vs PSA 10 buckets).
-double? displayPriceForUserCopyFromGradeMap({
-  required bool isGraded,
-  required String? gradeValueRaw,
-  required Map<String, double?> gradeToPrice,
-}) {
-  double? pick(String k) {
-    final v = gradeToPrice[k];
-    return (v != null && v > 0) ? v : null;
-  }
-
-  final raw = pick('Raw');
-  final psa9 = pick('PSA 9');
-  final psa10 = pick('PSA 10');
-  if (!isGraded) return raw;
-  final gv = gradeValueRaw?.trim();
-  if (gv == null || gv.isEmpty) return raw;
-  if (gv == '10' || gv == '10.0') return psa10 ?? raw;
-  if (gv == '9' || gv == '9.0') return psa9 ?? raw;
-  return raw;
-}
-
-/// Parses nested PostgREST `current_prices` rows into [kGuideDisplayGrades] keys.
-Map<String, double?> parseEmbeddedCurrentPrices(List<dynamic>? rows) {
-  final out = emptyGuideGradePriceMap();
+/// Preserves upstream / DB grade labels from `current_prices` rows (no fixed Raw/PSA bucket collapse).
+Map<String, double?> parseCurrentPricesRowsToMap(List<dynamic>? rows) {
+  final out = <String, double?>{};
   if (rows == null) return out;
   for (final row in rows) {
     if (row is! Map) continue;
     final m = Map<String, dynamic>.from(row);
-    final key = normalizeGuideDisplayGrade(m['grade']?.toString() ?? '');
-    if (key == null) continue;
+    final label = m['grade']?.toString().trim() ?? '';
+    if (label.isEmpty) continue;
     final p = parsePostgresNumeric(m['price']);
     if (p == null || p <= 0) continue;
+
+    String? existingKey;
+    for (final k in out.keys) {
+      if (currentPricesGradeLooselyEqual(k, label)) {
+        existingKey = k;
+        break;
+      }
+    }
+    final key = existingKey ?? label;
     out[key] = p;
   }
-  return out;
+  return withCanonicalGuidePricePlaceholders(out);
 }
+
+/// Parses nested PostgREST `current_prices` rows using each row's [grade] label.
+Map<String, double?> parseEmbeddedCurrentPrices(List<dynamic>? rows) =>
+    parseCurrentPricesRowsToMap(rows);
 
 DateTime? maxFetchedAtFromCurrentPriceRows(List<dynamic>? rows) {
   if (rows == null) return null;
@@ -120,6 +239,42 @@ bool currentPricesGradeLooselyEqual(String a, String b) {
   final ca = na.replaceAll(RegExp(r'[\s-]'), '');
   final cb = nb.replaceAll(RegExp(r'[\s-]'), '');
   return ca == cb;
+}
+
+double? _priceFromGradeMapLoose(Map<String, double?> gradeToPrice, String target) {
+  for (final e in gradeToPrice.entries) {
+    final v = e.value;
+    if (v == null || v <= 0) continue;
+    if (currentPricesGradeLooselyEqual(e.key, target)) return v;
+  }
+  return null;
+}
+
+/// Picks the guide / `current_prices` row for the user's slab when labels are variable.
+double? displayPriceForUserCopyFromGradeMap({
+  required bool isGraded,
+  required String? grader,
+  required String? gradeValueRaw,
+  required Map<String, double?> gradeToPrice,
+}) {
+  if (gradeToPrice.isEmpty) return null;
+
+  final raw = _priceFromGradeMapLoose(gradeToPrice, 'Raw');
+  if (!isGraded) return raw ?? gradeToPrice.values.firstWhere((v) => v != null && v > 0, orElse: () => null);
+
+  final gv = gradeValueRaw?.trim();
+  if (gv == null || gv.isEmpty) return raw;
+
+  for (final c in currentPricesGradeLookupCandidates(
+    isGraded: true,
+    grader: grader,
+    gradeValueRaw: gv,
+  )) {
+    final hit = _priceFromGradeMapLoose(gradeToPrice, c);
+    if (hit != null) return hit;
+  }
+
+  return raw;
 }
 
 /// Labels to try against [current_prices.grade] for this user copy (order matters).
@@ -164,6 +319,7 @@ List<String> currentPricesGradeLookupCandidates({
       add('9');
     }
   }
+  add(gv);
   return out;
 }
 
@@ -194,15 +350,15 @@ double? priceFromCurrentPricesRowsForUserCopy(
     }
   }
 
-  final map = parseEmbeddedCurrentPrices(rows);
+  final map = parseCurrentPricesRowsToMap(rows);
   final mapped = displayPriceForUserCopyFromGradeMap(
     isGraded: isGraded,
+    grader: grader,
     gradeValueRaw: gradeValueRaw,
     gradeToPrice: map,
   );
   if (mapped != null && mapped > 0) return mapped;
 
-  // Single-row feeds sometimes use a nonstandard label (e.g. "NM-MT") for raw market.
   if (!isGraded && rows.length == 1) {
     final row = rows.first;
     if (row is Map) {

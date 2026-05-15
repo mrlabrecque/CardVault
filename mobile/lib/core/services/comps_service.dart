@@ -28,6 +28,30 @@ Map<String, dynamic>? _functionInvokeBodyAsMap(dynamic raw) {
 }
 
 /// Grade price map plus newest `current_prices.fetched_at` for staleness checks.
+/// Result from [ensureGuideGradeComps] / [fetchGuideGradeComps] (CardHedge comps API + DB).
+class GuideGradeCompsResult {
+  const GuideGradeCompsResult({
+    required this.saleCount,
+    this.fromCache = false,
+    this.high,
+    this.low,
+    this.compPrice,
+  });
+
+  /// Rows stored for this grade, or existing row count when [fromCache].
+  final int saleCount;
+
+  /// True when [hasFreshGuideGradeComps] skipped the upstream request.
+  final bool fromCache;
+
+  final double? high;
+  final double? low;
+  final double? compPrice;
+
+  bool get hasPriceRange =>
+      high != null && high! > 0 && low != null && low! > 0;
+}
+
 class MasterCardCurrentPricesSnapshot {
   const MasterCardCurrentPricesSnapshot({
     required this.prices,
@@ -141,6 +165,32 @@ class CompsService {
     return (data as List).map((r) => Comp.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  /// Distinct `grade` values with saved sold comps for this catalog variant.
+  Future<List<String>> listCachedCompsGradesForMaster(String masterCardId) async {
+    final id = masterCardId.trim();
+    if (id.isEmpty) return const [];
+    final data = await _supabase
+        .from('card_sold_comps')
+        .select('grade')
+        .eq('master_card_id', id);
+    final out = <String>[];
+    for (final row in data as List) {
+      if (row is! Map) continue;
+      final g = row['grade']?.toString().trim() ?? '';
+      if (g.isEmpty) continue;
+      var duplicate = false;
+      for (final existing in out) {
+        if (currentPricesGradeLooselyEqual(existing, g)) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (!duplicate) out.add(g);
+    }
+    out.sort(compareGuidePriceGradeLabels);
+    return out;
+  }
+
   /// True when [card_sold_comps] has at least one row for this variant + [grade] (`Raw`, `PSA 10`, …).
   Future<bool> hasSoldCompsForGrade(String masterCardId, String grade) async {
     final norm = grade.trim().isEmpty ? 'Raw' : grade.trim();
@@ -172,19 +222,15 @@ class CompsService {
   Future<MasterCardCurrentPricesSnapshot> loadMasterCardCurrentPricesSnapshot(
     String masterCardId,
   ) async {
-    final out = emptyGuideGradePriceMap();
     final data = await _supabase
         .from('current_prices')
         .select('grade, price, fetched_at')
         .eq('master_card_id', masterCardId.trim());
+    final rows = <Map<String, dynamic>>[];
     DateTime? newestFetchedAt;
     for (final row in data as List) {
       final m = Map<String, dynamic>.from(row as Map);
-      final key = normalizeGuideDisplayGrade(m['grade']?.toString() ?? '');
-      if (key == null) continue;
-      final p = parsePostgresNumeric(m['price']);
-      if (p == null || p <= 0) continue;
-      out[key] = p;
+      rows.add(m);
       final rawFt = m['fetched_at'];
       if (rawFt != null) {
         final t = DateTime.tryParse(rawFt.toString());
@@ -193,7 +239,10 @@ class CompsService {
         }
       }
     }
-    return MasterCardCurrentPricesSnapshot(prices: out, newestFetchedAt: newestFetchedAt);
+    return MasterCardCurrentPricesSnapshot(
+      prices: parseCurrentPricesRowsToMap(rows),
+      newestFetchedAt: newestFetchedAt,
+    );
   }
 
   /// Re-fetches guide prices + sales/gain from CardHedge when linked; updates `current_prices`
@@ -295,17 +344,63 @@ class CompsService {
     return (rows as List).isNotEmpty;
   }
 
+  /// Min/max sale price for a variant + grade from stored [card_sold_comps] rows.
+  Future<({double? low, double? high, int count})> getSoldCompsPriceRangeForGrade(
+    String masterCardId,
+    String grade,
+  ) async {
+    final id = masterCardId.trim();
+    if (id.isEmpty) return (low: null, high: null, count: 0);
+
+    final norm = grade.trim().isEmpty ? 'Raw' : grade.trim();
+    var data = await _supabase
+        .from('card_sold_comps')
+        .select('price, grade')
+        .eq('master_card_id', id)
+        .eq('grade', norm);
+
+    var rows = data as List;
+    if (rows.isEmpty && norm == 'Raw') {
+      data = await _supabase
+          .from('card_sold_comps')
+          .select('price, grade')
+          .eq('master_card_id', id)
+          .ilike('grade', 'raw');
+      rows = data as List;
+    }
+
+    double? low;
+    double? high;
+    var count = 0;
+    for (final row in rows) {
+      if (row is! Map) continue;
+      final m = Map<String, dynamic>.from(row);
+      final g = m['grade']?.toString() ?? '';
+      if (!currentPricesGradeLooselyEqual(g, norm)) continue;
+      final p = parsePostgresNumeric(m['price']);
+      if (p == null || p <= 0) continue;
+      count++;
+      if (low == null || p < low) low = p;
+      if (high == null || p > high) high = p;
+    }
+    return (low: low, high: high, count: count);
+  }
+
   /// Loads upstream sold comps for the grade unless [hasFreshGuideGradeComps] is true.
-  /// Returns `null` on failure, `-1` when the 24h cache was used (no network call),
-  /// otherwise the number of sale rows stored.
-  Future<int?> ensureGuideGradeComps({
+  Future<GuideGradeCompsResult?> ensureGuideGradeComps({
     required String masterVariantId,
     required String guidePriceCardId,
     required String grade,
     int count = 40,
   }) async {
     if (await hasFreshGuideGradeComps(masterVariantId, grade)) {
-      return -1;
+      final range = await getSoldCompsPriceRangeForGrade(masterVariantId, grade);
+      return GuideGradeCompsResult(
+        saleCount: range.count,
+        fromCache: true,
+        high: range.high,
+        low: range.low,
+      );
     }
     return fetchGuideGradeComps(
       masterVariantId: masterVariantId,
@@ -689,8 +784,8 @@ class CompsService {
   }
 
   /// POST sold-comps for [grade], upserts `comps_cache`, replaces
-  /// `card_sold_comps` rows for that catalog variant + grade. Returns row count or null on failure.
-  Future<int?> fetchGuideGradeComps({
+  /// `card_sold_comps` rows for that catalog variant + grade.
+  Future<GuideGradeCompsResult?> fetchGuideGradeComps({
     required String masterVariantId,
     required String guidePriceCardId,
     required String grade,
@@ -711,7 +806,16 @@ class CompsService {
       if (raw is! Map) return null;
       final map = Map<String, dynamic>.from(raw);
       if (map['ok'] != true) return null;
-      return (map['count'] as num?)?.toInt();
+      final saleCount = (map['count'] as num?)?.toInt() ?? 0;
+      final high = parsePostgresNumeric(map['high']);
+      final low = parsePostgresNumeric(map['low']);
+      final compPrice = parsePostgresNumeric(map['comp_price']);
+      return GuideGradeCompsResult(
+        saleCount: saleCount,
+        high: high != null && high > 0 ? high : null,
+        low: low != null && low > 0 ? low : null,
+        compPrice: compPrice != null && compPrice > 0 ? compPrice : null,
+      );
     } on FunctionException {
       return null;
     } catch (_) {
