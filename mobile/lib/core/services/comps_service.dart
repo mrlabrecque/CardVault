@@ -27,6 +27,21 @@ Map<String, dynamic>? _functionInvokeBodyAsMap(dynamic raw) {
   return null;
 }
 
+/// Grade price map plus newest `current_prices.fetched_at` for staleness checks.
+class MasterCardCurrentPricesSnapshot {
+  const MasterCardCurrentPricesSnapshot({
+    required this.prices,
+    required this.newestFetchedAt,
+  });
+
+  final Map<String, double?> prices;
+  final DateTime? newestFetchedAt;
+
+  bool get hasAnyPrice => guideGradeMapHasAnyPrice(prices);
+
+  bool get isStale => guideCurrentPricesAreStale(newestFetchedAt);
+}
+
 class CompsService {
   CompsService(this._supabase);
   final SupabaseClient _supabase;
@@ -150,11 +165,19 @@ class CompsService {
 
   /// Grade averages from `current_prices` (written when a guide-price card is linked).
   Future<Map<String, double?>> getMasterCardCurrentPrices(String masterCardId) async {
+    return (await loadMasterCardCurrentPricesSnapshot(masterCardId)).prices;
+  }
+
+  /// Loads display-grade prices and the newest `fetched_at` across rows for this variant.
+  Future<MasterCardCurrentPricesSnapshot> loadMasterCardCurrentPricesSnapshot(
+    String masterCardId,
+  ) async {
     final out = emptyGuideGradePriceMap();
     final data = await _supabase
         .from('current_prices')
-        .select('grade, price')
-        .eq('master_card_id', masterCardId);
+        .select('grade, price, fetched_at')
+        .eq('master_card_id', masterCardId.trim());
+    DateTime? newestFetchedAt;
     for (final row in data as List) {
       final m = Map<String, dynamic>.from(row as Map);
       final key = normalizeGuideDisplayGrade(m['grade']?.toString() ?? '');
@@ -162,13 +185,32 @@ class CompsService {
       final p = parsePostgresNumeric(m['price']);
       if (p == null || p <= 0) continue;
       out[key] = p;
+      final rawFt = m['fetched_at'];
+      if (rawFt != null) {
+        final t = DateTime.tryParse(rawFt.toString());
+        if (t != null && (newestFetchedAt == null || t.isAfter(newestFetchedAt))) {
+          newestFetchedAt = t;
+        }
+      }
     }
-    return out;
+    return MasterCardCurrentPricesSnapshot(prices: out, newestFetchedAt: newestFetchedAt);
+  }
+
+  /// Re-fetches guide prices + sales/gain from CardHedge when linked; updates `current_prices`
+  /// and `master_card_definitions.cardhedge_fetched_at` via [persistCardHedgeHydratedFromCardId].
+  Future<MasterCard?> refreshStaleLinkedGuidePrices({
+    required String masterVariantId,
+    required String guidePriceCardId,
+  }) {
+    return persistCardHedgeHydratedFromCardId(
+      masterVariantId: masterVariantId,
+      guidePriceCardId: guidePriceCardId,
+    );
   }
 
   /// Same hydration path as [MasterCardDetailScreen._syncGuidePricesForMaster]:
-  /// when `cardhedge_id` is set and `current_prices` has rows, no network call;
-  /// otherwise invokes catalog search with persist for this variant.
+  /// when `cardhedge_id` is set and `current_prices` has fresh rows, no network call;
+  /// when stale (>24h), hydrates from CardHedge; otherwise invokes catalog search.
   ///
   /// Call after adding to collection or when opening item detail so `current_prices`
   /// and `master_card_definitions` match what the catalog detail screen would load.
@@ -186,8 +228,15 @@ class CompsService {
 
     final linkedGuideCardId = row['cardhedge_id']?.toString().trim();
     if (linkedGuideCardId != null && linkedGuideCardId.isNotEmpty) {
-      final dbPrices = await getMasterCardCurrentPrices(trimId);
-      if (dbPrices.values.any((v) => v != null && v > 0)) return;
+      final snap = await loadMasterCardCurrentPricesSnapshot(trimId);
+      if (snap.hasAnyPrice && !snap.isStale) return;
+      if (snap.hasAnyPrice && snap.isStale) {
+        await refreshStaleLinkedGuidePrices(
+          masterVariantId: trimId,
+          guidePriceCardId: linkedGuideCardId,
+        );
+        return;
+      }
     }
 
     Map<String, dynamic>? asMap(dynamic v) {

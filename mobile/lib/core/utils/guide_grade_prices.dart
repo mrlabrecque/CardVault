@@ -99,6 +99,16 @@ DateTime? maxFetchedAtFromCurrentPriceRows(List<dynamic>? rows) {
   return maxFt;
 }
 
+/// Aligns with scheduled `auto-refresh-cards` staleness (23h cron window); UI uses 24h.
+const Duration kGuideCurrentPricesStaleAfter = Duration(hours: 24);
+
+/// True when there are no price rows or the newest `current_prices.fetched_at` is older than [kGuideCurrentPricesStaleAfter].
+bool guideCurrentPricesAreStale(DateTime? newestFetchedAt, {DateTime? now}) {
+  if (newestFetchedAt == null) return true;
+  final clock = now ?? DateTime.now();
+  return clock.difference(newestFetchedAt) >= kGuideCurrentPricesStaleAfter;
+}
+
 bool guideGradeMapHasAnyPrice(Map<String, double?> m) =>
     m.values.any((v) => v != null && v > 0);
 

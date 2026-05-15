@@ -137,8 +137,10 @@ class _MasterCardDetailScreenState
   bool get _needsDoublePopFromScan =>
       _openedFromScanResults && !_openedFromScanSingleRoute;
 
-  /// When true, skip linked [current_prices] + CardHedge id fast path and re-run
-  /// catalog search + persist so guide rows match the opened parallel.
+  /// When true, skip linked [current_prices] fast path and re-run catalog search + persist
+  /// so guide rows match the opened parallel. When false, fresh linked prices are read from
+  /// DB; if `current_prices` are older than 24h, [CompsService.refreshStaleLinkedGuidePrices]
+  /// hydrates from CardHedge (prices, sales_7d/30d, gain, cardhedge_fetched_at).
   bool get _resyncGuidePricesFromCatalog {
     final o = widget.resyncGuidePricesFromCatalog;
     if (o != null) return o;
@@ -208,17 +210,45 @@ class _MasterCardDetailScreenState
     final baseId = widget.masterCard.id;
     final working = _refreshedMaster ?? widget.masterCard;
     final linkedGuideId = working.guidePriceCardId?.trim();
+    final comps = ref.read(compsServiceProvider);
 
     if (!_resyncGuidePricesFromCatalog &&
         linkedGuideId != null &&
         linkedGuideId.isNotEmpty) {
-      final dbPrices = await ref.read(compsServiceProvider).getMasterCardCurrentPrices(baseId);
+      final snap = await comps.loadMasterCardCurrentPricesSnapshot(baseId);
       if (!mounted) return;
-      final hasPrices = dbPrices.values.any((v) => v != null && v > 0);
-      if (hasPrices) {
+
+      if (snap.hasAnyPrice && !snap.isStale) {
         setState(() {
           _guidePricesLoading = false;
-          _linkedGradePricesFromDb = dbPrices;
+          _linkedGradePricesFromDb = snap.prices;
+          _guideMatchResult = null;
+          _guideMatchRowPick = null;
+        });
+        return;
+      }
+
+      if (snap.hasAnyPrice && snap.isStale) {
+        final fresh = await comps.refreshStaleLinkedGuidePrices(
+          masterVariantId: baseId,
+          guidePriceCardId: linkedGuideId,
+        );
+        if (!mounted) return;
+        if (fresh != null) {
+          final dbPrices = await comps.getMasterCardCurrentPrices(fresh.id);
+          if (!mounted) return;
+          setState(() {
+            _guidePricesLoading = false;
+            _linkedGradePricesFromDb = dbPrices;
+            _guideMatchResult = null;
+            _guideMatchRowPick = null;
+            _refreshedMaster = fresh;
+          });
+          return;
+        }
+        setState(() {
+          _guidePricesLoading = false;
+          _linkedGradePricesFromDb = snap.prices;
           _guideMatchResult = null;
           _guideMatchRowPick = null;
         });
@@ -232,7 +262,7 @@ class _MasterCardDetailScreenState
       _linkedGradePricesFromDb = null;
     });
 
-    final payload = await ref.read(compsServiceProvider).searchGuidePriceCatalog(
+    final payload = await comps.searchGuidePriceCatalog(
           player: widget.masterCard.player,
           year: widget.year,
           releaseName: widget.releaseName,
