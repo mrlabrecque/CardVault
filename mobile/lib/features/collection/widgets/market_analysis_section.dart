@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/utils/currency_format.dart';
+import '../../../core/utils/comps_outlier_utils.dart';
 import '../../../core/utils/guide_grade_prices.dart';
 import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
@@ -15,6 +16,7 @@ import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/app_segmented_control.dart';
 import 'card_active_listings_section.dart';
 import 'card_comps_section.dart';
+import 'comps_market_filters.dart';
 
 /// Segmented "Sold Comps" vs "For Sale" market block for item detail.
 class MarketAnalysisSection extends ConsumerStatefulWidget {
@@ -142,14 +144,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       });
       return;
     }
-    final range = await ref.read(compsServiceProvider).getSoldCompsPriceRangeForGrade(id, g);
-    if (!mounted || gen != _dbCompsProbeGen) return;
-    setState(() {
-      _autoDbCompsGrade = g;
-      _compsGradeSelection = g;
-      _compsGradeLow = range.low;
-      _compsGradeHigh = range.high;
-    });
+    await _applyTrimmedCompsRangeForGrade(g, gen: gen);
   }
 
   Future<void> _loadCompsForGrade(String grade) async {
@@ -178,12 +173,8 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       if (result != null) {
         _guideSoldCompsGrade = g;
         _guideSoldCompsNonce++;
-        if (result.hasPriceRange) {
-          _compsGradeLow = result.low;
-          _compsGradeHigh = result.high;
-        } else if (result.saleCount > 0) {
-          // Fallback when API omits high/low but rows exist.
-          unawaited(_applyCompsRangeFromDb(g));
+        if (result.saleCount > 0) {
+          unawaited(_applyTrimmedCompsRangeForGrade(g));
         }
       }
     });
@@ -196,15 +187,27 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     }
   }
 
-  Future<void> _applyCompsRangeFromDb(String grade) async {
-    final range = await ref
-        .read(compsServiceProvider)
-        .getSoldCompsPriceRangeForGrade(widget.masterCardId, grade);
+  Future<void> _applyTrimmedCompsRangeForGrade(String grade, {int? gen}) async {
+    final id = widget.masterCardId.trim();
+    if (id.isEmpty) return;
+    final g = grade.trim().isEmpty ? 'Raw' : grade.trim();
+    final comps = await ref.read(compsServiceProvider).getMasterCardComps(id);
     if (!mounted) return;
-    if (range.low == null && range.high == null) return;
+    if (gen != null && gen != _dbCompsProbeGen) return;
+    final filtered = comps
+        .where((c) => (c.grade ?? 'Raw') == g)
+        .toList();
+    final low = CompsOutlierStats.trimmedLow(filtered);
+    final high = CompsOutlierStats.trimmedHigh(filtered);
+    if (!mounted) return;
+    if (gen != null && gen != _dbCompsProbeGen) return;
     setState(() {
-      _compsGradeLow = range.low;
-      _compsGradeHigh = range.high;
+      if (gen != null) {
+        _autoDbCompsGrade = g;
+        _compsGradeSelection = g;
+      }
+      _compsGradeLow = low;
+      _compsGradeHigh = high;
     });
   }
 
@@ -224,9 +227,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
 
   String _compsGradeMenuLabel(String grade) {
     final selected = currentPricesGradeLooselyEqual(grade, _compsGradeSelection);
-    final saved = _cachedCompsGrades.any((c) => currentPricesGradeLooselyEqual(c, grade));
     if (selected) return '✓ $grade';
-    if (saved) return '$grade (saved)';
     return grade;
   }
 
@@ -244,6 +245,9 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       widget.guidePriceCardId != null && widget.guidePriceCardId!.trim().isNotEmpty;
 
   bool get _hoistCompsDateFilter => _useGuideSoldCompsPath && _guideGradeMenuEnabled;
+
+  bool get _gradeFilterActive =>
+      !currentPricesGradeLooselyEqual(_compsGradeSelection, _defaultCompsGrade());
 
   static const double _kGainNoiseEps = 0.01;
 
@@ -328,13 +332,17 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
           _GuideRecentPricesSection(slots: recentSlots),
         ],
         const SizedBox(height: 16),
-        AppSegmentedControl(
-          labels: const ['Sold Comps', 'For Sale'],
-          selectedIndex: _segment,
-          onValueChanged: (index) => setState(() => _segment = index),
-          color: widget.segmentColor,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AppSegmentedControl(
+            labels: const ['Sold Comps', 'For Sale'],
+            selectedIndex: _segment,
+            onValueChanged: (index) => setState(() => _segment = index),
+            color: widget.segmentColor,
+            preset: AppSegmentedControlPreset.compact,
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         if (_segment == 0)
           (_useGuideSoldCompsPath
               ? Column(
@@ -350,6 +358,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                         loading: _guideSoldCompsLoading,
                         gradeMenuEntries: _compsGradeMenuEntries,
                         onGradeMenuSelected: _onCompsGradeMenuSelected,
+                        isGradeFiltered: _gradeFilterActive,
                         selectedDays: _compsSelectedDays,
                         onSelectedDaysChanged: (days) =>
                             setState(() => _compsSelectedDays = days),
@@ -394,6 +403,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         else
           CardActiveListingsSection(
             masterCardId: widget.masterCardId,
+            guideRecentPrices: widget.guideRecentPrices,
           ),
       ],
     );
@@ -411,7 +421,7 @@ class _GuideRecentPricesSection extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return AdaptiveListCard(
       margin: EdgeInsets.zero,
-      color: AppTheme.surfaceElev,
+      color: colors.surface,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(
@@ -422,14 +432,14 @@ class _GuideRecentPricesSection extends StatelessWidget {
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.2,
-                    color: AppTheme.textMain,
+                    color: colors.onSurface,
                   ),
             ),
             const SizedBox(height: 2),
             Text(
               'Latest guide values from CardHedge — not sold-comp averages.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textMuted,
+                    color: colors.onSurface.withValues(alpha: 0.55),
                     fontSize: 12,
                     height: 1.25,
                   ),
@@ -437,9 +447,12 @@ class _GuideRecentPricesSection extends StatelessWidget {
             const SizedBox(height: 10),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: colors.surface,
+                color: Color.alphaBlend(
+                  colors.onSurface.withValues(alpha: 0.06),
+                  colors.surface,
+                ),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.border),
+                border: Border.all(color: colors.outline.withValues(alpha: 0.5)),
               ),
               child: Row(
                 children: [
@@ -448,7 +461,7 @@ class _GuideRecentPricesSection extends StatelessWidget {
                       Container(
                         width: 1,
                         height: 40,
-                        color: AppTheme.border,
+                        color: colors.outline.withValues(alpha: 0.45),
                       ),
                     Expanded(
                       child: _GuideRecentPriceSlot(
@@ -476,6 +489,7 @@ class _GuideRecentPriceSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPrice = price != null && price! > 0;
+    final colors = Theme.of(context).colorScheme;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -490,7 +504,7 @@ class _GuideRecentPriceSlot extends StatelessWidget {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textMuted,
+                  color: colors.onSurface.withValues(alpha: 0.58),
                   fontSize: 11,
                   height: 1.1,
                 ),
@@ -506,7 +520,9 @@ class _GuideRecentPriceSlot extends StatelessWidget {
                   letterSpacing: -0.2,
                   fontSize: 14,
                   height: 1.1,
-                  color: hasPrice ? AppTheme.textMain : AppTheme.grayMedium,
+                  color: hasPrice
+                      ? colors.onSurface
+                      : colors.onSurface.withValues(alpha: 0.45),
                 ),
           ),
         ],
@@ -521,6 +537,7 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
     required this.gradeLabel,
     required this.gradeMenuEntries,
     required this.onGradeMenuSelected,
+    required this.isGradeFiltered,
     required this.selectedDays,
     required this.onSelectedDaysChanged,
     this.low,
@@ -532,6 +549,7 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
   final String gradeLabel;
   final List<AdaptivePopupMenuEntry> gradeMenuEntries;
   final void Function(int index, AdaptivePopupMenuItem<String> entry) onGradeMenuSelected;
+  final bool isGradeFiltered;
   final int selectedDays;
   final ValueChanged<int> onSelectedDaysChanged;
   final double? low;
@@ -542,6 +560,7 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final showRange = low != null && high != null && low! > 0 && high! > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -549,24 +568,41 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: _SoldCompsGradeTitleLine(
-                gradeLabel: gradeLabel,
-                low: low,
-                high: high,
-                gradeMenuEntries: gradeMenuEntries,
-                onGradeMenuSelected: onGradeMenuSelected,
-                menuEnabled: !loading,
-              ),
-            ),
-            const SizedBox(width: 8),
-            CompsDateRangeFilter(
-              selectedDays: selectedDays,
-              onChanged: onSelectedDaysChanged,
+            CompsGradeFilter(
+              gradeLabel: gradeLabel,
+              menuEntries: gradeMenuEntries,
+              onSelected: onGradeMenuSelected,
+              isFiltered: isGradeFiltered,
+              enabled: !loading,
               color: colors.primary,
             ),
+            if (showRange) ...[
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Semantics(
+                    label:
+                        'Sold price range ${formatUsd(low!)} low, ${formatUsd(high!)} high',
+                    excludeSemantics: true,
+                    child: Text(
+                      '↓ ${formatUsdCompact(low!)} · ↑ ${formatUsdCompact(high!)}',
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.onSurface.withValues(alpha: 0.42),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
+                            height: 1.15,
+                            letterSpacing: -0.15,
+                          ),
+                    ),
+                  ),
+                ),
+              ),
+            ] else
+              const Spacer(),
             if (loading) ...[
-              const SizedBox(width: 8),
               if (isIOS)
                 const CupertinoActivityIndicator(radius: 7)
               else
@@ -575,7 +611,13 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+              const SizedBox(width: 8),
             ],
+            CompsDateRangeFilter(
+              selectedDays: selectedDays,
+              onChanged: onSelectedDaysChanged,
+              color: colors.primary,
+            ),
           ],
         ),
         if (onLoadComps != null) ...[
@@ -591,136 +633,6 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _SoldCompsGradeTitleLine extends StatelessWidget {
-  const _SoldCompsGradeTitleLine({
-    required this.gradeLabel,
-    required this.gradeMenuEntries,
-    required this.onGradeMenuSelected,
-    this.low,
-    this.high,
-    this.menuEnabled = true,
-  });
-
-  final String gradeLabel;
-  final List<AdaptivePopupMenuEntry> gradeMenuEntries;
-  final void Function(int index, AdaptivePopupMenuItem<String> entry) onGradeMenuSelected;
-  final double? low;
-  final double? high;
-  final bool menuEnabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.2,
-          color: AppTheme.textMain,
-        );
-
-    final showRange = low != null && high != null && low! > 0 && high! > 0;
-
-    final gradePicker = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(gradeLabel, style: titleStyle),
-        const SizedBox(width: 2),
-        Icon(
-          isIOS ? CupertinoIcons.chevron_down : Icons.keyboard_arrow_down_rounded,
-          size: 14,
-          color: AppTheme.textMuted,
-        ),
-      ],
-    );
-
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      runSpacing: 6,
-      children: [
-        AbsorbPointer(
-          absorbing: !menuEnabled,
-          child: Opacity(
-            opacity: menuEnabled ? 1 : 0.5,
-            child: AdaptivePopupMenuButton.widget<String>(
-              items: gradeMenuEntries,
-              buttonStyle: PopupButtonStyle.plain,
-              tint: AppTheme.primary,
-              onSelected: onGradeMenuSelected,
-              child: gradePicker,
-            ),
-          ),
-        ),
-        if (showRange) ...[
-          _CompsPriceBoundTag(
-            bound: _CompsPriceBound.low,
-            price: low!,
-          ),
-          _CompsPriceBoundTag(
-            bound: _CompsPriceBound.high,
-            price: high!,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-enum _CompsPriceBound { low, high }
-
-class _CompsPriceBoundTag extends StatelessWidget {
-  const _CompsPriceBoundTag({
-    required this.bound,
-    required this.price,
-  });
-
-  final _CompsPriceBound bound;
-  final double price;
-
-  @override
-  Widget build(BuildContext context) {
-    final isHigh = bound == _CompsPriceBound.high;
-    final fg = isHigh ? const Color(0xFF166534) : const Color(0xFF9F1239);
-    final bg = isHigh ? const Color(0xFFDCFCE7) : const Color(0xFFFFE4E6);
-    final icon = isHigh
-        ? (isIOS ? CupertinoIcons.arrow_up : Icons.arrow_upward_rounded)
-        : (isIOS ? CupertinoIcons.arrow_down : Icons.arrow_downward_rounded);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: fg),
-          const SizedBox(width: 4),
-          Text(
-            isHigh ? 'High' : 'Low',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: fg,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            formatUsd(price),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: fg,
-              height: 1.1,
-              letterSpacing: -0.2,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

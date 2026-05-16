@@ -61,6 +61,22 @@ Future<T?> showAdaptiveSheet<T>({
   bool isDismissible = true,
   bool enableDrag = true,
 }) async {
+  if (isIOS) {
+    return showCupertinoModalPopup<T>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: isDismissible,
+      builder: (sheetContext) {
+        final colors = Theme.of(sheetContext).colorScheme;
+        return Material(
+          color: colors.surface,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: builder(sheetContext),
+        );
+      },
+    );
+  }
   return showModalBottomSheet<T>(
     context: context,
     useRootNavigator: true,

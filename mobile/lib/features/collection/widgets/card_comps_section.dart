@@ -1,141 +1,19 @@
 import 'dart:async';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/comps_outlier_utils.dart';
 import '../../../core/utils/currency_format.dart';
-import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
+import 'comps_market_filters.dart';
 import 'market_listing_row.dart';
-
-String compsDateRangeFilterLabel(int selectedDays) => switch (selectedDays) {
-      7 => '7 days',
-      30 => '30 days',
-      _ => 'All time',
-    };
-
-/// Period filter for sold comps — popup menu styled like collection [FilterPill]s.
-class CompsDateRangeFilter extends StatelessWidget {
-  const CompsDateRangeFilter({
-    super.key,
-    required this.selectedDays,
-    required this.onChanged,
-    this.color,
-  });
-
-  /// `0` = all, `7` = 7 days, `30` = 30 days.
-  final int selectedDays;
-  final ValueChanged<int> onChanged;
-  final Color? color;
-
-  static const _options = <(int days, String label)>[
-    (7, 'Last 7 days'),
-    (30, 'Last 30 days'),
-    (0, 'All time'),
-  ];
-
-  List<AdaptivePopupMenuEntry> _menuEntries() {
-    return [
-      for (final (days, label) in _options)
-        AdaptivePopupMenuItem<int>(
-          value: days,
-          label: days == selectedDays ? '✓ $label' : label,
-          icon: 'calendar',
-        ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tint = color ?? Theme.of(context).colorScheme.primary;
-    final label = compsDateRangeFilterLabel(selectedDays);
-    final isFiltered = selectedDays != 0;
-
-    return AdaptivePopupMenuButton.widget<int>(
-      items: _menuEntries(),
-      buttonStyle: PopupButtonStyle.plain,
-      tint: tint,
-      onSelected: (_, entry) {
-        final days = entry.value;
-        if (days == null || days == selectedDays) return;
-        onChanged(days);
-      },
-      child: _CompsPeriodFilterChip(
-        label: label,
-        isFiltered: isFiltered,
-        tint: tint,
-      ),
-    );
-  }
-}
-
-class _CompsPeriodFilterChip extends StatelessWidget {
-  const _CompsPeriodFilterChip({
-    required this.label,
-    required this.isFiltered,
-    required this.tint,
-  });
-
-  final String label;
-  final bool isFiltered;
-  final Color tint;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final bgColor = isIOS
-        ? (isFiltered
-            ? tint.withValues(alpha: 0.16)
-            : CupertinoColors.secondarySystemFill.resolveFrom(context))
-        : (isFiltered ? tint.withValues(alpha: 0.12) : colors.surfaceContainerHighest);
-    final borderColor = isIOS
-        ? (isFiltered ? tint.withValues(alpha: 0.45) : Colors.transparent)
-        : (isFiltered ? tint.withValues(alpha: 0.35) : colors.outline.withValues(alpha: 0.35));
-    final textColor = isIOS
-        ? (isFiltered ? tint : CupertinoColors.label.resolveFrom(context))
-        : (isFiltered ? tint : colors.onSurface);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: bgColor,
-        border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isIOS ? CupertinoIcons.calendar : Icons.calendar_today_outlined,
-            size: 14,
-            color: textColor.withValues(alpha: isFiltered ? 1 : 0.72),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(width: 2),
-          Icon(
-            isIOS ? CupertinoIcons.chevron_down : Icons.keyboard_arrow_down_rounded,
-            size: 13,
-            color: textColor.withValues(alpha: 0.65),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -315,6 +193,10 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     }).toList();
   }
 
+  CompsOutlierStats get _outlierStats => CompsOutlierStats.fromComps(_filteredComps);
+
+  List<Comp> get _compsForStats => CompsOutlierStats.includedComps(_filteredComps);
+
   String _formatCompDate(DateTime dt) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -330,43 +212,21 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     final comps = _allComps
         .where((c) => (c.grade ?? 'Raw') == grade && _isWithinDateRange(c.soldAt))
         .toList();
-    if (comps.isEmpty) return null;
-    final total = comps.fold<double>(0, (s, c) => s + c.price);
-    return total / comps.length;
+    return CompsOutlierStats.averagePrice(comps);
   }
 
-  Map<DateTime, double> _getChartData() {
-    final filtered = _filteredComps;
-    if (filtered.isEmpty) return {};
-
-    final grouped = <DateTime, List<double>>{};
-    for (final comp in filtered) {
-      if (comp.soldAt != null) {
-        final day = DateTime(comp.soldAt!.year, comp.soldAt!.month, comp.soldAt!.day);
-        grouped.putIfAbsent(day, () => []).add(comp.price);
-      }
-    }
-
-    final result = <DateTime, double>{};
-    for (final entry in grouped.entries) {
-      final avg = entry.value.fold<double>(0, (s, p) => s + p) / entry.value.length;
-      result[entry.key] = avg;
-    }
-
-    return result;
+  /// One chart point per included sold listing (chronological); outliers omitted.
+  List<_CompChartPoint> _getChartPoints() {
+    final withDates = _compsForStats.where((c) => c.soldAt != null).toList()
+      ..sort((a, b) => a.soldAt!.compareTo(b.soldAt!));
+    return [
+      for (final c in withDates)
+        _CompChartPoint(soldAt: c.soldAt!, price: c.price),
+    ];
   }
 
-  /// Mean sold price for every listing in the current grade + date filter
-  /// (same rows as the list under the chart).
-  double? _listingsAverageInFilter() {
-    final list = _filteredComps;
-    if (list.isEmpty) return null;
-    var sum = 0.0;
-    for (final c in list) {
-      sum += c.price;
-    }
-    return sum / list.length;
-  }
+  /// Mean sold price for listings included in chart/stats (outliers excluded).
+  double? _listingsAverageInFilter() => CompsOutlierStats.averagePrice(_filteredComps);
 
   @override
   Widget build(BuildContext context) {
@@ -485,8 +345,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       );
     }
 
-    final chartData = _getChartData();
+    final chartPoints = _getChartPoints();
     final periodAvg = _listingsAverageInFilter();
+    final outlierStats = _outlierStats;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -555,17 +416,17 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           ),
 
-        if (chartData.length >= 2) ...[
+        if (chartPoints.length >= 2) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
             child: AdaptiveListCard(
               margin: EdgeInsets.zero,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                 child: SizedBox(
-                  height: 120,
+                  height: 148,
                   child: _PriceChart(
-                    data: chartData,
+                    points: chartPoints,
                     listingsAverage: periodAvg,
                   ),
                 ),
@@ -580,7 +441,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '${_filteredComps.length} ${_filteredComps.length == 1 ? 'listing' : 'listings'}',
+              _listingsCountLabel(outlierStats),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.onSurface.withValues(alpha: 0.60),
                   ),
@@ -623,6 +484,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               child: Builder(
                 builder: (context) {
                   final comp = _filteredComps[i];
+                  final excluded = outlierStats.isOutlier(i);
                   final chipBg = switch (comp.saleType) {
                     SaleType.auction => const Color(0xFF3B82F6).withValues(alpha: 0.15),
                     SaleType.bestOffer => const Color(0xFFF97316).withValues(alpha: 0.2),
@@ -648,6 +510,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                     subtitle: subtitle,
                     imageUrl: comp.imageUrl,
                     url: comp.url,
+                    excludedFromStats: excluded,
                   );
                 },
               ),
@@ -655,6 +518,16 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           ),
       ],
     );
+  }
+
+  String _listingsCountLabel(CompsOutlierStats stats) {
+    final total = _filteredComps.length;
+    final noun = total == 1 ? 'listing' : 'listings';
+    if (!stats.hasOutliers) return '$total $noun';
+    final excluded = stats.outlierIndices.length;
+    final included = stats.includedCount;
+    return '$total $noun · $included in chart'
+        ' · $excluded outlier${excluded == 1 ? '' : 's'} excluded';
   }
 }
 
@@ -836,6 +709,16 @@ class _GradePill extends StatelessWidget {
 
 // ── Price chart ────────────────────────────────────────────────────────────
 
+class _CompChartPoint {
+  const _CompChartPoint({required this.soldAt, required this.price});
+
+  final DateTime soldAt;
+  final double price;
+}
+
+bool _isSameCalendarDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
 /// Pill badge drawn at the period-average point (right end of the avg segment).
 class _AvgPillDotPainter extends FlDotPainter {
   const _AvgPillDotPainter({
@@ -870,8 +753,10 @@ class _AvgPillDotPainter extends FlDotPainter {
       textDirection: TextDirection.ltr,
     )..layout();
     final sz = _pillSizeFor(tp);
+    // Sit below the average line so the pill isn't clipped at the chart top.
+    final center = Offset(c.dx, c.dy + sz.height / 2 + 4);
     final rrect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: c, width: sz.width, height: sz.height),
+      Rect.fromCenter(center: center, width: sz.width, height: sz.height),
       Radius.circular(sz.height / 2),
     );
     canvas.drawRRect(rrect, Paint()..color = fillColor);
@@ -882,7 +767,10 @@ class _AvgPillDotPainter extends FlDotPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
-    tp.paint(canvas, Offset(c.dx - tp.width / 2, c.dy - tp.height / 2));
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
   }
 
   @override
@@ -918,8 +806,9 @@ class _AvgPillDotPainter extends FlDotPainter {
   @override
   bool hitTest(FlSpot spot, Offset touched, Offset center, double extraThreshold) {
     final sz = getSize(spot);
+    final pillCenter = Offset(center.dx, center.dy + sz.height / 2 + 4);
     final r = Rect.fromCenter(
-      center: center,
+      center: pillCenter,
       width: sz.width,
       height: sz.height,
     ).inflate(extraThreshold);
@@ -929,17 +818,22 @@ class _AvgPillDotPainter extends FlDotPainter {
 
 class _PriceChart extends StatelessWidget {
   const _PriceChart({
-    required this.data,
+    required this.points,
     this.listingsAverage,
   });
 
-  final Map<DateTime, double> data;
+  final List<_CompChartPoint> points;
   /// Mean price of all sold comps in the selected grade + date window (listings, not daily points).
   final double? listingsAverage;
 
+  bool _showBottomDateLabel(int index) {
+    if (index <= 0 || index >= points.length - 1) return true;
+    return !_isSameCalendarDay(points[index].soldAt, points[index - 1].soldAt);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) {
+    if (points.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -952,9 +846,8 @@ class _PriceChart extends StatelessWidget {
       fontSize: 11,
     );
 
-    final sortedDates = data.keys.toList()..sort();
-    var minPrice = data.values.reduce((a, b) => a < b ? a : b);
-    var maxPrice = data.values.reduce((a, b) => a > b ? a : b);
+    var minPrice = points.map((p) => p.price).reduce((a, b) => a < b ? a : b);
+    var maxPrice = points.map((p) => p.price).reduce((a, b) => a > b ? a : b);
     final avg = listingsAverage;
     if (avg != null) {
       if (avg < minPrice) minPrice = avg;
@@ -965,37 +858,39 @@ class _PriceChart extends StatelessWidget {
       axisSpan = (minPrice.abs() * 0.05) + 1;
     }
 
-    final spots = <FlSpot>[];
-    for (int i = 0; i < sortedDates.length; i++) {
-      final price = data[sortedDates[i]]!;
-      // Round to 2 decimal places
-      final roundedPrice = double.parse(price.toStringAsFixed(2));
-      spots.add(FlSpot(i.toDouble(), roundedPrice));
-    }
+    final spots = <FlSpot>[
+      for (var i = 0; i < points.length; i++)
+        FlSpot(
+          i.toDouble(),
+          double.parse(points[i].price.toStringAsFixed(2)),
+        ),
+    ];
 
-    final lastX = (sortedDates.length - 1).toDouble();
+    final lastX = (points.length - 1).toDouble();
     final pillCenterX = lastX / 2.0;
+
+    const lineColor = AppTheme.primary;
 
     final lineBars = <LineChartBarData>[
       LineChartBarData(
         spots: spots,
         isCurved: true,
-        color: const Color(0xFF800020),
+        color: lineColor,
         barWidth: 2.5,
         dotData: FlDotData(
           show: true,
           getDotPainter: (spot, percent, barData, index) {
             return FlDotCirclePainter(
               radius: 4,
-              color: const Color(0xFF800020),
+              color: lineColor,
               strokeWidth: 2,
-              strokeColor: Colors.white,
+              strokeColor: colors.surface,
             );
           },
         ),
         belowBarData: BarAreaData(
           show: true,
-          color: const Color(0xFF800020).withValues(alpha: 0.08),
+          color: lineColor.withValues(alpha: 0.1),
         ),
       ),
     ];
@@ -1064,8 +959,9 @@ class _PriceChart extends StatelessWidget {
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
-                if (index < 0 || index >= sortedDates.length) return const SizedBox.shrink();
-                final date = sortedDates[index];
+                if (index < 0 || index >= points.length) return const SizedBox.shrink();
+                if (!_showBottomDateLabel(index)) return const SizedBox.shrink();
+                final date = points[index].soldAt;
                 final month = date.month.toString().padLeft(2, '0');
                 final day = date.day.toString().padLeft(2, '0');
                 return Padding(
@@ -1090,25 +986,61 @@ class _PriceChart extends StatelessWidget {
           ),
         ),
         lineTouchData: LineTouchData(
+          touchSpotThreshold: 22,
+          getTouchedSpotIndicator: (barData, spotIndexes) {
+            if (barData.barWidth == 0) {
+              return List.filled(spotIndexes.length, null);
+            }
+            return defaultTouchedIndicators(barData, spotIndexes);
+          },
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (touchedSpot) => Colors.white,
-            tooltipBorder: const BorderSide(color: Color(0xFFF3F4F6)),
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            tooltipMargin: 6,
+            tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            maxContentWidth: 140,
+            getTooltipColor: (_) => colors.surface,
+            tooltipBorder: BorderSide(
+              color: colors.outline.withValues(alpha: 0.35),
+            ),
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
+                if (spot.barIndex != 0) return null;
+                final index = spot.spotIndex;
+                final date = index >= 0 && index < points.length
+                    ? points[index].soldAt
+                    : null;
+                final dateLine = date != null
+                    ? '${date.month}/${date.day}/${date.year}'
+                    : null;
+                final priceStyle = TextStyle(
+                  color: colors.onSurface,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  letterSpacing: -0.2,
+                );
+                final dateStyle = TextStyle(
+                  color: colors.onSurface.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 11,
+                );
+                if (dateLine == null) {
+                  return LineTooltipItem(formatUsd(spot.y), priceStyle);
+                }
                 return LineTooltipItem(
                   formatUsd(spot.y),
-                  TextStyle(
-                    color: colors.onSurface,
-                    fontWeight: FontWeight.w600,
-                    fontSize: theme.textTheme.bodySmall?.fontSize ?? 12,
-                  ),
+                  priceStyle,
+                  textAlign: TextAlign.center,
+                  children: [
+                    TextSpan(text: '\n$dateLine', style: dateStyle),
+                  ],
                 );
               }).toList();
             },
           ),
         ),
-        minY: minPrice - axisSpan * 0.1,
-        maxY: maxPrice + axisSpan * 0.1,
+        minY: minPrice - axisSpan * 0.08,
+        maxY: maxPrice + axisSpan * 0.22,
         lineBarsData: lineBars,
       ),
     );

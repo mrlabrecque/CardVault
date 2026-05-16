@@ -1,3 +1,5 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons, IconData;
+
 /// Preferred ordering when multiple `current_prices.grade` labels exist (not a fixed display set).
 const List<String> kPreferredGuidePriceGradeOrder = ['Raw', 'PSA 10', 'PSA 9'];
 
@@ -368,4 +370,245 @@ double? priceFromCurrentPricesRowsForUserCopy(
     }
   }
   return null;
+}
+
+// ── Active listings vs CardHedge guide ─────────────────────────────────────
+
+/// Latest guide value for [gradeLabel] from `current_prices`-style map (loose grade match).
+double? guideLatestPriceForGradeMap(Map<String, double?>? map, String gradeLabel) {
+  if (map == null || map.isEmpty) return null;
+  final g = gradeLabel.trim().isEmpty ? 'Raw' : gradeLabel.trim();
+  for (final e in map.entries) {
+    final v = e.value;
+    if (v == null || v <= 0) continue;
+    if (currentPricesGradeLooselyEqual(e.key, g)) return v;
+  }
+  return null;
+}
+
+/// Raw vs slab read from an eBay listing title (best-effort; defaults to raw).
+class InferredListingCondition {
+  const InferredListingCondition({
+    required this.isGraded,
+    required this.displayTag,
+    this.grader,
+    this.gradeValueRaw,
+  });
+
+  final bool isGraded;
+  /// Short chip label, e.g. `Raw`, `PSA 10`, `BGS 9.5`.
+  final String displayTag;
+  final String? grader;
+  final String? gradeValueRaw;
+}
+
+final RegExp _psaGradeInTitle = RegExp(
+  r'\bPSA\s*(?:GEM\s*MT\s*|GEM\s*MINT\s*)?(\d+(?:\.\d+)?)\b',
+  caseSensitive: false,
+);
+final RegExp _psaTightInTitle = RegExp(r'\bPSA(\d{1,2}(?:\.\d+)?)\b', caseSensitive: false);
+final RegExp _bgsGradeInTitle = RegExp(r'\bBGS\s*(\d+(?:\.\d+)?)\b', caseSensitive: false);
+final RegExp _beckettGradeInTitle = RegExp(
+  r'\bBeckett\s*(?:black\s*label\s*)?(\d+(?:\.\d+)?)\b',
+  caseSensitive: false,
+);
+final RegExp _sgcGradeInTitle = RegExp(r'\bSGC\s*(\d+(?:\.\d+)?)\b', caseSensitive: false);
+final RegExp _cgcGradeInTitle = RegExp(r'\bCGC\s*(\d+(?:\.\d+)?)\b', caseSensitive: false);
+final RegExp _csgGradeInTitle = RegExp(r'\bCSG\s*(\d+(?:\.\d+)?)\b', caseSensitive: false);
+final RegExp _rawWordsInTitle = RegExp(r'\b(raw|ungraded)\b', caseSensitive: false);
+
+/// Heuristic slab / raw detection from marketplace listing titles.
+InferredListingCondition inferListingConditionFromTitle(String title) {
+  final t = title.trim();
+  if (t.isEmpty) {
+    return const InferredListingCondition(isGraded: false, displayTag: 'Raw');
+  }
+
+  Match? m = _psaGradeInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'PSA $n',
+      grader: 'PSA',
+      gradeValueRaw: n,
+    );
+  }
+  m = _psaTightInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'PSA $n',
+      grader: 'PSA',
+      gradeValueRaw: n,
+    );
+  }
+  m = _bgsGradeInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'BGS $n',
+      grader: 'BGS',
+      gradeValueRaw: n,
+    );
+  }
+  m = _beckettGradeInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'BGS $n',
+      grader: 'BGS',
+      gradeValueRaw: n,
+    );
+  }
+  m = _sgcGradeInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'SGC $n',
+      grader: 'SGC',
+      gradeValueRaw: n,
+    );
+  }
+  m = _cgcGradeInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'CGC $n',
+      grader: 'CGC',
+      gradeValueRaw: n,
+    );
+  }
+  m = _csgGradeInTitle.firstMatch(t);
+  if (m != null) {
+    final n = m.group(1)!;
+    return InferredListingCondition(
+      isGraded: true,
+      displayTag: 'CSG $n',
+      grader: 'CSG',
+      gradeValueRaw: n,
+    );
+  }
+
+  if (_rawWordsInTitle.hasMatch(t)) {
+    return const InferredListingCondition(isGraded: false, displayTag: 'Raw');
+  }
+
+  return const InferredListingCondition(isGraded: false, displayTag: 'Raw');
+}
+
+/// Guide row for [inferred] from a `current_prices` map.
+///
+/// Graded listings only match their slab row — no silent fallback to Raw (avoids
+/// misleading deal tiers when that grade is missing from [gradeToPrice]).
+double? guidePriceForInferredListing({
+  required Map<String, double?>? gradeToPrice,
+  required InferredListingCondition inferred,
+}) {
+  final map = gradeToPrice;
+  if (map == null || map.isEmpty) return null;
+  if (!inferred.isGraded) {
+    return guideLatestPriceForGradeMap(map, 'Raw');
+  }
+  final candidates = currentPricesGradeLookupCandidates(
+    isGraded: true,
+    grader: inferred.grader,
+    gradeValueRaw: inferred.gradeValueRaw,
+  );
+  for (final c in candidates) {
+    final hit = _priceFromGradeMapLoose(map, c);
+    if (hit != null) return hit;
+  }
+  return null;
+}
+
+/// Five-step deal quality vs CardHedge guide (% over/under asking vs guide).
+enum ActiveListingGuideDealTier {
+  badDeal,
+  okDeal,
+  fairDeal,
+  goodDeal,
+  greatDeal,
+}
+
+/// SF Symbol names for adaptive menus; same shapes as [dealTierCupertinoIcon].
+String dealTierSfSymbolName(ActiveListingGuideDealTier tier) {
+  return switch (tier) {
+    ActiveListingGuideDealTier.badDeal => 'arrow.up.circle.fill',
+    ActiveListingGuideDealTier.okDeal => 'arrow.up.right.circle.fill',
+    ActiveListingGuideDealTier.fairDeal => 'arrow.right.circle.fill',
+    ActiveListingGuideDealTier.goodDeal => 'arrow.down.right.circle.fill',
+    ActiveListingGuideDealTier.greatDeal => 'arrow.down.circle.fill',
+  };
+}
+
+/// Cupertino / SF-style icons for listing rows and filter UI.
+IconData dealTierCupertinoIcon(ActiveListingGuideDealTier tier) {
+  return switch (tier) {
+    ActiveListingGuideDealTier.badDeal => CupertinoIcons.arrow_up_circle_fill,
+    ActiveListingGuideDealTier.okDeal => CupertinoIcons.arrow_up_right_circle_fill,
+    ActiveListingGuideDealTier.fairDeal => CupertinoIcons.arrow_right_circle_fill,
+    ActiveListingGuideDealTier.goodDeal => CupertinoIcons.arrow_down_right_circle_fill,
+    ActiveListingGuideDealTier.greatDeal => CupertinoIcons.arrow_down_circle_fill,
+  };
+}
+
+class ActiveListingVsGuideDelta {
+  const ActiveListingVsGuideDelta({
+    required this.label,
+    required this.tier,
+  });
+
+  final String label;
+  final ActiveListingGuideDealTier tier;
+}
+
+/// [pct] = percent over guide: `(listing / guide - 1) * 100`.
+///
+/// Five contiguous bands (buyer view; lower [pct] = better):
+/// - **Great Deal**: pct ≤ -25%
+/// - **Good Deal**: -25% < pct < -5% (includes ≤ -15%)
+/// - **Fair Deal**: -5% ≤ pct ≤ +5%
+/// - **Ok Deal**: +5% < pct < +25% (includes ≥ +15%)
+/// - **Bad Deal**: pct ≥ +25%
+ActiveListingVsGuideDelta? computeActiveListingGuideDeal({
+  required double listingPrice,
+  required double guidePrice,
+}) {
+  if (listingPrice <= 0 || guidePrice <= 0) return null;
+  final pct = ((listingPrice / guidePrice) - 1) * 100;
+
+  if (pct <= -25) {
+    return const ActiveListingVsGuideDelta(
+      label: 'Great Deal',
+      tier: ActiveListingGuideDealTier.greatDeal,
+    );
+  }
+  if (pct < -5) {
+    return const ActiveListingVsGuideDelta(
+      label: 'Good Deal',
+      tier: ActiveListingGuideDealTier.goodDeal,
+    );
+  }
+  if (pct <= 5) {
+    return const ActiveListingVsGuideDelta(
+      label: 'Fair Deal',
+      tier: ActiveListingGuideDealTier.fairDeal,
+    );
+  }
+  if (pct < 25) {
+    return const ActiveListingVsGuideDelta(
+      label: 'Ok Deal',
+      tier: ActiveListingGuideDealTier.okDeal,
+    );
+  }
+  return const ActiveListingVsGuideDelta(
+    label: 'Bad Deal',
+    tier: ActiveListingGuideDealTier.badDeal,
+  );
 }
