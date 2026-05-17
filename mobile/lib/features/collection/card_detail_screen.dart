@@ -147,11 +147,25 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   bool get _needsDoublePopFromScan =>
       _openedFromScanResults && !_openedFromScanSingleRoute;
 
+  /// When true, run a full CardHedge catalog search (slow). Base parallel only
+  /// forces search when the variant is not linked yet — not on every open.
   bool get _resyncGuidePricesFromCatalog {
     final o = _catalog.resyncGuidePricesFromCatalog;
     if (o != null) return o;
     if (_catalog.openedFromScanResults ?? false) return true;
-    return _parallelLabelImpliesDefaultBase(_catalog.parallelName);
+    if (_parallelLabelImpliesDefaultBase(_catalog.parallelName)) {
+      final id = _catalog.masterCard.guidePriceCardId?.trim() ?? '';
+      return id.isEmpty;
+    }
+    return false;
+  }
+
+  /// Full-screen loader only for cold link / explicit resync — not when we
+  /// already have a CardHedge id and can hydrate from DB in the background.
+  bool get _catalogNeedsBlockingGuideOverlay {
+    if (_resyncGuidePricesFromCatalog) return true;
+    final id = _catalog.masterCard.guidePriceCardId?.trim() ?? '';
+    return id.isEmpty;
   }
 
   Map<String, double?>? _resolvedGuideRecentPrices(Map<String, double?> raw) {
@@ -173,7 +187,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     if (_isCatalog) {
-      _guidePricesLoading = true;
+      _guidePricesLoading = _catalogNeedsBlockingGuideOverlay;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_syncGuidePricesForMaster());
       });
@@ -205,7 +219,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         (o.openedFromScanSingleRoute ?? false) != (n.openedFromScanSingleRoute ?? false) ||
         o.resyncGuidePricesFromCatalog != n.resyncGuidePricesFromCatalog) {
       setState(() {
-        _guidePricesLoading = true;
+        _guidePricesLoading = _catalogNeedsBlockingGuideOverlay;
         _guideMatchResult = null;
         _linkedGradePricesFromDb = null;
         _guideMatchRowPick = null;
@@ -344,10 +358,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
 
     if (!mounted) return;
-    setState(() {
-      _guidePricesLoading = true;
-      _linkedGradePricesFromDb = null;
-    });
+    if (_catalogNeedsBlockingGuideOverlay) {
+      setState(() {
+        _guidePricesLoading = true;
+        _linkedGradePricesFromDb = null;
+      });
+    }
 
     final payload = await comps.searchGuidePriceCatalog(
       player: _catalog.masterCard.player,
@@ -834,6 +850,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final topInset = padding.top;
     final onLight = _scrolledPastHero;
     final iconTint = onLight ? colors.onSurface : Colors.white;
+    final catalogGuideSpinner = _isCatalog && _guidePricesLoading;
 
     if (_isCatalog) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -853,19 +870,22 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         foregroundColor: iconTint,
         shape: const RoundedRectangleBorder(side: BorderSide.none),
         iconTheme: IconThemeData(color: iconTint),
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Center(
-            child: GlassCircleIconButton(
-              icon: Icons.arrow_back_ios_new,
-              onPressed: _handleBack,
-              tooltip: 'Back',
-              iconSize: 17,
-              onDarkSurface: !onLight,
-            ),
-          ),
-        ),
+        leadingWidth: catalogGuideSpinner ? 0 : 64,
+        automaticallyImplyLeading: false,
+        leading: catalogGuideSpinner
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Center(
+                  child: GlassCircleIconButton(
+                    icon: Icons.arrow_back_ios_new,
+                    onPressed: _handleBack,
+                    tooltip: 'Back',
+                    iconSize: 17,
+                    onDarkSurface: !onLight,
+                  ),
+                ),
+              ),
         actions: widget.isOwned
             ? [
                 Padding(
@@ -913,7 +933,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (!_isCatalog) return scaffold;
 
     return PopScope(
-      canPop: !_needsDoublePopFromScan,
+      canPop: !_needsDoublePopFromScan && !catalogGuideSpinner,
       onPopInvokedWithResult: (didPop, result) {
         if (_needsDoublePopFromScan && !didPop) {
           _handleBack();
@@ -1352,26 +1372,23 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   Widget _buildGuideSyncOverlay(BuildContext context, ColorScheme colors) {
-    return Positioned.fill(
-      child: Material(
-        color: colors.surface,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              children: [
-                const CardFanLoader(size: 72),
-                const SizedBox(height: 12),
-                Text(
-                  _guideSyncDebugJson == null
-                      ? 'Linking CardHedge catalog…'
-                      : 'No CardHedge link yet',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                if (_guideSyncDebugJson != null) ...[
+    if (_guideSyncDebugJson != null) {
+      return Positioned.fill(
+        child: Material(
+          color: colors.surface,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'No CardHedge link yet',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'CardHedge response (no link saved yet):',
@@ -1423,9 +1440,18 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
+        ),
+      );
+    }
+
+    return Positioned.fill(
+      child: Material(
+        color: colors.surface,
+        child: const Center(
+          child: CardFanLoader(size: 72),
         ),
       ),
     );
