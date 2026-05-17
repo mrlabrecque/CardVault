@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/currency_format.dart';
+import '../../../core/ui/price_guide_copy.dart';
 import '../../../core/utils/guide_grade_prices.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
+import '../../../core/widgets/inline_notice_container.dart';
 
 /// Short date for sold / listing-end meta lines (Today, Yesterday, M/D/YYYY).
 String formatMarketListingMetaDate(DateTime dt) {
@@ -170,7 +172,7 @@ class MarketListingRow extends StatelessWidget {
     final gradeLabel = gradeTag?.trim();
     final showGradeTag = gradeLabel != null && gradeLabel.isNotEmpty;
     final noGuideSemantic = [
-      'No guide price',
+      PriceGuideCopy.noPriceGuide,
       if (showGradeTag) 'for $gradeLabel',
     ].join(' ');
 
@@ -274,10 +276,10 @@ class MarketListingRow extends StatelessWidget {
                   if (showDealGlyph) ...[
                     Semantics(
                       label: [
-                        vsGuideLabel ?? 'Listing vs price guide',
+                        vsGuideLabel ?? PriceGuideCopy.listingVsPriceGuide,
                         if (vsGuideCompareGrade != null &&
                             vsGuideCompareGrade!.trim().isNotEmpty)
-                          'vs ${vsGuideCompareGrade!.trim()} guide',
+                          PriceGuideCopy.vsPriceGuideGrade(vsGuideCompareGrade!.trim()),
                       ].join(' — '),
                       child: Icon(
                         dealTierCupertinoIcon(vsGuideDealTier!),
@@ -399,6 +401,48 @@ class MarketListingsList extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// iOS-style callout for empty/error states in market analysis (comps, for sale).
+class MarketSectionNotice extends StatelessWidget {
+  const MarketSectionNotice({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.highlightBorderColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final Color? highlightBorderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        );
+    final bodyStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          height: 1.35,
+          color: colors.onSurface.withValues(alpha: 0.72),
+        );
+
+    return InlineNoticeContainer(
+      icon: Icon(icon, size: 20, color: colors.onSurface.withValues(alpha: 0.55)),
+      highlightBorderColor: highlightBorderColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: titleStyle),
+          const SizedBox(height: 4),
+          Text(message, style: bodyStyle),
+        ],
+      ),
     );
   }
 }

@@ -15,6 +15,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/utils/currency_format.dart';
+import '../../core/ui/price_guide_copy.dart';
 import '../../core/utils/guide_catalog_match_query.dart';
 import '../../core/utils/guide_grade_prices.dart';
 import '../../core/utils/usd_field.dart';
@@ -303,7 +304,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
     if (map.isEmpty) {
       return const JsonEncoder.withIndent('  ').convert({
-        'error': 'No CardHedge response (search did not return)',
+        'error': PriceGuideCopy.debugNoResponse,
       });
     }
     return const JsonEncoder.withIndent('  ').convert(map);
@@ -550,11 +551,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   String _missingCatalogValueNotice(UserCard card) {
     if (card.masterCardId == null) {
-      return 'This copy is not linked to the catalog, so no guide price is available.';
+      return PriceGuideCopy.catalogNotLinkedValue;
     }
     final hasCh = card.embeddedMasterGuideCardId != null && card.embeddedMasterGuideCardId!.trim().isNotEmpty;
     if (!hasCh) {
-      return 'This variant has no catalog match yet — no guide price in the app. Try again from the catalog card page.';
+      return PriceGuideCopy.variantNotMatchedValue;
     }
     return 'No recent prices.';
   }
@@ -1364,7 +1365,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
-            'Market data will appear once this variant is linked.',
+            PriceGuideCopy.marketDataWhenMatched,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colors.onSurface.withValues(alpha: 0.60),
                 ),
@@ -1400,7 +1401,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'CardHedge lookup (no link saved)',
+                    PriceGuideCopy.debugLookupTitle,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -1408,7 +1409,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Request JSON (vault → edge → CardHedge):',
+                    PriceGuideCopy.debugRequestJsonLabel,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colors.onSurface.withValues(alpha: 0.65),
                         ),
@@ -1449,7 +1450,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     style: AdaptiveButtonStyle.filled,
                     color: AppTheme.primary,
                     child: const Text(
-                      'Retry CardHedge lookup',
+                      PriceGuideCopy.debugRetryLookup,
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -1539,10 +1540,10 @@ class _ValueRefreshNotice extends StatelessWidget {
     final t = refreshedAt;
     final text = t != null
         ? (marketGuideHeadline
-            ? 'Market guide last updated ${relativeRefreshed(t)} · ${_fmtClock(t)}'
+            ? PriceGuideCopy.priceGuideLastUpdated(relativeRefreshed(t), _fmtClock(t))
             : 'Sold comps value last refreshed ${relativeRefreshed(t)} · ${_fmtClock(t)}')
         : (marketGuideHeadline
-            ? 'No market guide timestamp yet — it updates when catalog prices are fetched.'
+            ? PriceGuideCopy.noPriceGuideTimestamp
             : 'Value has not been refreshed yet — open Edit or pull collection refresh when available.');
 
     final theme = Theme.of(context);

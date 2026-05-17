@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart' as animate;
 import 'package:go_router/go_router.dart';
 import '../../../core/models/user_card.dart';
+import '../../../core/ui/price_guide_copy.dart';
 import '../../../core/utils/currency_format.dart';
 import '../../../core/widgets/card_info_section.dart';
 
@@ -161,7 +162,7 @@ class _ListItemCardState extends State<ListItemCard>
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'No guide price',
+                  PriceGuideCopy.noPriceGuide,
                   style: TextStyle(
                     fontSize: 11,
                     color: colors.onSurface.withValues(alpha: 0.55),

@@ -6,10 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/comp.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/utils/adaptive_ui.dart';
+import '../../../core/ui/price_guide_copy.dart';
 import '../../../core/utils/guide_grade_prices.dart';
+import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/modal_sheet_scaffold.dart';
-import 'market_listings_list.dart' show MarketListingRow, MarketListingsList, formatMarketListingMetaDate;
+import 'market_listings_list.dart'
+    show MarketListingRow, MarketListingsList, MarketSectionNotice, formatMarketListingMetaDate;
 
 /// Active eBay listings for a catalog variant (`master_card_definitions.id`).
 ///
@@ -139,7 +142,7 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
         return StatefulBuilder(
           builder: (ctx, setModal) {
             return ModalSheetScaffold(
-              title: 'Deals vs guide',
+              title: PriceGuideCopy.dealsVsPriceGuideTitle,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -349,53 +352,22 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
     }
 
     if (_error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Text(
-          _error!,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.error),
-        ),
+      return MarketSectionNotice(
+        icon: isIOS ? CupertinoIcons.exclamationmark_circle : Icons.error_outline,
+        title: 'Could not load listings',
+        message: _error!,
+        highlightBorderColor: colors.error.withValues(alpha: 0.35),
       );
     }
 
     final items = _items ?? [];
     if (items.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFEF3C7),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFDBB726)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.storefront_outlined, size: 20, color: Color(0xFFF59E0B)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'No active listings',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFFB45309),
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No matching Buy It Now or auction listings found right now.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurface.withValues(alpha: 0.60),
-                          height: 1.35,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+      return MarketSectionNotice(
+        icon: isIOS ? CupertinoIcons.tag : Icons.storefront_outlined,
+        title: 'No active listings',
+        message:
+            'No matching Buy It Now or auction listings were found for this card right now.',
+        highlightBorderColor: colors.outline.withValues(alpha: 0.28),
       );
     }
 
@@ -419,7 +391,7 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
           Padding(
             padding: const EdgeInsets.only(bottom: 0),
             child: Text(
-              'Add guide prices to compare listings to market value.',
+              PriceGuideCopy.forSaleNeedsPriceGuide,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.onSurface.withValues(alpha: 0.50),
                     height: 1.3,
@@ -429,12 +401,13 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
         if (displayItems.isEmpty && items.isNotEmpty && _hasGuidePrices)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'No listings match this deal filter.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurface.withValues(alpha: 0.55),
-                    fontStyle: FontStyle.italic,
-                  ),
+            child: MarketSectionNotice(
+              icon: isIOS
+                  ? CupertinoIcons.line_horizontal_3_decrease_circle
+                  : Icons.filter_list_outlined,
+              title: 'No listings match this filter',
+              message: 'Try clearing the deal filter or selecting different deal tiers.',
+              highlightBorderColor: colors.outline.withValues(alpha: 0.28),
             ),
           ),
         MarketListingsList(

@@ -1,0 +1,9 @@
+# Price guide UI copy
+
+User-visible strings for the external market-price integration must **not** use vendor names (e.g. CardHedge).
+
+- Say **price guide** (noun): “No price guide”, “Deals vs price guide”, “Link the price guide…”
+- Avoid: “guide price”, “guide prices”, “market guide”, “CardHedge”, “Card Hedge”
+- Shared strings live in [`lib/core/ui/price_guide_copy.dart`](../../lib/core/ui/price_guide_copy.dart) — add new user-facing copy there when possible.
+
+Code identifiers, API fields, and debug JSON keys may still use `cardhedge_*` / `CardHedge*` types.

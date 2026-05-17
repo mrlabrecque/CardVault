@@ -8,15 +8,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/utils/currency_format.dart';
 import '../../../core/utils/comps_outlier_utils.dart';
+import '../../../core/ui/price_guide_copy.dart';
 import '../../../core/utils/guide_grade_prices.dart';
 import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/app_segmented_control.dart';
-import '../../../core/widgets/inline_notice_container.dart';
 import 'card_active_listings_section.dart';
 import 'card_comps_section.dart';
 import 'comps_market_filters.dart';
+import 'market_listings_list.dart' show MarketSectionNotice;
 
 /// Segmented "Sold Comps" vs "For Sale" market block for item detail.
 class MarketAnalysisSection extends ConsumerStatefulWidget {
@@ -77,8 +78,18 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   int _compsSelectedDays = 0;
   bool _guideSoldCompsEmpty = false;
 
+  bool get _hasUsableGuidePrices =>
+      guideGradeMapHasAnyPrice(widget.guideRecentPrices ?? const {});
+
+  /// CardHedge-linked / catalog path: no sold comps without `current_prices` (For Sale still works).
+  bool get _showGuidePricesRequiredNotice {
+    if (_hasUsableGuidePrices) return false;
+    final linked = widget.guidePriceCardId?.trim().isNotEmpty == true;
+    return linked || widget.skipScraperSoldComps;
+  }
+
   bool get _useGuideSoldCompsPath {
-    if (widget.skipScraperSoldComps) return true;
+    if (widget.skipScraperSoldComps) return _hasUsableGuidePrices;
     final avgs = widget.guideRecentPrices;
     if (avgs == null) return false;
     return avgs.values.any((v) => v != null && v > 0);
@@ -101,6 +112,9 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   void initState() {
     super.initState();
     _compsGradeSelection = _defaultCompsGrade();
+    if (_showGuidePricesRequiredNotice) {
+      _segment = 1;
+    }
     Future.microtask(() async {
       await _refreshCachedCompsGrades();
       if (mounted) await _tryAutoShowDbComps();
@@ -122,6 +136,10 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       widget.guideRecentPrices,
     )) {
       unawaited(_refreshCachedCompsGrades());
+      final hadPrices = guideGradeMapHasAnyPrice(oldWidget.guideRecentPrices ?? const {});
+      if (hadPrices && _showGuidePricesRequiredNotice && _segment == 0) {
+        setState(() => _segment = 1);
+      }
     }
     if (oldWidget.masterCardId != widget.masterCardId ||
         oldWidget.initialGrade != widget.initialGrade ||
@@ -142,6 +160,16 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   }
 
   Future<void> _tryAutoShowDbComps() async {
+    if (_showGuidePricesRequiredNotice) {
+      if (mounted) {
+        setState(() {
+          _guideSoldCompsLoading = false;
+          _autoDbCompsGrade = null;
+          _guideSoldCompsGrade = null;
+        });
+      }
+      return;
+    }
     if (!widget.showDbSoldCompsWhenAvailable || !_useGuideSoldCompsPath) {
       if (mounted && _autoDbCompsGrade != null) {
         setState(() => _autoDbCompsGrade = null);
@@ -366,11 +394,9 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     );
   }
 
-  bool get _showRecentPrices {
-    final prices = widget.guideRecentPrices;
-    if (prices == null) return false;
-    return guideGradeMapHasAnyPrice(prices);
-  }
+  /// Recent Prices card when guide prices exist or the variant is on the guide path (N/A slots).
+  bool get _showRecentPricesSection =>
+      _hasUsableGuidePrices || _showGuidePricesRequiredNotice;
 
   List<MapEntry<String, double?>> get _recentPriceSlots =>
       guideRecentPriceDisplaySlots(widget.guideRecentPrices ?? const {});
@@ -383,9 +409,12 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildTitle(context),
-        if (_showRecentPrices) ...[
+        if (_showRecentPricesSection) ...[
           const SizedBox(height: 20),
-          _GuideRecentPricesSection(slots: recentSlots),
+          _GuideRecentPricesSection(
+            slots: recentSlots,
+            showUnavailableFootnote: _showGuidePricesRequiredNotice,
+          ),
         ],
         const SizedBox(height: 16),
         Align(
@@ -400,10 +429,12 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         ),
         const SizedBox(height: 12),
         if (_segment == 0)
-          (_useGuideSoldCompsPath
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+          if (_showGuidePricesRequiredNotice)
+            const _GuidePricesUnavailableNotice()
+          else if (_useGuideSoldCompsPath)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                     if (_guideGradeMenuEnabled) ...[
                       _GuideSoldCompsGradeBar(
                         gradeLabel: _guideSoldCompsLoading
@@ -456,14 +487,15 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                             'No recent sales found',
                       ),
                     ],
-                  ],
-                )
-              : CardCompsSection(
-                  masterCardId: widget.masterCardId,
-                  initialGrade: widget.initialGrade,
-                  refreshVersion: widget.refreshVersion,
-                  externalLoading: widget.externalLoading,
-                ))
+              ],
+            )
+          else
+            CardCompsSection(
+              masterCardId: widget.masterCardId,
+              initialGrade: widget.initialGrade,
+              refreshVersion: widget.refreshVersion,
+              externalLoading: widget.externalLoading,
+            )
         else
           CardActiveListingsSection(
             masterCardId: widget.masterCardId,
@@ -474,11 +506,31 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   }
 }
 
+/// Sold comps tab when the variant is linked but `current_prices` has no usable grades.
+class _GuidePricesUnavailableNotice extends StatelessWidget {
+  const _GuidePricesUnavailableNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return MarketSectionNotice(
+      icon: isIOS ? CupertinoIcons.chart_bar_alt_fill : Icons.insights_outlined,
+      title: 'Sold comps unavailable',
+      message: PriceGuideCopy.soldCompsUnavailableMessage,
+      highlightBorderColor: colors.outline.withValues(alpha: 0.28),
+    );
+  }
+}
+
 /// CardHedge / `current_prices` snapshot — three equal slots, not sold-comp averages.
 class _GuideRecentPricesSection extends StatelessWidget {
-  const _GuideRecentPricesSection({required this.slots});
+  const _GuideRecentPricesSection({
+    required this.slots,
+    this.showUnavailableFootnote = false,
+  });
 
   final List<MapEntry<String, double?>> slots;
+  final bool showUnavailableFootnote;
 
   @override
   Widget build(BuildContext context) {
@@ -537,6 +589,17 @@ class _GuideRecentPricesSection extends StatelessWidget {
                 ],
               ),
             ),
+            if (showUnavailableFootnote) ...[
+              const SizedBox(height: 10),
+              Text(
+                PriceGuideCopy.recentPricesUnavailableFootnote,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurface.withValues(alpha: 0.58),
+                      height: 1.35,
+                      fontSize: 12,
+                    ),
+              ),
+            ],
           ],
         ),
       ),
@@ -606,15 +669,11 @@ class _SoldCompsNotFoundBanner extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final grade = gradeLabel.trim().isEmpty ? 'Raw' : gradeLabel.trim();
 
-    return InlineNoticeContainer(
-      icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.58)),
-      child: Text(
-        'No sold comps were found for $grade.',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              height: 1.35,
-              color: colors.onSurface.withValues(alpha: 0.75),
-            ),
-      ),
+    return MarketSectionNotice(
+      icon: isIOS ? CupertinoIcons.info : Icons.info_outline,
+      title: 'No sold comps found',
+      message: 'No sold comps were found for $grade.',
+      highlightBorderColor: colors.outline.withValues(alpha: 0.28),
     );
   }
 }
@@ -719,15 +778,11 @@ class _GuideSoldCompsEmptyPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        message,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: colors.onSurface.withValues(alpha: 0.58),
-              height: 1.35,
-            ),
-      ),
+    return MarketSectionNotice(
+      icon: isIOS ? CupertinoIcons.info : Icons.info_outline,
+      title: 'No sold comps found',
+      message: message,
+      highlightBorderColor: colors.outline.withValues(alpha: 0.28),
     );
   }
 }

@@ -15,6 +15,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/scan_immersive.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/cardhedge_image_search.dart';
+import '../../core/ui/price_guide_copy.dart';
 import '../../core/services/cards_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
@@ -1162,7 +1163,7 @@ class _MatchResultTile extends StatelessWidget {
                             match.cardHedgeCardId!.trim().isNotEmpty) ...[
                           const SizedBox(height: 6),
                           Text(
-                            'CardHedge · ${match.cardHedgeCardId}',
+                            '${PriceGuideCopy.priceGuideMatchIdLabel} · ${match.cardHedgeCardId}',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: muted,

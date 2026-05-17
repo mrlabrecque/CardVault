@@ -8,6 +8,7 @@ import '../../../core/models/comp.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/comps_outlier_utils.dart';
 import '../../../core/utils/currency_format.dart';
+import '../../../core/ui/price_guide_copy.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
@@ -297,7 +298,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'No guide sales returned for $_selectedGrade.',
+                  PriceGuideCopy.noPriceGuideSalesForGrade(_selectedGrade),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.onSurface.withValues(alpha: 0.72),
                         height: 1.35,
@@ -461,7 +462,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
                 ),
                 Text(
                   widget.embeddedGuideSoldComps
-                      ? 'No guide sales in the selected date range at $_selectedGrade.'
+                      ? PriceGuideCopy.noPriceGuideSalesInRange(_selectedGrade)
                       : 'No recent eBay sales found at $_selectedGrade grade.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.onSurface.withValues(alpha: 0.60),
