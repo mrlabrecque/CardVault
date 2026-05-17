@@ -22,9 +22,14 @@ String formatMarketListingMetaDate(DateTime dt) {
 
 /// Neutral grade pill on a market listing row (Raw, PSA 10, etc.).
 class MarketListingGradeTag extends StatelessWidget {
-  const MarketListingGradeTag({super.key, required this.label});
+  const MarketListingGradeTag({
+    super.key,
+    required this.label,
+    this.muted = false,
+  });
 
   final String label;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
@@ -34,16 +39,20 @@ class MarketListingGradeTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
+        color: colors.surfaceContainerHighest.withValues(
+          alpha: muted ? 0.35 : 0.65,
+        ),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: colors.outline.withValues(alpha: 0.45)),
+        border: Border.all(
+          color: colors.outline.withValues(alpha: muted ? 0.22 : 0.45),
+        ),
       ),
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: colors.onSurface.withValues(alpha: 0.78),
+              color: colors.onSurface.withValues(alpha: muted ? 0.38 : 0.78),
             ),
       ),
     );
@@ -97,10 +106,10 @@ class MarketListingRow extends StatelessWidget {
     final thumb = imageUrl;
     final muted = excludedFromStats;
     final titleColor = muted
-        ? colors.onSurface.withValues(alpha: 0.45)
+        ? colors.onSurface.withValues(alpha: 0.30)
         : colors.onSurface;
     final metaColor = muted
-        ? colors.onSurface.withValues(alpha: 0.38)
+        ? colors.onSurface.withValues(alpha: 0.28)
         : colors.onSurface.withValues(alpha: 0.60);
     final metaStyle = theme.textTheme.labelSmall?.copyWith(
       fontSize: 11,
@@ -109,7 +118,7 @@ class MarketListingRow extends StatelessWidget {
       color: metaColor,
     );
     final priceColor = muted
-        ? colors.onSurface.withValues(alpha: 0.42)
+        ? colors.onSurface.withValues(alpha: 0.28)
         : colors.onSurface;
 
     void openListing() {
@@ -123,8 +132,9 @@ class MarketListingRow extends StatelessWidget {
     final hasMetaLine = metaLine != null && metaLine!.trim().isNotEmpty;
 
     Widget thumbnail() {
+      Widget thumbChild;
       if (thumb != null && thumb.isNotEmpty) {
-        return ClipRRect(
+        thumbChild = ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: CachedNetworkImage(
             imageUrl: thumb,
@@ -135,16 +145,23 @@ class MarketListingRow extends StatelessWidget {
                 SizedBox(width: thumbWidth, height: thumbHeight),
           ),
         );
+      } else {
+        thumbChild = Container(
+          width: thumbWidth,
+          height: thumbHeight,
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: 22,
+            color: colors.outline.withValues(alpha: muted ? 0.35 : 1),
+          ),
+        );
       }
-      return Container(
-        width: thumbWidth,
-        height: thumbHeight,
-        decoration: BoxDecoration(
-          color: colors.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(Icons.image_not_supported_outlined, size: 22, color: colors.outline),
-      );
+      if (!muted) return thumbChild;
+      return Opacity(opacity: 0.45, child: thumbChild);
     }
 
     final showDealGlyph =
@@ -171,14 +188,21 @@ class MarketListingRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (showGradeTag) ...[
-                MarketListingGradeTag(label: gradeLabel),
+                MarketListingGradeTag(label: gradeLabel, muted: muted),
                 const SizedBox(width: 6),
               ],
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
-                  color: muted ? colors.surfaceContainerHighest : chipBackground,
+                  color: muted
+                      ? colors.surfaceContainerHighest.withValues(alpha: 0.5)
+                      : chipBackground,
                   borderRadius: BorderRadius.circular(4),
+                  border: muted
+                      ? Border.all(
+                          color: colors.outline.withValues(alpha: 0.2),
+                        )
+                      : null,
                 ),
                 child: Text(
                   chipLabel,
@@ -187,7 +211,7 @@ class MarketListingRow extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     height: 1.2,
                     color: muted
-                        ? colors.onSurface.withValues(alpha: 0.4)
+                        ? colors.onSurface.withValues(alpha: 0.32)
                         : chipForeground,
                   ),
                 ),
@@ -207,7 +231,9 @@ class MarketListingRow extends StatelessWidget {
                         child: Icon(
                           Icons.open_in_new,
                           size: 18,
-                          color: colors.onSurface.withValues(alpha: 0.60),
+                          color: colors.onSurface.withValues(
+                            alpha: muted ? 0.32 : 0.60,
+                          ),
                         ),
                       ),
                     ),
@@ -290,9 +316,10 @@ class MarketListingRow extends StatelessWidget {
             Text(
               'Excluded from chart & average',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: colors.onSurface.withValues(alpha: 0.38),
+                color: colors.onSurface.withValues(alpha: 0.32),
                 fontWeight: FontWeight.w500,
                 fontSize: 11,
+                fontStyle: FontStyle.italic,
               ),
             ),
           ],
@@ -300,7 +327,7 @@ class MarketListingRow extends StatelessWidget {
       );
     }
 
-    return Padding(
+    final body = Padding(
       padding: const EdgeInsets.all(12),
       child: hasUrl
           ? InkWell(
@@ -310,6 +337,13 @@ class MarketListingRow extends StatelessWidget {
               child: content(),
             )
           : content(),
+    );
+
+    if (!muted) return body;
+
+    return Opacity(
+      opacity: 0.72,
+      child: body,
     );
   }
 }

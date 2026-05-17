@@ -65,15 +65,19 @@ function buyingOptionsTokens(buyingOptions: unknown): string[] {
   return buyingOptions.map((o) => String(o ?? '').trim()).filter(Boolean);
 }
 
-/** Honors full eBay `buyingOptions` array (e.g. `AUCTION` + `BEST_OFFER`). */
+/**
+ * Maps eBay `buyingOptions` to a single chip type.
+ * Auction wins when present — many auctions include `BEST_OFFER` for optional offers
+ * but should still display as Auction, not Best Offer.
+ */
 function listingTypeFromBuyingOptions(
   buyingOptions: unknown,
 ): 'AUCTION' | 'FIXED_PRICE' | 'BEST_OFFER' {
   const opts = buyingOptionsTokens(buyingOptions).map((o) => o.toUpperCase());
-  const hasBestOffer = opts.some((o) => o === 'BEST_OFFER' || o.includes('BEST_OFFER'));
   const hasAuction = opts.some((o) => o === 'AUCTION' || o.includes('AUCTION'));
-  if (hasBestOffer) return 'BEST_OFFER';
+  const hasBestOffer = opts.some((o) => o === 'BEST_OFFER' || o.includes('BEST_OFFER'));
   if (hasAuction) return 'AUCTION';
+  if (hasBestOffer) return 'BEST_OFFER';
   return 'FIXED_PRICE';
 }
 

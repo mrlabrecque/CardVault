@@ -139,8 +139,9 @@ function browseRowToFilterShape(row: EbayActiveListingRow) {
 
 function listingTypeActive(buying_format: string): string {
   const fmt = (buying_format ?? '').toUpperCase();
-  if (fmt.includes('BEST_OFFER')) return 'BEST_OFFER';
+  // Auction before Best Offer — cached rows may be "AUCTION,BEST_OFFER".
   if (fmt.includes('AUCTION')) return 'AUCTION';
+  if (fmt.includes('BEST_OFFER')) return 'BEST_OFFER';
   return 'FIXED_PRICE';
 }
 
