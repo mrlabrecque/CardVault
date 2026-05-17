@@ -16,6 +16,8 @@ class GuideCatalogMatchPayload {
     this.errorMessage,
     this.persistedMaster,
     this.parallelDebug,
+    this.cardhedgeRequest,
+    this.vaultRequestToEdge,
   });
 
   final bool matched;
@@ -39,6 +41,12 @@ class GuideCatalogMatchPayload {
 
   /// Edge `parallel_debug`: candidate rows (number + variant + card_id) after filters.
   final Map<String, dynamic>? parallelDebug;
+
+  /// Edge `cardhedge_request`: vault→edge params + exact POST body for CardHedge API replay.
+  final Map<String, dynamic>? cardhedgeRequest;
+
+  /// Client body sent to `cardhedge-search-cards` (not from edge JSON).
+  final Map<String, dynamic>? vaultRequestToEdge;
 
   bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
 
@@ -64,6 +72,9 @@ class GuideCatalogMatchPayload {
     Map<String, dynamic>? parallelDebug;
     final pd = json['parallel_debug'];
     if (pd is Map) parallelDebug = Map<String, dynamic>.from(pd);
+    Map<String, dynamic>? cardhedgeRequest;
+    final chr = json['cardhedge_request'];
+    if (chr is Map) cardhedgeRequest = Map<String, dynamic>.from(chr);
 
     return GuideCatalogMatchPayload(
       matched: matched,
@@ -84,6 +95,30 @@ class GuideCatalogMatchPayload {
       errorMessage: json['error'] as String?,
       persistedMaster: persisted,
       parallelDebug: parallelDebug,
+      cardhedgeRequest: cardhedgeRequest,
+    );
+  }
+
+  GuideCatalogMatchPayload withVaultRequestToEdge(Map<String, dynamic> vault) {
+    return GuideCatalogMatchPayload(
+      matched: matched,
+      minConfidence: minConfidence,
+      reason: reason,
+      confidence: confidence,
+      candidatesEvaluated: candidatesEvaluated,
+      searchQueryUsed: searchQueryUsed,
+      expectedParallel: expectedParallel,
+      gotVariant: gotVariant,
+      resolvedVia: resolvedVia,
+      searchSet: searchSet,
+      searchMeta: searchMeta,
+      alternateMatches: alternateMatches,
+      match: match,
+      errorMessage: errorMessage,
+      persistedMaster: persistedMaster,
+      parallelDebug: parallelDebug,
+      cardhedgeRequest: cardhedgeRequest,
+      vaultRequestToEdge: vault,
     );
   }
 
@@ -95,6 +130,28 @@ class GuideCatalogMatchPayload {
       parallelDebug: null,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'matched': matched,
+        'minConfidence': minConfidence,
+        if (reason != null) 'reason': reason,
+        if (confidence != null) 'confidence': confidence,
+        if (candidatesEvaluated != null) 'candidates_evaluated': candidatesEvaluated,
+        if (searchQueryUsed != null) 'search_query_used': searchQueryUsed,
+        if (expectedParallel != null) 'expected_parallel': expectedParallel,
+        if (gotVariant != null) 'got_variant': gotVariant,
+        if (resolvedVia != null) 'resolved_via': resolvedVia,
+        if (searchSet != null) 'search_set': searchSet,
+        if (searchMeta != null) 'search_meta': searchMeta,
+        if (alternateMatches != null)
+          'alternate_matches': alternateMatches!.map((e) => e.toJson()).toList(),
+        if (match != null) 'match': match!.toJson(),
+        if (errorMessage != null) 'error': errorMessage,
+        if (persistedMaster != null) 'persisted_master': persistedMaster,
+        if (parallelDebug != null) 'parallel_debug': parallelDebug,
+        if (cardhedgeRequest != null) 'cardhedge_request': cardhedgeRequest,
+        if (vaultRequestToEdge != null) 'vault_request_to_edge': vaultRequestToEdge,
+      };
 }
 
 class GuideCatalogMatchedRow {
@@ -177,4 +234,20 @@ class GuideCatalogMatchedRow {
       gain: _parseGain(json['gain'] ?? json['Gain']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        if (cardId != null) 'card_id': cardId,
+        if (description != null) 'description': description,
+        if (player != null) 'player': player,
+        if (set != null) 'set': set,
+        if (number != null) 'number': number,
+        if (variant != null) 'variant': variant,
+        if (category != null) 'category': category,
+        if (image != null) 'image': image,
+        if (prices != null) 'prices': prices,
+        if (reasoning != null) 'reasoning': reasoning,
+        if (sales7d != null) 'sales_7d': sales7d,
+        if (sales30d != null) 'sales_30d': sales30d,
+        if (gain != null) 'gain': gain,
+      };
 }

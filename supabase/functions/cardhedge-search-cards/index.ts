@@ -2,23 +2,27 @@
  * Proxies upstream **card-search** only (no card-match):
  * POST https://api.cardhedger.com/v1/cards/card-search
  *
- * Structured body only (no `search` field — parallel is resolved from `variant`
- * after fetch). Upstream `set` = year (if not already on release) + releaseName +
- * category; subset (Fireworks, …) on `description`, parallel on `variant`.
- * `alternate_matches` only for **exact** normalized `variant` ties. If none match
- * exactly, a **single** best row is chosen via [parallelScore] (persist + prices)
- * with `alternate_matches: []` so the app does not show fuzzy parallel chips.
+ * Upstream body: `category`, `page`, `page_size`, and `search` where
+ * search = Player + Year + Release + #Number + Set. Parallel resolved from `variant` after fetch.
+ * **Non-Base** parallels: [parallelExactCatalogVariant] only (`red` ≠ `red stars`);
+ * no fuzzy fallback. **Base** uses [pickBestBaseVariantRow]; fuzzy [parallelScore]
+ * only when Base has zero exact rows.
  * If the chosen row has no persistable `prices`, calls all-prices-by-card before
  * persist and response `match`.
  */
 import {
-  buildCardHedgeSearchSetLabel,
+  buildCardHedgeCardSearchBody,
+  buildCardHedgeCardSearchString,
   cardNumberMatches,
+  catalogParallelImpliesBase,
   categoryFromSport,
   insertSetMatchesDescription,
   normLabel,
   parallelExactCatalogVariant,
   parallelScore,
+  extractCardHedgeSalesFromRow,
+  pickBestAmongExactVariantRows,
+  pickBestBaseVariantRow,
   stripSerialSuffix,
 } from '../_shared/cardhedge_text.ts';
 import {
@@ -71,6 +75,39 @@ function parseLogSampleLimit(): number {
 
 const LOG_TAG = 'cardhedge-search-cards';
 
+/** Echoed in API responses so clients can replay the upstream CardHedge POST (API key is header-only). */
+function buildCardhedgeRequestDebug(input: {
+  vaultToEdge: Record<string, unknown>;
+  setLabel: string;
+  upstreamPostBody: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    vault_to_edge: input.vaultToEdge,
+    cardhedge_api: {
+      url: CARD_SEARCH_URL,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': '<set in Supabase secrets — not echoed>',
+      },
+    },
+    cardhedge_post_body: input.upstreamPostBody,
+    cardhedge_search_query: input.setLabel,
+    allowed_api_parameters: [
+      'category',
+      'page',
+      'page_size',
+      'player',
+      'raw_images_only',
+      'rookie',
+      'search',
+      'set',
+    ],
+    replay_note:
+      'POST cardhedge_post_body as JSON to cardhedge_api.url with your X-API-Key header (same as CARDHEDGE_API_KEY on the edge).',
+  };
+}
+
 function clip(s: string, max: number): string {
   const t = s.replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
@@ -107,38 +144,8 @@ function strField(body: Record<string, unknown>, ...keys: string[]): string {
   return '';
 }
 
-/** CardHedge rows may use spaced keys; expose stable names for clients + persist. */
-function extractCardHedgeSales(row: Record<string, unknown>): {
-  sales_7d: number | null;
-  sales_30d: number | null;
-  gain: number | null;
-} {
-  const toNum = (v: unknown): number | null => {
-    if (typeof v === 'number' && Number.isFinite(v)) return v;
-    if (typeof v === 'string') {
-      const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
-      return Number.isFinite(n) ? n : null;
-    }
-    return null;
-  };
-  const pick = (...keys: string[]): number | null => {
-    for (const k of keys) {
-      if (Object.prototype.hasOwnProperty.call(row, k)) {
-        const n = toNum(row[k]);
-        if (n !== null) return n;
-      }
-    }
-    return null;
-  };
-  return {
-    sales_7d: pick('7 Day Sales', '7_Day_Sales', 'sales_7d', 'seven_day_sales', 'sevenDaySales'),
-    sales_30d: pick('30 Day Sales', '30_Day_Sales', 'sales_30d', 'thirty_day_sales', 'thirtyDaySales'),
-    gain: pick('gain', 'Gain'),
-  };
-}
-
 function searchRowToMatch(row: Record<string, unknown>) {
-  const sales = extractCardHedgeSales(row);
+  const sales = extractCardHedgeSalesFromRow(row);
   return {
     card_id: row.card_id,
     description: row.description,
@@ -294,15 +301,20 @@ Deno.serve(async (req) => {
       ? Math.min(100, Math.max(1, psRaw))
       : 100;
 
-    const setLabel = buildCardHedgeSearchSetLabel({
+    const searchQuery = buildCardHedgeCardSearchString({
+      player,
       year,
       releaseName,
-      category,
+      cardNumber: cardNumber || null,
+      setName: setName || null,
     });
 
-    if (setLabel.length < 2) {
+    if (searchQuery.length < 2) {
       return json(
-        { error: 'Could not build set label from year/release/category', details: { year, releaseName, category } },
+        {
+          error: 'Could not build CardHedge search string (need player + year/release/set)',
+          details: { year, releaseName, setName: setName || null, player },
+        },
         400,
       );
     }
@@ -310,12 +322,47 @@ Deno.serve(async (req) => {
     const minConfidence = parseMinConfidence();
     const maxPages = parseMaxSearchPages();
 
-    const upstreamBase: Record<string, unknown> = {
+    const rookieRaw = strField(body, 'rookie');
+    const rookie =
+      rookieRaw ||
+      (body.is_rookie === true || body.isRookie === true ? 'Rookie' : '');
+    const rawImagesOnly =
+      body.raw_images_only === true ||
+      body.rawImagesOnly === true ||
+      Deno.env.get('CARDHEDGE_SEARCH_RAW_IMAGES_ONLY')?.trim() === '1';
+
+    const upstreamBase = buildCardHedgeCardSearchBody({
       category,
-      page_size: pageSize,
-      set: setLabel,
       player,
-    };
+      year,
+      releaseName,
+      setName: setName || null,
+      cardNumber: cardNumber || null,
+      pageSize,
+      page: 1,
+      rawImagesOnly,
+      rookie: rookie || null,
+    });
+    // Drop page from base — loop adds per-page `page`.
+    const { page: _dropPage, ...upstreamBaseNoPage } = upstreamBase;
+
+    const cardhedgeRequestDebug = buildCardhedgeRequestDebug({
+      vaultToEdge: {
+        player,
+        year,
+        releaseName,
+        setName: setName || null,
+        cardNumber: cardNumber || null,
+        parallelName: parallelName || null,
+        category,
+        sport: sport || null,
+        page_size: pageSize,
+        persistMasterVariantId: persistMasterVariantId || null,
+        note: 'Vault fields above; only cardhedge_post_body is sent to CardHedge API.',
+      },
+      setLabel: searchQuery,
+      upstreamPostBody: upstreamBase,
+    });
 
     const logSample = parseLogSampleLimit();
 
@@ -328,7 +375,7 @@ Deno.serve(async (req) => {
     const perReqTimeoutMs = 20_000;
 
     for (let pageNum = 1; pageNum <= totalPages && pageNum <= maxPages; pageNum++) {
-      const requestBody = { ...upstreamBase, page: pageNum };
+      const requestBody = { ...upstreamBaseNoPage, page: pageNum };
       const requestBodyString = JSON.stringify(requestBody);
       // Exact POST JSON CardHedge receives (API key is only in headers, never logged here).
       console.log(
@@ -376,7 +423,12 @@ Deno.serve(async (req) => {
           }),
         );
         return json(
-          { error: 'CardHedge search failed', status: upstream.status, details: text.slice(0, 2000) },
+          {
+            error: 'CardHedge search failed',
+            status: upstream.status,
+            details: text.slice(0, 2000),
+            cardhedge_request: cardhedgeRequestDebug,
+          },
           502,
         );
       }
@@ -420,7 +472,7 @@ Deno.serve(async (req) => {
           year,
           release_name: releaseName,
           set_name: setName || null,
-          set: setLabel,
+          search: searchQuery,
           player,
           card_number: cardNumber || null,
           parallel: parallelName || null,
@@ -469,7 +521,7 @@ Deno.serve(async (req) => {
         reason: allCards.length === 0 ? 'no_match' : 'search_no_row_after_filter',
         confidence: null,
         resolved_via: 'card_search',
-        search_set: setLabel,
+        search_set: searchQuery,
         search_meta: {
           page_size: pageSize,
           max_pages_scanned: maxPages,
@@ -487,6 +539,7 @@ Deno.serve(async (req) => {
           after_insert_set_count: 0,
           rows: allCards,
         }),
+        cardhedge_request: cardhedgeRequestDebug,
       });
     }
 
@@ -498,7 +551,7 @@ Deno.serve(async (req) => {
         reason: 'search_no_row_after_filter',
         confidence: null,
         resolved_via: 'card_search',
-        search_set: setLabel,
+        search_set: searchQuery,
         search_meta: {
           page_size: pageSize,
           max_pages_scanned: maxPages,
@@ -516,43 +569,46 @@ Deno.serve(async (req) => {
           after_insert_set_count: 0,
           rows: byNumber,
         }),
+        cardhedge_request: cardhedgeRequestDebug,
       });
     }
 
-    const MIN_NONBASE_PARALLEL_SCORE = 22;
-
     let chosen: Record<string, unknown> | null = null;
     let alternateRows: Record<string, unknown>[] = [];
-    let parallelMatchMode: 'exact_variant' | 'fuzzy_best_no_alternates' | 'parallel_unspecified' =
-      'parallel_unspecified';
+    let parallelMatchMode:
+      | 'exact_variant'
+      | 'base_auto_pick'
+      | 'fuzzy_best_no_alternates'
+      | 'parallel_unspecified' = 'parallel_unspecified';
     let afterParallelExact = 0;
 
     if (!parallelName) {
-      const sorted = [...byInsertSet].sort((a, b) =>
-        String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''))
-      );
-      chosen = sorted[0] as Record<string, unknown>;
-      alternateRows = sorted.slice(1).slice(0, 24);
-      parallelMatchMode = 'parallel_unspecified';
+      const picked = pickBestBaseVariantRow(byInsertSet, setName || null);
+      chosen = picked.chosen;
+      alternateRows = picked.alternates;
+      parallelMatchMode = 'base_auto_pick';
     } else {
       const exactPool = byInsertSet.filter((row) => parallelExactCatalogVariant(parallelName, row));
       if (exactPool.length > 0) {
         afterParallelExact = exactPool.length;
-        const sorted = [...exactPool].sort((a, b) =>
-          String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''))
-        );
-        chosen = sorted[0] as Record<string, unknown>;
-        alternateRows = sorted.slice(1).slice(0, 24);
-        parallelMatchMode = 'exact_variant';
-      } else {
+        if (catalogParallelImpliesBase(parallelName)) {
+          const picked = pickBestBaseVariantRow(exactPool, setName || null);
+          chosen = picked.chosen;
+          alternateRows = picked.alternates;
+          parallelMatchMode = 'base_auto_pick';
+        } else {
+          const picked = pickBestAmongExactVariantRows(exactPool);
+          chosen = picked.chosen;
+          alternateRows = picked.alternates;
+          parallelMatchMode = 'exact_variant';
+        }
+      } else if (catalogParallelImpliesBase(parallelName)) {
         const ranked = [...byInsertSet].sort(
           (a, b) => parallelScore(parallelName, b) - parallelScore(parallelName, a),
         );
         const top = ranked[0] as Record<string, unknown>;
         const topScore = parallelScore(parallelName, top);
-        const expN = normLabel(stripSerialSuffix(parallelName));
-        const minScore = !expN || expN === 'base' ? 15 : MIN_NONBASE_PARALLEL_SCORE;
-        if (topScore < minScore) {
+        if (topScore < 15) {
           console.log(
             JSON.stringify({
               tag: LOG_TAG,
@@ -560,7 +616,7 @@ Deno.serve(async (req) => {
               matched: false,
               reason: 'no_exact_and_fuzzy_below_threshold',
               best_fuzzy_parallel_score: topScore,
-              threshold: minScore,
+              threshold: 15,
             }),
           );
           return json({
@@ -569,7 +625,7 @@ Deno.serve(async (req) => {
             reason: 'search_no_row_after_filter',
             confidence: null,
             resolved_via: 'card_search',
-            search_set: setLabel,
+            search_set: searchQuery,
             search_meta: {
               page_size: pageSize,
               max_pages_scanned: maxPages,
@@ -590,11 +646,51 @@ Deno.serve(async (req) => {
               rows: byInsertSet,
               match_mode: 'fuzzy_rejected_below_threshold',
             }),
+            cardhedge_request: cardhedgeRequestDebug,
           });
         }
         chosen = top;
         alternateRows = [];
         parallelMatchMode = 'fuzzy_best_no_alternates';
+      } else {
+        console.log(
+          JSON.stringify({
+            tag: LOG_TAG,
+            event: 'outcome',
+            matched: false,
+            reason: 'no_exact_parallel_match',
+            expected_parallel: stripSerialSuffix(parallelName),
+          }),
+        );
+        return json({
+          matched: false,
+          minConfidence,
+          reason: 'no_exact_parallel_match',
+          confidence: null,
+          resolved_via: 'card_search',
+          search_set: searchQuery,
+          search_meta: {
+            page_size: pageSize,
+            max_pages_scanned: maxPages,
+            total_pages_reported: totalPages,
+            upstream_count: upstreamCount,
+            cards_accumulated: allCards.length,
+            after_number_filter: byNumber.length,
+            after_insert_set_filter: byInsertSet.length,
+            after_parallel_exact_filter: 0,
+            parallel_match: 'exact_required_non_base',
+          },
+          expected_parallel: stripSerialSuffix(parallelName),
+          card_number: cardNumber || null,
+          parallel_debug: buildParallelDebugPayload({
+            requested_parallel: parallelName,
+            after_number_count: byNumber.length,
+            after_insert_set_count: byInsertSet.length,
+            rows: byInsertSet,
+            match_mode: 'exact_required_non_base',
+          }),
+          cardhedge_request: cardhedgeRequestDebug,
+        });
       }
     }
 
@@ -651,7 +747,7 @@ Deno.serve(async (req) => {
       minConfidence,
       confidence,
       resolved_via: 'card_search',
-      search_set: setLabel,
+            search_set: searchQuery,
       search_meta: {
         page_size: pageSize,
         max_pages_scanned: maxPages,
@@ -673,6 +769,7 @@ Deno.serve(async (req) => {
         rows: byInsertSet,
         match_mode: parallelMatchMode,
       }),
+      cardhedge_request: cardhedgeRequestDebug,
       ...(persistMasterVariantId ? { persisted_master } : {}),
     });
   } catch (e) {

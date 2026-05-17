@@ -1,3 +1,5 @@
+import { normalizePriceEntry } from './cardhedge_persist_master.ts';
+
 /** Strip trailing " /99" style print-run suffix from parallel labels (Vault or CardHedge `variant`). */
 export function stripSerialSuffix(s: string): string {
   return s.replace(/\s*\/\d+$/, '').trim();
@@ -31,9 +33,194 @@ export function parallelExactCatalogVariant(
 }
 
 /**
- * Fuzzy score for CardHedge `variant` when [parallelExactCatalogVariant] finds no rows.
- * Used only to pick a **single** best row for persist; [alternate_matches] stay empty in that path.
+ * Fuzzy score for CardHedge `variant` when **Base** has no [parallelExactCatalogVariant] rows.
+ * Not used for non-Base parallels (those require `v === exp` exactly).
  */
+/** Catalog parallel is Vault Base (looser CardHedge exact-match bucket). */
+export function catalogParallelImpliesBase(parallelName: string): boolean {
+  const exp = normLabel(stripSerialSuffix(parallelName));
+  return (
+    !exp ||
+    exp === 'base' ||
+    exp === 'base set' ||
+    exp === 'base parallel' ||
+    exp === 'base card' ||
+    exp === 'baseset' ||
+    exp === 'baseparallel'
+  );
+}
+
+const BASE_VARIANT_PENALTY_RE =
+  /\b(silver|gold|red|blue|green|purple|orange|pink|black|prizm|refractor|holo|mojo|wave|scope|velocity|shimmer|sparkle|ice|lazer|laser|disco|hyper|genesis|auto|patch|rc\b|rookie|ssp|numbered|\/\d+)\b/i;
+
+/**
+ * Rank CardHedge rows when several qualify as "Base" — prefer plain base variant +
+ * checklist description match; never surface alternates to the app.
+ */
+export function baseVariantPickScore(
+  row: Record<string, unknown>,
+  setName?: string | null,
+): number {
+  const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
+  let score = 0;
+  if (!v || v === 'base' || v === 'base set') score += 120;
+  else if (v === 'base card' || v === 'base parallel') score += 100;
+  else if (/\bbase\b/.test(v) && !BASE_VARIANT_PENALTY_RE.test(v)) score += 55;
+  else score += 8;
+
+  const desc = typeof row.description === 'string' ? normLabel(row.description) : '';
+  const set = normLabel(String(setName ?? '').trim());
+  if (set && !isVaultCanonicalBaseSetName(setName)) {
+    if (desc.includes(set)) score += 45;
+    const tokens = set.split(' ').filter((t) => t.length > 2);
+    let hits = 0;
+    for (const t of tokens) {
+      if (desc.includes(t)) hits++;
+    }
+    if (tokens.length > 0) {
+      score += Math.round((hits / tokens.length) * 30);
+    }
+  }
+
+  const prices = row.prices ?? row.current_prices;
+  if (Array.isArray(prices) && prices.length > 0) score += 20;
+
+  return score;
+}
+
+/** CardHedge sales / gain fields (spaced or snake_case keys). */
+export function extractCardHedgeSalesFromRow(row: Record<string, unknown>): {
+  sales_7d: number | null;
+  sales_30d: number | null;
+  gain: number | null;
+} {
+  const toNum = (v: unknown): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+      const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const pick = (...keys: string[]): number | null => {
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(row, k)) {
+        const n = toNum(row[k]);
+        if (n !== null) return n;
+      }
+    }
+    return null;
+  };
+  return {
+    sales_7d: pick('7 Day Sales', '7_Day_Sales', 'sales_7d', 'seven_day_sales', 'sevenDaySales'),
+    sales_30d: pick('30 Day Sales', '30_Day_Sales', 'sales_30d', 'thirty_day_sales', 'thirtyDaySales'),
+    gain: pick('gain', 'Gain'),
+  };
+}
+
+function pricesFingerprint(row: Record<string, unknown>): string {
+  const p = row.prices;
+  if (!Array.isArray(p)) return '';
+  const entries: { grade: string; price: number }[] = [];
+  for (const e of p) {
+    const n = normalizePriceEntry(e);
+    if (n) entries.push(n);
+  }
+  entries.sort((a, b) => a.grade.localeCompare(b.grade));
+  return JSON.stringify(entries);
+}
+
+/** Stable compare key for 7d/30d sales, gain, and grade price rows. */
+export function rowMarketFingerprint(row: Record<string, unknown>): string {
+  const sales = extractCardHedgeSalesFromRow(row);
+  return JSON.stringify({
+    sales_7d: sales.sales_7d,
+    sales_30d: sales.sales_30d,
+    gain: sales.gain,
+    prices: pricesFingerprint(row),
+  });
+}
+
+/** More populated market fields = richer CardHedge row. */
+export function rowMarketDetailScore(row: Record<string, unknown>): number {
+  const sales = extractCardHedgeSalesFromRow(row);
+  let score = 0;
+  if (sales.sales_7d != null) score += 12;
+  if (sales.sales_30d != null) score += 12;
+  if (sales.gain != null) score += 12;
+  const p = row.prices;
+  if (Array.isArray(p)) {
+    for (const e of p) {
+      if (normalizePriceEntry(e)) score += 18;
+    }
+  }
+  const img = typeof row.image === 'string' ? row.image.trim() : '';
+  if (img.length > 0) score += 6;
+  const desc = typeof row.description === 'string' ? row.description.trim() : '';
+  if (desc.length > 24) score += 4;
+  return score;
+}
+
+/**
+ * Multiple rows with the same exact `variant`: if 7d/30d/gain/prices all match, pick
+ * stably by `card_id`; otherwise pick the row with the most market detail.
+ */
+export function pickBestAmongExactVariantRows(
+  rows: Record<string, unknown>[],
+): { chosen: Record<string, unknown>; alternates: Record<string, unknown>[] } {
+  if (rows.length === 0) {
+    throw new Error('pickBestAmongExactVariantRows: empty pool');
+  }
+  if (rows.length === 1) {
+    return { chosen: rows[0]!, alternates: [] };
+  }
+
+  const fingerprints = rows.map((r) => rowMarketFingerprint(r));
+  const allSame = fingerprints.every((f) => f === fingerprints[0]);
+
+  if (allSame) {
+    const sorted = [...rows].sort((a, b) =>
+      String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''))
+    );
+    return { chosen: sorted[0]!, alternates: [] };
+  }
+
+  const ranked = [...rows].sort((a, b) => {
+    const ds = rowMarketDetailScore(b) - rowMarketDetailScore(a);
+    if (ds !== 0) return ds;
+    return String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''));
+  });
+  return { chosen: ranked[0]!, alternates: [] };
+}
+
+/** Single best Base row; [alternates] always empty. */
+export function pickBestBaseVariantRow(
+  rows: Record<string, unknown>[],
+  setName?: string | null,
+): { chosen: Record<string, unknown>; alternates: Record<string, unknown>[] } {
+  if (rows.length === 0) {
+    throw new Error('pickBestBaseVariantRow: empty pool');
+  }
+  const ranked = [...rows].sort((a, b) => {
+    const ds = baseVariantPickScore(b, setName) - baseVariantPickScore(a, setName);
+    if (ds !== 0) return ds;
+    return String(a.card_id ?? '').localeCompare(String(b.card_id ?? ''));
+  });
+  const topScore = baseVariantPickScore(ranked[0]!, setName);
+  const topTier = ranked.filter((r) => baseVariantPickScore(r, setName) === topScore);
+  if (topTier.length <= 1) {
+    return { chosen: ranked[0]!, alternates: [] };
+  }
+  const winnerVariant = normLabel(
+    stripSerialSuffix(typeof ranked[0]!.variant === 'string' ? ranked[0]!.variant : ''),
+  );
+  const sameVariant = topTier.filter((r) => {
+    const v = normLabel(stripSerialSuffix(typeof r.variant === 'string' ? r.variant : ''));
+    return v === winnerVariant;
+  });
+  return pickBestAmongExactVariantRows(sameVariant.length > 0 ? sameVariant : topTier);
+}
+
 export function parallelScore(parallelName: string, row: Record<string, unknown>): number {
   const exp = normLabel(stripSerialSuffix(parallelName));
   const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
@@ -44,6 +231,8 @@ export function parallelScore(parallelName: string, row: Record<string, unknown>
   }
 
   if (v === exp) return 100;
+
+  // Base-only fuzzy: never treat `red` as matching `red stars`.
   if (v.includes(exp) || exp.includes(v)) return 92;
 
   const tokens = exp.split(' ').filter((t) => t.length > 2);
@@ -109,6 +298,72 @@ export function buildCardHedgeSearchSetLabel(input: {
     }
   }
   return out;
+}
+
+/**
+ * CardHedge `search` string: **Player + Year + Release + Number + Set**
+ * (e.g. `Jalen Hurts 2025 Donruss Football #GK-JHS Gridiron Kings`).
+ * Parallel is resolved post-fetch on `variant`, not in this string.
+ */
+export function buildCardHedgeCardSearchString(input: {
+  player: string;
+  year?: number | null;
+  releaseName?: string | null;
+  cardNumber?: string | null;
+  setName?: string | null;
+}): string {
+  const parts: string[] = [];
+  const player = input.player.trim();
+  if (player) parts.push(player);
+  const rel = (input.releaseName ?? '').trim();
+  if (typeof input.year === 'number' && Number.isFinite(input.year)) {
+    const yStr = String(Math.trunc(input.year));
+    if (!rel.toLowerCase().startsWith(yStr.toLowerCase())) {
+      parts.push(yStr);
+    }
+  }
+  if (rel) parts.push(rel);
+  const cn = (input.cardNumber ?? '').trim().replace(/^#/, '');
+  if (cn) parts.push(`#${cn}`);
+  const set = (input.setName ?? '').trim();
+  if (set && !isVaultCanonicalBaseSetName(set)) parts.push(set);
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * POST `/v1/cards/card-search` body — `category`, `page`, `page_size`, and `search`
+ * (plus optional `raw_images_only`, `rookie`). No separate `player` / `set` fields.
+ */
+export function buildCardHedgeCardSearchBody(input: {
+  category: string;
+  player: string;
+  year?: number | null;
+  releaseName?: string | null;
+  setName?: string | null;
+  cardNumber?: string | null;
+  pageSize?: number;
+  page?: number;
+  rawImagesOnly?: boolean;
+  rookie?: string | null;
+}): Record<string, unknown> {
+  const category = input.category.trim();
+  const search = buildCardHedgeCardSearchString({
+    player: input.player,
+    year: input.year,
+    releaseName: input.releaseName,
+    cardNumber: input.cardNumber,
+    setName: input.setName,
+  });
+  const body: Record<string, unknown> = {
+    category,
+    search,
+    page_size: Math.min(100, Math.max(1, input.pageSize ?? 100)),
+    page: Math.max(1, input.page ?? 1),
+  };
+  if (input.rawImagesOnly === true) body.raw_images_only = true;
+  const rookie = input.rookie?.trim();
+  if (rookie) body.rookie = rookie;
+  return body;
 }
 
 /**

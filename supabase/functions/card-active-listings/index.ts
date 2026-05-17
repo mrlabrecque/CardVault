@@ -133,12 +133,15 @@ function browseRowToFilterShape(row: EbayActiveListingRow) {
     buying_format: row.buying_format_raw,
     link: row.url,
     image: row.image_url,
+    item_end_date: row.itemEndDate,
   };
 }
 
 function listingTypeActive(buying_format: string): string {
-  const fmt = (buying_format ?? '').toLowerCase();
-  return fmt.includes('auction') ? 'AUCTION' : 'FIXED_PRICE';
+  const fmt = (buying_format ?? '').toUpperCase();
+  if (fmt.includes('BEST_OFFER')) return 'BEST_OFFER';
+  if (fmt.includes('AUCTION')) return 'AUCTION';
+  return 'FIXED_PRICE';
 }
 
 function buildFallbackQueries(params: {
@@ -368,6 +371,7 @@ Deno.serve(async (req) => {
     listing_type: listingTypeActive(row.buying_format),
     url: row.link,
     image_url: row.image,
+    itemEndDate: row.item_end_date ?? null,
   }));
 
   return new Response(

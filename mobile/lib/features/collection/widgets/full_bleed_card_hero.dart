@@ -51,8 +51,7 @@ class HeroDetails {
 }
 
 /// Burgundy gradient hero with full-bleed top — sits behind a transparent
-/// AppBar. Used by both [ItemDetailScreen] (user copy) and
-/// [MasterCardDetailScreen] (catalog).
+/// AppBar. Used by [CardDetailScreen] (collection + catalog detail).
 class FullBleedHero extends StatelessWidget {
   const FullBleedHero({
     super.key,

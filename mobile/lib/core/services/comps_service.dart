@@ -1,5 +1,6 @@
-import 'dart:convert' show jsonDecode;
+import 'dart:convert' show jsonDecode, JsonEncoder;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
@@ -257,7 +258,7 @@ class CompsService {
     );
   }
 
-  /// Same hydration path as [MasterCardDetailScreen._syncGuidePricesForMaster]:
+  /// Same hydration path as [CardDetailScreen] catalog guide sync:
   /// when `cardhedge_id` is set and `current_prices` has fresh rows, no network call;
   /// when stale (>24h), hydrates from CardHedge; otherwise invokes catalog search.
   ///
@@ -823,9 +824,9 @@ class CompsService {
     }
   }
 
-  /// Catalog card-search via Edge `cardhedge-search-cards`. Upstream `set` is
-  /// [year] (if not already leading [releaseName]) + [releaseName] + category;
-  /// [setName] filters on API `description`; [parallelName] on `variant`.
+  /// Catalog card-search via Edge `cardhedge-search-cards`. CardHedge POST body:
+  /// `category`, `page`, `page_size`, `search` where search =
+  /// Player + Year + Release + #Number + Set. [setName] / [parallelName] filter after fetch.
   /// Trailing print-run suffixes on [parallelName] (e.g. ` /149`) are stripped in
   /// the client before the request, aligned with [stripSerialSuffix] on the edge.
   /// Edge scans multiple pages, then card # + insert + parallel scoring.
@@ -844,28 +845,19 @@ class CompsService {
     String? persistMasterVariantId,
     int pageSize = 100,
   }) async {
-    final body = <String, dynamic>{
-      'player': player.trim(),
-      'page_size': pageSize.clamp(1, 100),
-    };
-    if (year != null) body['year'] = year;
-    final r = releaseName?.trim();
-    if (r != null && r.isNotEmpty) body['releaseName'] = r;
-    final s = setName?.trim();
-    if (s != null && s.isNotEmpty) body['setName'] = s;
-    final sp = sport?.trim();
-    if (sp != null && sp.isNotEmpty) body['sport'] = sp;
-    final c = category?.trim();
-    if (c != null && c.isNotEmpty) body['category'] = c;
-    final cn = cardNumber?.trim();
-    if (cn != null && cn.isNotEmpty) body['cardNumber'] = cn;
-    final pRaw = parallelName?.trim();
-    if (pRaw != null && pRaw.isNotEmpty) {
-      final p = stripCatalogParallelSerialSuffix(pRaw);
-      if (p.isNotEmpty) body['parallelName'] = p;
-    }
-    final pid = persistMasterVariantId?.trim();
-    if (pid != null && pid.isNotEmpty) body['persistMasterVariantId'] = pid;
+    final body = buildGuidePriceCatalogRequestBody(
+      player: player,
+      year: year,
+      releaseName: releaseName,
+      setName: setName,
+      sport: sport,
+      category: category,
+      cardNumber: cardNumber,
+      parallelName: parallelName,
+      persistMasterVariantId: persistMasterVariantId,
+      pageSize: pageSize,
+    );
+    _logGuidePriceCatalogRequest(body);
 
     try {
       final res = await _supabase.functions.invoke(
@@ -876,34 +868,98 @@ class CompsService {
       if (raw is Map) {
         final map = Map<String, dynamic>.from(raw);
         if (res.status == 200) {
-          return GuideCatalogMatchPayload.fromJson(map);
+          final payload = GuideCatalogMatchPayload.fromJson(map).withVaultRequestToEdge(body);
+          _logGuidePriceCatalogCardhedgeRequest(payload.cardhedgeRequest);
+          return payload;
         }
         final err = map['error']?.toString() ?? 'Request failed';
         final hint = map['hint']?.toString();
         final details = map['details']?.toString();
+        final chr = map['cardhedge_request'];
+        if (chr is Map) {
+          _logGuidePriceCatalogCardhedgeRequest(Map<String, dynamic>.from(chr));
+        }
         if (details != null && details.isNotEmpty) {
           final short = details.length > 200 ? '${details.substring(0, 200)}…' : details;
           return GuideCatalogMatchPayload.error(
             hint != null && hint.isNotEmpty ? '$err: $short\n$hint' : '$err: $short',
-          );
+          ).withVaultRequestToEdge(body);
         }
         return GuideCatalogMatchPayload.error(
           hint != null && hint.isNotEmpty ? '$err\n$hint' : err,
-        );
+        ).withVaultRequestToEdge(body);
       }
       return GuideCatalogMatchPayload.error('Catalog search: unexpected response (${res.status})');
     } on FunctionException catch (e) {
       final details = e.details;
       if (details is Map) {
         final m = Map<String, dynamic>.from(details);
+        final chr = m['cardhedge_request'];
+        if (chr is Map) {
+          _logGuidePriceCatalogCardhedgeRequest(Map<String, dynamic>.from(chr));
+        }
         final err = m['error']?.toString() ?? 'Request failed';
-        return GuideCatalogMatchPayload.error('$err (${e.status})');
+        return GuideCatalogMatchPayload.error('$err (${e.status})').withVaultRequestToEdge(body);
       }
-      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})');
+      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})')
+          .withVaultRequestToEdge(body);
     } catch (e) {
-      return GuideCatalogMatchPayload.error(e.toString());
+      return GuideCatalogMatchPayload.error(e.toString()).withVaultRequestToEdge(body);
     }
   }
+}
+
+/// Body for `cardhedge-search-cards` (shared by [CompsService.searchGuidePriceCatalog]).
+Map<String, dynamic> buildGuidePriceCatalogRequestBody({
+  required String player,
+  int? year,
+  String? releaseName,
+  String? setName,
+  String? sport,
+  String? category,
+  String? cardNumber,
+  String? parallelName,
+  String? persistMasterVariantId,
+  int pageSize = 100,
+}) {
+  final body = <String, dynamic>{
+    'player': player.trim(),
+    'page_size': pageSize.clamp(1, 100),
+  };
+  if (year != null) body['year'] = year;
+  final r = releaseName?.trim();
+  if (r != null && r.isNotEmpty) body['releaseName'] = r;
+  final s = setName?.trim();
+  if (s != null && s.isNotEmpty) body['setName'] = s;
+  final sp = sport?.trim();
+  if (sp != null && sp.isNotEmpty) body['sport'] = sp;
+  final c = category?.trim();
+  if (c != null && c.isNotEmpty) body['category'] = c;
+  final cn = cardNumber?.trim();
+  if (cn != null && cn.isNotEmpty) body['cardNumber'] = cn;
+  final pRaw = parallelName?.trim();
+  if (pRaw != null && pRaw.isNotEmpty) {
+    final p = stripCatalogParallelSerialSuffix(pRaw);
+    if (p.isNotEmpty) body['parallelName'] = p;
+  }
+  final pid = persistMasterVariantId?.trim();
+  if (pid != null && pid.isNotEmpty) body['persistMasterVariantId'] = pid;
+  return body;
+}
+
+void _logGuidePriceCatalogRequest(Map<String, dynamic> vaultToEdge) {
+  if (!kDebugMode) return;
+  debugPrint(
+    '[cardhedge-search] vault→edge:\n${const JsonEncoder.withIndent('  ').convert(vaultToEdge)}',
+  );
+}
+
+void _logGuidePriceCatalogCardhedgeRequest(Map<String, dynamic>? cardhedgeRequest) {
+  if (!kDebugMode || cardhedgeRequest == null) return;
+  debugPrint(
+    '[cardhedge-search] CardHedge API (from edge):\n'
+    '${const JsonEncoder.withIndent('  ').convert(cardhedgeRequest)}',
+  );
 }
 
 /// Key for [soldCompsExistForGradeProvider].

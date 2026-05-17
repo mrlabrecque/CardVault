@@ -5,7 +5,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/utils/currency_format.dart';
 import '../../../core/utils/comps_outlier_utils.dart';
@@ -14,6 +13,7 @@ import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/app_segmented_control.dart';
+import '../../../core/widgets/inline_notice_container.dart';
 import 'card_active_listings_section.dart';
 import 'card_comps_section.dart';
 import 'comps_market_filters.dart';
@@ -32,6 +32,7 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
     this.showDbSoldCompsWhenAvailable = false,
     this.guidePriceCardId,
     this.titleGain,
+    this.soldCompsCompactPrompt = false,
   });
 
   final String masterCardId;
@@ -49,6 +50,9 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
   final String? guidePriceCardId;
   /// `gain` on `master_card_definitions` — shown next to the section title (↑/↓).
   final double? titleGain;
+
+  /// Catalog browse: hide grade/date selectors and range row; auto-fetch comps on load.
+  final bool soldCompsCompactPrompt;
 
   @override
   ConsumerState<MarketAnalysisSection> createState() => _MarketAnalysisSectionState();
@@ -71,6 +75,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   double? _compsGradeLow;
   double? _compsGradeHigh;
   int _compsSelectedDays = 0;
+  bool _guideSoldCompsEmpty = false;
 
   bool get _useGuideSoldCompsPath {
     if (widget.skipScraperSoldComps) return true;
@@ -79,10 +84,13 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     return avgs.values.any((v) => v != null && v > 0);
   }
 
-  /// Grade passed to [CardCompsSection] — omitted while a fetch runs so the child
-  /// does not race the edge write and flash the empty-state info box.
-  String? get _mountedCompsGrade =>
-      _guideSoldCompsLoading ? null : (_guideSoldCompsGrade ?? _autoDbCompsGrade);
+  /// Grade passed to [CardCompsSection]. Hidden only on the first fetch (nothing mounted yet)
+  /// so the child does not race the edge write; keep mounted during refresh/scroll rebuilds.
+  String? get _mountedCompsGrade {
+    final mounted = _guideSoldCompsGrade ?? _autoDbCompsGrade;
+    if (_guideSoldCompsLoading && mounted == null) return null;
+    return mounted;
+  }
 
   String _defaultCompsGrade() {
     final g = widget.initialGrade.trim();
@@ -109,13 +117,23 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   @override
   void didUpdateWidget(covariant MarketAnalysisSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!guideGradePriceMapsEqual(
+      oldWidget.guideRecentPrices,
+      widget.guideRecentPrices,
+    )) {
+      unawaited(_refreshCachedCompsGrades());
+    }
     if (oldWidget.masterCardId != widget.masterCardId ||
         oldWidget.initialGrade != widget.initialGrade ||
         oldWidget.showDbSoldCompsWhenAvailable != widget.showDbSoldCompsWhenAvailable ||
         oldWidget.skipScraperSoldComps != widget.skipScraperSoldComps ||
         oldWidget.refreshVersion != widget.refreshVersion ||
-        oldWidget.guideRecentPrices != widget.guideRecentPrices) {
+        oldWidget.guidePriceCardId != widget.guidePriceCardId ||
+        oldWidget.soldCompsCompactPrompt != widget.soldCompsCompactPrompt) {
       _compsGradeSelection = _defaultCompsGrade();
+      _guideSoldCompsEmpty = false;
+      _guideSoldCompsGrade = null;
+      _autoDbCompsGrade = null;
       Future.microtask(() async {
         await _refreshCachedCompsGrades();
         if (mounted) await _tryAutoShowDbComps();
@@ -133,29 +151,53 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     final id = widget.masterCardId.trim();
     if (id.isEmpty) return;
     final g = widget.initialGrade.trim().isEmpty ? 'Raw' : widget.initialGrade.trim();
+    final mountedGrade = _guideSoldCompsGrade ?? _autoDbCompsGrade;
+    if (!_guideSoldCompsLoading &&
+        mountedGrade != null &&
+        currentPricesGradeLooselyEqual(mountedGrade, g)) {
+      return;
+    }
     final gen = ++_dbCompsProbeGen;
     final has = await ref.read(compsServiceProvider).hasSoldCompsForGrade(id, g);
     if (!mounted || gen != _dbCompsProbeGen) return;
     if (!has) {
-      setState(() {
-        _autoDbCompsGrade = null;
-        _compsGradeLow = null;
-        _compsGradeHigh = null;
-      });
+      if (_guideGradeMenuEnabled) {
+        await _loadCompsForGrade(
+          g,
+          showErrorSnackBar: !widget.soldCompsCompactPrompt,
+        );
+      } else if (mounted) {
+        setState(() {
+          _autoDbCompsGrade = null;
+          _compsGradeLow = null;
+          _compsGradeHigh = null;
+        });
+      }
       return;
     }
     await _applyTrimmedCompsRangeForGrade(g, gen: gen);
   }
 
-  Future<void> _loadCompsForGrade(String grade) async {
+  Future<void> _loadCompsForGrade(
+    String grade, {
+    bool showErrorSnackBar = true,
+  }) async {
     if (!_guideGradeMenuEnabled) return;
     final hid = widget.guidePriceCardId!.trim();
     final g = grade.trim().isEmpty ? 'Raw' : grade.trim();
+    if (!_guideSoldCompsLoading &&
+        _guideSoldCompsGrade != null &&
+        currentPricesGradeLooselyEqual(_guideSoldCompsGrade!, g)) {
+      return;
+    }
     setState(() {
       _compsGradeSelection = g;
       _guideSoldCompsLoading = true;
       _guideSoldCompsFetchingGrade = g;
-      _guideSoldCompsGrade = null;
+      if (!currentPricesGradeLooselyEqual(_guideSoldCompsGrade ?? '', g)) {
+        _guideSoldCompsGrade = null;
+      }
+      _guideSoldCompsEmpty = false;
       _compsGradeLow = null;
       _compsGradeHigh = null;
     });
@@ -167,18 +209,21 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     if (!mounted) return;
     await _refreshCachedCompsGrades();
     if (!mounted) return;
+    final hasSales = result != null && result.saleCount > 0;
     setState(() {
       _guideSoldCompsLoading = false;
       _guideSoldCompsFetchingGrade = null;
-      if (result != null) {
+      if (hasSales) {
         _guideSoldCompsGrade = g;
+        _guideSoldCompsEmpty = false;
         _guideSoldCompsNonce++;
-        if (result.saleCount > 0) {
-          unawaited(_applyTrimmedCompsRangeForGrade(g));
-        }
+        unawaited(_applyTrimmedCompsRangeForGrade(g));
+      } else {
+        _guideSoldCompsGrade = null;
+        _guideSoldCompsEmpty = true;
       }
     });
-    if (result == null && mounted) {
+    if (!hasSales && showErrorSnackBar && mounted) {
       AdaptiveSnackBar.show(
         context,
         message: 'Could not load sold comps for $g.',
@@ -244,7 +289,8 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
   bool get _guideGradeMenuEnabled =>
       widget.guidePriceCardId != null && widget.guidePriceCardId!.trim().isNotEmpty;
 
-  bool get _hoistCompsDateFilter => _useGuideSoldCompsPath && _guideGradeMenuEnabled;
+  bool get _hoistCompsDateFilter =>
+      _useGuideSoldCompsPath && _guideGradeMenuEnabled && !widget.soldCompsCompactPrompt;
 
   bool get _gradeFilterActive =>
       !currentPricesGradeLooselyEqual(_compsGradeSelection, _defaultCompsGrade());
@@ -286,24 +332,34 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       label: _titleSemanticsLabel(),
       excludeSemantics: true,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text('Market Analysis', style: baseStyle),
           const SizedBox(width: 8),
-          Icon(
-            strong ? (positive ? Icons.trending_up : Icons.trending_down) : Icons.trending_flat,
-            size: 22,
-            color: accent,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            strong ? '${positive ? '+' : ''}${g.toStringAsFixed(1)}%' : '${g.toStringAsFixed(1)}%',
-            style: baseStyle?.copyWith(
-              color: accent,
-              fontWeight: FontWeight.w800,
-              fontSize: (baseStyle.fontSize ?? 22) * 0.92,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                strong
+                    ? (positive ? Icons.trending_up : Icons.trending_down)
+                    : Icons.trending_flat,
+                size: 22,
+                color: accent,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                strong
+                    ? '${positive ? '+' : ''}${g.toStringAsFixed(1)}%'
+                    : '${g.toStringAsFixed(1)}%',
+                style: baseStyle?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w800,
+                  fontSize: (baseStyle.fontSize ?? 22) * 0.92,
+                  height: 1.0,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -348,7 +404,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_guideGradeMenuEnabled) ...[
+                    if (_guideGradeMenuEnabled && !widget.soldCompsCompactPrompt) ...[
                       _GuideSoldCompsGradeBar(
                         gradeLabel: _guideSoldCompsLoading
                             ? (_guideSoldCompsFetchingGrade ?? _compsGradeSelection)
@@ -362,18 +418,20 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                         selectedDays: _compsSelectedDays,
                         onSelectedDaysChanged: (days) =>
                             setState(() => _compsSelectedDays = days),
-                        onLoadComps: _mountedCompsGrade == null && !_guideSoldCompsLoading
-                            ? () => _loadCompsForGrade(_compsGradeSelection)
-                            : null,
                       ),
                       const SizedBox(height: 12),
                     ],
-                    if (_guideSoldCompsLoading &&
-                        _guideSoldCompsFetchingGrade != null) ...[
+                    if (_guideSoldCompsLoading) ...[
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 20),
                         child: Center(child: CardFanLoader(size: 72)),
                       ),
+                    ],
+                    if (_guideSoldCompsEmpty &&
+                        !_guideSoldCompsLoading &&
+                        _mountedCompsGrade == null) ...[
+                      _SoldCompsNotFoundBanner(gradeLabel: _compsGradeSelection),
+                      const SizedBox(height: 12),
                     ],
                     if (_mountedCompsGrade != null) ...[
                       CardCompsSection(
@@ -386,10 +444,17 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                             _guideSoldCompsGrade != null ? _guideSoldCompsNonce : widget.refreshVersion,
                         externalLoading: widget.externalLoading,
                         embeddedGuideSoldComps: true,
+                        suppressFilterChrome: widget.soldCompsCompactPrompt,
                         selectedDays: _hoistCompsDateFilter ? _compsSelectedDays : null,
                         onSelectedDaysChanged: _hoistCompsDateFilter
                             ? (days) => setState(() => _compsSelectedDays = days)
                             : null,
+                      ),
+                    ] else if (!_guideSoldCompsLoading && !_guideGradeMenuEnabled) ...[
+                      const _GuideSoldCompsEmptyPanel(
+                        message:
+                            'Sold comps for this card need a CardHedge guide link. '
+                            'Try opening from catalog after guide prices sync, or check another parallel.',
                       ),
                     ],
                   ],
@@ -531,6 +596,30 @@ class _GuideRecentPriceSlot extends StatelessWidget {
   }
 }
 
+/// Shown when guide sold comps were fetched but returned no sales for the grade.
+class _SoldCompsNotFoundBanner extends StatelessWidget {
+  const _SoldCompsNotFoundBanner({required this.gradeLabel});
+
+  final String gradeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final grade = gradeLabel.trim().isEmpty ? 'Raw' : gradeLabel.trim();
+
+    return InlineNoticeContainer(
+      icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.58)),
+      child: Text(
+        'No sold comps were found for $grade.',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              height: 1.35,
+              color: colors.onSurface.withValues(alpha: 0.75),
+            ),
+      ),
+    );
+  }
+}
+
 /// Sold comps grade header — distinct from [Recent Prices] (menu, not a second grade row).
 class _GuideSoldCompsGradeBar extends StatelessWidget {
   const _GuideSoldCompsGradeBar({
@@ -543,7 +632,6 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
     this.low,
     this.high,
     this.loading = false,
-    this.onLoadComps,
   });
 
   final String gradeLabel;
@@ -555,7 +643,6 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
   final double? low;
   final double? high;
   final bool loading;
-  final VoidCallback? onLoadComps;
 
   @override
   Widget build(BuildContext context) {
@@ -620,19 +707,28 @@ class _GuideSoldCompsGradeBar extends StatelessWidget {
             ),
           ],
         ),
-        if (onLoadComps != null) ...[
-          const SizedBox(height: 10),
-          AdaptiveButton.child(
-            onPressed: onLoadComps,
-            style: AdaptiveButtonStyle.filled,
-            color: AppTheme.primary,
-            child: const Text(
-              'Load sold comps',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
       ],
+    );
+  }
+}
+
+class _GuideSoldCompsEmptyPanel extends StatelessWidget {
+  const _GuideSoldCompsEmptyPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: colors.onSurface.withValues(alpha: 0.58),
+              height: 1.35,
+            ),
+      ),
     );
   }
 }

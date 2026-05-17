@@ -7,10 +7,9 @@ import '../../../core/models/comp.dart';
 import '../../../core/services/comps_service.dart';
 import '../../../core/utils/adaptive_ui.dart';
 import '../../../core/utils/guide_grade_prices.dart';
-import '../../../core/widgets/adaptive_list_card.dart';
 import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/modal_sheet_scaffold.dart';
-import 'market_listing_row.dart';
+import 'market_listings_list.dart' show MarketListingRow, MarketListingsList, formatMarketListingMetaDate;
 
 /// Active eBay listings for a catalog variant (`master_card_definitions.id`).
 ///
@@ -292,6 +291,52 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
     return (inferred: inferred, delta: delta);
   }
 
+  MarketListingRow _activeListingRow(ActiveListing listing, ColorScheme colors) {
+    final (chipBg, chipFg, chipLabel) = switch (listing.listingType) {
+      'AUCTION' => (
+          const Color(0xFF3B82F6).withValues(alpha: 0.15),
+          const Color(0xFF2563EB),
+          'Auction',
+        ),
+      'BEST_OFFER' => (
+          const Color(0xFFF97316).withValues(alpha: 0.2),
+          const Color(0xFFF97316),
+          'Best Offer',
+        ),
+      _ => (
+          const Color(0xFF16A34A).withValues(alpha: 0.15),
+          const Color(0xFF15803D),
+          'Buy It Now',
+        ),
+    };
+
+    final vs = _vsGuideForListing(listing);
+    final delta = vs.delta;
+    final vsPair = delta != null ? _dealTierColors(delta.tier, colors) : null;
+
+    final ends = listing.endsAt;
+    final metaLine = ends != null
+        ? 'Listing ends: ${formatMarketListingMetaDate(ends)}'
+        : null;
+
+    return MarketListingRow(
+      title: listing.title,
+      price: listing.price,
+      chipLabel: chipLabel,
+      chipBackground: chipBg,
+      chipForeground: chipFg,
+      imageUrl: listing.imageUrl,
+      url: listing.url,
+      metaLine: metaLine,
+      gradeTag: vs.inferred.displayTag,
+      vsGuideDealTier: delta?.tier,
+      vsGuideLabel: delta?.label,
+      vsGuideForeground: vsPair?.fg,
+      vsGuideCompareGrade: delta != null ? vs.inferred.displayTag : null,
+      vsGuidePriceMissing: _hasGuidePrices && delta == null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -381,24 +426,24 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
                   ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  _selectedDealTiers.isNotEmpty && _hasGuidePrices
-                      ? '${displayItems.length} of ${items.length} listing${items.length == 1 ? '' : 's'}'
-                      : '${items.length} listing${items.length == 1 ? '' : 's'}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.60),
-                      ),
-                ),
-              ),
-              if (_hasGuidePrices) ...[
-                const SizedBox(width: 4),
-                IconButton(
+        if (displayItems.isEmpty && items.isNotEmpty && _hasGuidePrices)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'No listings match this deal filter.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurface.withValues(alpha: 0.55),
+                    fontStyle: FontStyle.italic,
+                  ),
+            ),
+          ),
+        MarketListingsList(
+          countLabel: _selectedDealTiers.isNotEmpty && _hasGuidePrices
+              ? '${displayItems.length} of ${items.length} listing${items.length == 1 ? '' : 's'}'
+              : '${items.length} listing${items.length == 1 ? '' : 's'}',
+          countPadding: EdgeInsets.zero,
+          headerTrailing: _hasGuidePrices
+              ? IconButton(
                   tooltip: 'Filter by deal',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
@@ -412,63 +457,11 @@ class _CardActiveListingsSectionState extends ConsumerState<CardActiveListingsSe
                         ? colors.primary
                         : colors.onSurface.withValues(alpha: 0.72),
                   ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        if (displayItems.isEmpty && items.isNotEmpty && _hasGuidePrices)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'No listings match this deal filter.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurface.withValues(alpha: 0.55),
-                    fontStyle: FontStyle.italic,
-                  ),
-            ),
-          ),
-        ListView.separated(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: displayItems.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => AdaptiveListCard(
-            margin: EdgeInsets.zero,
-            child: Builder(
-              builder: (context) {
-                final listing = displayItems[i];
-                final chipBg = listing.isAuction
-                    ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                    : const Color(0xFF16A34A).withValues(alpha: 0.15);
-                final chipFg = listing.isAuction
-                    ? const Color(0xFF2563EB)
-                    : const Color(0xFF15803D);
-
-                final vs = _vsGuideForListing(listing);
-                final delta = vs.delta;
-                final vsPair = delta != null ? _dealTierColors(delta.tier, colors) : null;
-
-                return MarketListingRow(
-                  title: listing.title,
-                  price: listing.price,
-                  chipLabel: listing.isAuction ? 'Auction' : 'Buy It Now',
-                  chipBackground: chipBg,
-                  chipForeground: chipFg,
-                  imageUrl: listing.imageUrl,
-                  url: listing.url,
-                  listingConditionTag: vs.inferred.displayTag,
-                  vsGuideDealTier: delta?.tier,
-                  vsGuideLabel: delta?.label,
-                  vsGuideForeground: vsPair?.fg,
-                  vsGuideBackground: vsPair?.bg,
-                  vsGuideCompareGrade: delta != null ? vs.inferred.displayTag : null,
-                  vsGuidePriceMissing: _hasGuidePrices && delta == null,
-                );
-              },
-            ),
-          ),
+                )
+              : null,
+          rows: [
+            for (final listing in displayItems) _activeListingRow(listing, colors),
+          ],
         ),
       ],
     );

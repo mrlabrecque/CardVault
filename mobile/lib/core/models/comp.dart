@@ -81,6 +81,7 @@ class ActiveListing {
   final String? url;
   final String? imageUrl;
   final String? ebayItemId;
+  final DateTime? endsAt;
 
   const ActiveListing({
     required this.title,
@@ -89,6 +90,7 @@ class ActiveListing {
     this.url,
     this.imageUrl,
     this.ebayItemId,
+    this.endsAt,
   });
 
   factory ActiveListing.fromJson(Map<String, dynamic> json) {
@@ -99,7 +101,17 @@ class ActiveListing {
       url: json['url']?.toString(),
       imageUrl: json['image_url']?.toString(),
       ebayItemId: json['ebay_item_id']?.toString(),
+      endsAt: _parseOptionalDate(
+        json['itemEndDate'] ?? json['item_end_date'] ?? json['ends_at'],
+      ),
     );
+  }
+
+  static DateTime? _parseOptionalDate(dynamic raw) {
+    if (raw == null) return null;
+    final s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s);
   }
 
   static double _parseActivePrice(dynamic raw) {
@@ -109,4 +121,6 @@ class ActiveListing {
   }
 
   bool get isAuction => listingType == 'AUCTION';
+
+  bool get isBestOffer => listingType == 'BEST_OFFER';
 }

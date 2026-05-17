@@ -11,9 +11,11 @@ export type EbayActiveListingRow = {
   price: number;
   /** Raw buying option label from Browse API (wishlist matcher uses substring checks). */
   buying_format_raw: string;
-  listing_type: 'AUCTION' | 'FIXED_PRICE';
+  listing_type: 'AUCTION' | 'FIXED_PRICE' | 'BEST_OFFER';
   url: string | null;
   image_url: string | null;
+  /** ISO-8601 from Browse API `itemEndDate` when present. */
+  itemEndDate: string | null;
 };
 
 let ebayTokenCache: { token: string; expiresAt: number } | null = null;
@@ -55,9 +57,33 @@ export async function getEbayAccessToken(): Promise<string> {
   return token;
 }
 
-function listingTypeFromBuyingOptions(buyingOptions: unknown): 'AUCTION' | 'FIXED_PRICE' {
-  const raw = Array.isArray(buyingOptions) ? String(buyingOptions[0] ?? '') : String(buyingOptions ?? '');
-  return raw.toLowerCase().includes('auction') ? 'AUCTION' : 'FIXED_PRICE';
+function buyingOptionsTokens(buyingOptions: unknown): string[] {
+  if (!Array.isArray(buyingOptions)) {
+    const s = String(buyingOptions ?? '').trim();
+    return s ? [s] : [];
+  }
+  return buyingOptions.map((o) => String(o ?? '').trim()).filter(Boolean);
+}
+
+/** Honors full eBay `buyingOptions` array (e.g. `AUCTION` + `BEST_OFFER`). */
+function listingTypeFromBuyingOptions(
+  buyingOptions: unknown,
+): 'AUCTION' | 'FIXED_PRICE' | 'BEST_OFFER' {
+  const opts = buyingOptionsTokens(buyingOptions).map((o) => o.toUpperCase());
+  const hasBestOffer = opts.some((o) => o === 'BEST_OFFER' || o.includes('BEST_OFFER'));
+  const hasAuction = opts.some((o) => o === 'AUCTION' || o.includes('AUCTION'));
+  if (hasBestOffer) return 'BEST_OFFER';
+  if (hasAuction) return 'AUCTION';
+  return 'FIXED_PRICE';
+}
+
+function readBrowseItemEndDate(raw: unknown): string | null {
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw.trim();
+  if (raw != null && typeof raw === 'object') {
+    const v = (raw as { value?: unknown }).value;
+    if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+  }
+  return null;
 }
 
 /** Search active (buy-it-now / auction) listings; returns [] on failure. */
@@ -91,15 +117,16 @@ export async function fetchActiveListingsBrowse(
     const sourceItems = Array.isArray(data?.itemSummaries) ? data.itemSummaries : [];
     return sourceItems
       .map((p: any) => {
-        const buyingRaw = Array.isArray(p.buyingOptions) ? String(p.buyingOptions[0] ?? '') : String(p.buyingOptions ?? '');
+        const buyingTokens = buyingOptionsTokens(p.buyingOptions);
         return {
           ebay_item_id: p.itemId ?? null,
           title: p.title ?? '',
           price: Number.parseFloat(String(p.price?.value ?? 0)),
-          buying_format_raw: buyingRaw,
+          buying_format_raw: buyingTokens.join(','),
           listing_type: listingTypeFromBuyingOptions(p.buyingOptions),
           url: p.itemWebUrl ?? null,
           image_url: p.image?.imageUrl ?? null,
+          itemEndDate: readBrowseItemEndDate(p.itemEndDate),
         } satisfies EbayActiveListingRow;
       })
       .filter((row: EbayActiveListingRow) => row.price > 0 && row.title);

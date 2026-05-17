@@ -13,7 +13,7 @@ import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
 import 'comps_market_filters.dart';
-import 'market_listing_row.dart';
+import 'market_listings_list.dart' show MarketListingRow, MarketListingsList, formatMarketListingMetaDate;
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -28,6 +28,7 @@ class CardCompsSection extends ConsumerStatefulWidget {
     /// When set with [onSelectedDaysChanged], the date filter is rendered by the parent.
     this.selectedDays,
     this.onSelectedDaysChanged,
+    this.suppressFilterChrome = false,
   });
 
   final String masterCardId;
@@ -37,6 +38,8 @@ class CardCompsSection extends ConsumerStatefulWidget {
   final bool embeddedGuideSoldComps;
   final int? selectedDays;
   final ValueChanged<int>? onSelectedDaysChanged;
+  /// Hides the date-range row (e.g. catalog detail after load).
+  final bool suppressFilterChrome;
 
   @override
   ConsumerState<CardCompsSection> createState() => _CardCompsSectionState();
@@ -66,7 +69,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   @override
   void initState() {
     super.initState();
-    _fetchComps();
+    // Parent [MarketAnalysisSection] already fetched guide comps; read DB quietly.
+    _loading = !widget.embeddedGuideSoldComps;
+    _fetchComps(silent: widget.embeddedGuideSoldComps);
     _syncLoadingTicker();
   }
 
@@ -85,7 +90,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
       return;
     }
     if (oldWidget.refreshVersion != widget.refreshVersion) {
-      _fetchComps();
+      _fetchComps(
+        silent: widget.embeddedGuideSoldComps && _allComps.isNotEmpty,
+      );
     }
   }
 
@@ -131,14 +138,16 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     });
   }
 
-  Future<void> _fetchComps() async {
+  Future<void> _fetchComps({bool silent = false}) async {
     if (_fetchInProgress) {
       _compsFetchQueued = true;
       return;
     }
     _fetchInProgress = true;
-    setState(() => _loading = true);
-    _syncLoadingTicker();
+    if (!silent) {
+      setState(() => _loading = true);
+      _syncLoadingTicker();
+    }
     try {
       var comps = await ref.read(compsServiceProvider).getMasterCardComps(
             widget.masterCardId,
@@ -172,7 +181,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         setState(() => _loading = false);
         _syncLoadingTicker();
         if (runAgain) {
-          unawaited(_fetchComps());
+          unawaited(_fetchComps(silent: widget.embeddedGuideSoldComps && _allComps.isNotEmpty));
         }
       }
     }
@@ -196,17 +205,6 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   CompsOutlierStats get _outlierStats => CompsOutlierStats.fromComps(_filteredComps);
 
   List<Comp> get _compsForStats => CompsOutlierStats.includedComps(_filteredComps);
-
-  String _formatCompDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = DateTime(now.year, now.month, now.day - 1);
-    final compDay = DateTime(dt.year, dt.month, dt.day);
-
-    if (compDay == today) return 'Today';
-    if (compDay == yesterday) return 'Yesterday';
-    return '${dt.month}/${dt.day}/${dt.year}';
-  }
 
   double? _getGradeAverage(String grade) {
     final comps = _allComps
@@ -283,6 +281,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
     if (_allComps.isEmpty) {
       if (widget.embeddedGuideSoldComps) {
+        if (_fetchInProgress) {
+          return const SizedBox.shrink();
+        }
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           decoration: BoxDecoration(
@@ -371,7 +372,7 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
               ),
             ),
           ),
-        if (!_dateFilterRenderedByParent)
+        if (!_dateFilterRenderedByParent && !widget.suppressFilterChrome)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -435,19 +436,6 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
           ),
         ],
 
-        // Filtered comps list
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              _listingsCountLabel(outlierStats),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurface.withValues(alpha: 0.60),
-                  ),
-            ),
-          ),
-        ),
         if (_filteredComps.isEmpty)
           InlineNoticeContainer(
             icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.60)),
@@ -473,50 +461,49 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
             ),
           )
         else
-          ListView.separated(
-            shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _filteredComps.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => AdaptiveListCard(
-              margin: EdgeInsets.zero,
-              child: Builder(
-                builder: (context) {
-                  final comp = _filteredComps[i];
-                  final excluded = outlierStats.isOutlier(i);
-                  final chipBg = switch (comp.saleType) {
-                    SaleType.auction => const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                    SaleType.bestOffer => const Color(0xFFF97316).withValues(alpha: 0.2),
-                    _ => const Color(0xFF16A34A).withValues(alpha: 0.15),
-                  };
-                  final chipFg = switch (comp.saleType) {
-                    SaleType.auction => const Color(0xFF2563EB),
-                    SaleType.bestOffer => const Color(0xFFF97316),
-                    _ => const Color(0xFF15803D),
-                  };
-                  final chipLabel = switch (comp.saleType) {
-                    SaleType.auction => 'Auction',
-                    SaleType.bestOffer => 'Best Offer',
-                    _ => 'Buy It Now',
-                  };
-                  final subtitle = comp.soldAt != null ? _formatCompDate(comp.soldAt!) : '—';
-                  return MarketListingRow(
-                    title: comp.title,
-                    price: comp.price,
-                    chipLabel: chipLabel,
-                    chipBackground: chipBg,
-                    chipForeground: chipFg,
-                    subtitle: subtitle,
-                    imageUrl: comp.imageUrl,
-                    url: comp.url,
-                    excludedFromStats: excluded,
-                  );
-                },
-              ),
-            ),
+          MarketListingsList(
+            countLabel: _listingsCountLabel(outlierStats),
+            rows: [
+              for (var i = 0; i < _filteredComps.length; i++)
+                _compListingRow(_filteredComps[i], outlierStats.isOutlier(i)),
+            ],
           ),
       ],
+    );
+  }
+
+  MarketListingRow _compListingRow(Comp comp, bool excluded) {
+    final chipBg = switch (comp.saleType) {
+      SaleType.auction => const Color(0xFF3B82F6).withValues(alpha: 0.15),
+      SaleType.bestOffer => const Color(0xFFF97316).withValues(alpha: 0.2),
+      _ => const Color(0xFF16A34A).withValues(alpha: 0.15),
+    };
+    final chipFg = switch (comp.saleType) {
+      SaleType.auction => const Color(0xFF2563EB),
+      SaleType.bestOffer => const Color(0xFFF97316),
+      _ => const Color(0xFF15803D),
+    };
+    final chipLabel = switch (comp.saleType) {
+      SaleType.auction => 'Auction',
+      SaleType.bestOffer => 'Best Offer',
+      _ => 'Buy It Now',
+    };
+    final grade = (comp.grade ?? _selectedGrade).trim();
+    final metaLine = comp.soldAt != null
+        ? 'Sold on: ${formatMarketListingMetaDate(comp.soldAt!)}'
+        : null;
+
+    return MarketListingRow(
+      title: comp.title,
+      price: comp.price,
+      chipLabel: chipLabel,
+      chipBackground: chipBg,
+      chipForeground: chipFg,
+      metaLine: metaLine,
+      imageUrl: comp.imageUrl,
+      url: comp.url,
+      excludedFromStats: excluded,
+      gradeTag: grade.isEmpty ? 'Raw' : grade,
     );
   }
 

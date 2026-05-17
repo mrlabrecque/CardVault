@@ -233,6 +233,20 @@ bool guideCurrentPricesAreStale(DateTime? newestFetchedAt, {DateTime? now}) {
 bool guideGradeMapHasAnyPrice(Map<String, double?> m) =>
     m.values.any((v) => v != null && v > 0);
 
+/// Value equality for guide price maps (ignores key order).
+bool guideGradePriceMapsEqual(
+  Map<String, double?>? a,
+  Map<String, double?>? b,
+) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return a == b;
+  if (a.length != b.length) return false;
+  for (final e in a.entries) {
+    if (!b.containsKey(e.key) || b[e.key] != e.value) return false;
+  }
+  return true;
+}
+
 /// True when [a] and [b] refer to the same slab label (spacing / case insensitive).
 bool currentPricesGradeLooselyEqual(String a, String b) {
   final na = a.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
