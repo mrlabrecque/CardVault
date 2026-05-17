@@ -51,7 +51,7 @@ class MarketAnalysisSection extends ConsumerStatefulWidget {
   /// `gain` on `master_card_definitions` — shown next to the section title (↑/↓).
   final double? titleGain;
 
-  /// Catalog browse: hide grade/date selectors and range row; auto-fetch comps on load.
+  /// Catalog detail: quieter comps fetch (no error snackbars); grade/range/date row still shown.
   final bool soldCompsCompactPrompt;
 
   @override
@@ -290,7 +290,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       widget.guidePriceCardId != null && widget.guidePriceCardId!.trim().isNotEmpty;
 
   bool get _hoistCompsDateFilter =>
-      _useGuideSoldCompsPath && _guideGradeMenuEnabled && !widget.soldCompsCompactPrompt;
+      _useGuideSoldCompsPath && _guideGradeMenuEnabled;
 
   bool get _gradeFilterActive =>
       !currentPricesGradeLooselyEqual(_compsGradeSelection, _defaultCompsGrade());
@@ -404,7 +404,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_guideGradeMenuEnabled && !widget.soldCompsCompactPrompt) ...[
+                    if (_guideGradeMenuEnabled) ...[
                       _GuideSoldCompsGradeBar(
                         gradeLabel: _guideSoldCompsLoading
                             ? (_guideSoldCompsFetchingGrade ?? _compsGradeSelection)
@@ -419,7 +419,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                         onSelectedDaysChanged: (days) =>
                             setState(() => _compsSelectedDays = days),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 4),
                     ],
                     if (_guideSoldCompsLoading) ...[
                       const Padding(
@@ -444,7 +444,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                             _guideSoldCompsGrade != null ? _guideSoldCompsNonce : widget.refreshVersion,
                         externalLoading: widget.externalLoading,
                         embeddedGuideSoldComps: true,
-                        suppressFilterChrome: widget.soldCompsCompactPrompt,
+                        suppressFilterChrome: _hoistCompsDateFilter,
                         selectedDays: _hoistCompsDateFilter ? _compsSelectedDays : null,
                         onSelectedDaysChanged: _hoistCompsDateFilter
                             ? (days) => setState(() => _compsSelectedDays = days)
@@ -453,8 +453,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                     ] else if (!_guideSoldCompsLoading && !_guideGradeMenuEnabled) ...[
                       const _GuideSoldCompsEmptyPanel(
                         message:
-                            'Sold comps for this card need a CardHedge guide link. '
-                            'Try opening from catalog after guide prices sync, or check another parallel.',
+                            'No recent sales found',
                       ),
                     ],
                   ],
@@ -502,7 +501,7 @@ class _GuideRecentPricesSection extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              'Latest guide values from CardHedge — not sold-comp averages.',
+              'Latest sold values - not averages.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.onSurface.withValues(alpha: 0.55),
                     fontSize: 12,

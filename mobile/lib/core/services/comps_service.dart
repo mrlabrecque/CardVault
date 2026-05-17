@@ -1,6 +1,4 @@
-import 'dart:convert' show jsonDecode, JsonEncoder;
-
-import 'package:flutter/foundation.dart';
+import 'dart:convert' show jsonDecode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_service.dart';
@@ -857,8 +855,6 @@ class CompsService {
       persistMasterVariantId: persistMasterVariantId,
       pageSize: pageSize,
     );
-    _logGuidePriceCatalogRequest(body);
-
     try {
       final res = await _supabase.functions.invoke(
         'cardhedge-search-cards',
@@ -868,43 +864,32 @@ class CompsService {
       if (raw is Map) {
         final map = Map<String, dynamic>.from(raw);
         if (res.status == 200) {
-          final payload = GuideCatalogMatchPayload.fromJson(map).withVaultRequestToEdge(body);
-          _logGuidePriceCatalogCardhedgeRequest(payload.cardhedgeRequest);
-          return payload;
+          return GuideCatalogMatchPayload.fromJson(map);
         }
         final err = map['error']?.toString() ?? 'Request failed';
         final hint = map['hint']?.toString();
         final details = map['details']?.toString();
-        final chr = map['cardhedge_request'];
-        if (chr is Map) {
-          _logGuidePriceCatalogCardhedgeRequest(Map<String, dynamic>.from(chr));
-        }
         if (details != null && details.isNotEmpty) {
           final short = details.length > 200 ? '${details.substring(0, 200)}…' : details;
           return GuideCatalogMatchPayload.error(
             hint != null && hint.isNotEmpty ? '$err: $short\n$hint' : '$err: $short',
-          ).withVaultRequestToEdge(body);
+          );
         }
         return GuideCatalogMatchPayload.error(
           hint != null && hint.isNotEmpty ? '$err\n$hint' : err,
-        ).withVaultRequestToEdge(body);
+        );
       }
       return GuideCatalogMatchPayload.error('Catalog search: unexpected response (${res.status})');
     } on FunctionException catch (e) {
       final details = e.details;
       if (details is Map) {
         final m = Map<String, dynamic>.from(details);
-        final chr = m['cardhedge_request'];
-        if (chr is Map) {
-          _logGuidePriceCatalogCardhedgeRequest(Map<String, dynamic>.from(chr));
-        }
         final err = m['error']?.toString() ?? 'Request failed';
-        return GuideCatalogMatchPayload.error('$err (${e.status})').withVaultRequestToEdge(body);
+        return GuideCatalogMatchPayload.error('$err (${e.status})');
       }
-      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})')
-          .withVaultRequestToEdge(body);
+      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})');
     } catch (e) {
-      return GuideCatalogMatchPayload.error(e.toString()).withVaultRequestToEdge(body);
+      return GuideCatalogMatchPayload.error(e.toString());
     }
   }
 }
@@ -945,21 +930,6 @@ Map<String, dynamic> buildGuidePriceCatalogRequestBody({
   final pid = persistMasterVariantId?.trim();
   if (pid != null && pid.isNotEmpty) body['persistMasterVariantId'] = pid;
   return body;
-}
-
-void _logGuidePriceCatalogRequest(Map<String, dynamic> vaultToEdge) {
-  if (!kDebugMode) return;
-  debugPrint(
-    '[cardhedge-search] vault→edge:\n${const JsonEncoder.withIndent('  ').convert(vaultToEdge)}',
-  );
-}
-
-void _logGuidePriceCatalogCardhedgeRequest(Map<String, dynamic>? cardhedgeRequest) {
-  if (!kDebugMode || cardhedgeRequest == null) return;
-  debugPrint(
-    '[cardhedge-search] CardHedge API (from edge):\n'
-    '${const JsonEncoder.withIndent('  ').convert(cardhedgeRequest)}',
-  );
 }
 
 /// Key for [soldCompsExistForGradeProvider].

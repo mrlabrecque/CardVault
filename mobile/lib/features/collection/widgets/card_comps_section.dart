@@ -419,11 +419,21 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
         if (chartPoints.length >= 2) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+            padding: EdgeInsets.fromLTRB(
+              0,
+              widget.embeddedGuideSoldComps ? 0 : 8,
+              0,
+              8,
+            ),
             child: AdaptiveListCard(
               margin: EdgeInsets.zero,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  widget.embeddedGuideSoldComps ? 8 : 12,
+                  12,
+                  8,
+                ),
                 child: SizedBox(
                   height: 148,
                   child: _PriceChart(
@@ -813,8 +823,9 @@ class _PriceChart extends StatelessWidget {
   /// Mean price of all sold comps in the selected grade + date window (listings, not daily points).
   final double? listingsAverage;
 
+  /// One x-axis label per calendar day (first point of each day in the series).
   bool _showBottomDateLabel(int index) {
-    if (index <= 0 || index >= points.length - 1) return true;
+    if (index == 0) return true;
     return !_isSameCalendarDay(points[index].soldAt, points[index - 1].soldAt);
   }
 
@@ -944,22 +955,23 @@ class _PriceChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              interval: 1,
               getTitlesWidget: (value, meta) {
-                final index = value.toInt();
+                final index = value.round();
                 if (index < 0 || index >= points.length) return const SizedBox.shrink();
                 if (!_showBottomDateLabel(index)) return const SizedBox.shrink();
                 final date = points[index].soldAt;
                 final month = date.month.toString().padLeft(2, '0');
                 final day = date.day.toString().padLeft(2, '0');
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     '$month/$day',
                     style: axisLabelStyle,
                   ),
                 );
               },
-              reservedSize: 30,
+              reservedSize: 26,
             ),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),

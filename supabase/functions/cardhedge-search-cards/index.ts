@@ -75,39 +75,6 @@ function parseLogSampleLimit(): number {
 
 const LOG_TAG = 'cardhedge-search-cards';
 
-/** Echoed in API responses so clients can replay the upstream CardHedge POST (API key is header-only). */
-function buildCardhedgeRequestDebug(input: {
-  vaultToEdge: Record<string, unknown>;
-  setLabel: string;
-  upstreamPostBody: Record<string, unknown>;
-}): Record<string, unknown> {
-  return {
-    vault_to_edge: input.vaultToEdge,
-    cardhedge_api: {
-      url: CARD_SEARCH_URL,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': '<set in Supabase secrets — not echoed>',
-      },
-    },
-    cardhedge_post_body: input.upstreamPostBody,
-    cardhedge_search_query: input.setLabel,
-    allowed_api_parameters: [
-      'category',
-      'page',
-      'page_size',
-      'player',
-      'raw_images_only',
-      'rookie',
-      'search',
-      'set',
-    ],
-    replay_note:
-      'POST cardhedge_post_body as JSON to cardhedge_api.url with your X-API-Key header (same as CARDHEDGE_API_KEY on the edge).',
-  };
-}
-
 function clip(s: string, max: number): string {
   const t = s.replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
@@ -195,39 +162,6 @@ async function ensureChosenRowHasPrices(
     }),
   );
   return { ...chosen, prices: backfill };
-}
-
-/** Rows the app can show so you can compare catalog parallel vs CardHedge `variant` strings. */
-function buildParallelDebugPayload(input: {
-  requested_parallel: string;
-  after_number_count: number;
-  after_insert_set_count: number;
-  rows: Record<string, unknown>[];
-  row_limit?: number;
-  match_mode?: string | null;
-}): Record<string, unknown> {
-  const lim = input.row_limit ?? 120;
-  const rows: Record<string, unknown>[] = [];
-  for (let i = 0; i < Math.min(lim, input.rows.length); i++) {
-    const r = input.rows[i]!;
-    const n = r.number;
-    rows.push({
-      card_id: typeof r.card_id === 'string' ? r.card_id : null,
-      number: n === null || n === undefined ? null : String(n),
-      variant: typeof r.variant === 'string' ? r.variant : null,
-    });
-  }
-  const out: Record<string, unknown> = {
-    requested_parallel: input.requested_parallel || null,
-    after_number_count: input.after_number_count,
-    after_insert_set_count: input.after_insert_set_count,
-    variant_rows_shown: rows.length,
-    rows,
-  };
-  if (input.match_mode != null && input.match_mode !== '') {
-    out.match_mode = input.match_mode;
-  }
-  return out;
 }
 
 Deno.serve(async (req) => {
@@ -346,24 +280,6 @@ Deno.serve(async (req) => {
     // Drop page from base — loop adds per-page `page`.
     const { page: _dropPage, ...upstreamBaseNoPage } = upstreamBase;
 
-    const cardhedgeRequestDebug = buildCardhedgeRequestDebug({
-      vaultToEdge: {
-        player,
-        year,
-        releaseName,
-        setName: setName || null,
-        cardNumber: cardNumber || null,
-        parallelName: parallelName || null,
-        category,
-        sport: sport || null,
-        page_size: pageSize,
-        persistMasterVariantId: persistMasterVariantId || null,
-        note: 'Vault fields above; only cardhedge_post_body is sent to CardHedge API.',
-      },
-      setLabel: searchQuery,
-      upstreamPostBody: upstreamBase,
-    });
-
     const logSample = parseLogSampleLimit();
 
     const seenIds = new Set<string>();
@@ -377,17 +293,6 @@ Deno.serve(async (req) => {
     for (let pageNum = 1; pageNum <= totalPages && pageNum <= maxPages; pageNum++) {
       const requestBody = { ...upstreamBaseNoPage, page: pageNum };
       const requestBodyString = JSON.stringify(requestBody);
-      // Exact POST JSON CardHedge receives (API key is only in headers, never logged here).
-      console.log(
-        JSON.stringify({
-          tag: LOG_TAG,
-          event: 'cardhedge_upstream_post_body',
-          url: CARD_SEARCH_URL,
-          page: pageNum,
-          json: requestBody,
-          json_string: requestBodyString,
-        }),
-      );
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), perReqTimeoutMs);
@@ -427,7 +332,6 @@ Deno.serve(async (req) => {
             error: 'CardHedge search failed',
             status: upstream.status,
             details: text.slice(0, 2000),
-            cardhedge_request: cardhedgeRequestDebug,
           },
           502,
         );
@@ -533,13 +437,6 @@ Deno.serve(async (req) => {
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
-        parallel_debug: buildParallelDebugPayload({
-          requested_parallel: parallelName,
-          after_number_count: 0,
-          after_insert_set_count: 0,
-          rows: allCards,
-        }),
-        cardhedge_request: cardhedgeRequestDebug,
       });
     }
 
@@ -563,13 +460,6 @@ Deno.serve(async (req) => {
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
-        parallel_debug: buildParallelDebugPayload({
-          requested_parallel: parallelName,
-          after_number_count: byNumber.length,
-          after_insert_set_count: 0,
-          rows: byNumber,
-        }),
-        cardhedge_request: cardhedgeRequestDebug,
       });
     }
 
@@ -639,14 +529,6 @@ Deno.serve(async (req) => {
             },
             expected_parallel: stripSerialSuffix(parallelName),
             card_number: cardNumber || null,
-            parallel_debug: buildParallelDebugPayload({
-              requested_parallel: parallelName,
-              after_number_count: byNumber.length,
-              after_insert_set_count: byInsertSet.length,
-              rows: byInsertSet,
-              match_mode: 'fuzzy_rejected_below_threshold',
-            }),
-            cardhedge_request: cardhedgeRequestDebug,
           });
         }
         chosen = top;
@@ -682,14 +564,6 @@ Deno.serve(async (req) => {
           },
           expected_parallel: stripSerialSuffix(parallelName),
           card_number: cardNumber || null,
-          parallel_debug: buildParallelDebugPayload({
-            requested_parallel: parallelName,
-            after_number_count: byNumber.length,
-            after_insert_set_count: byInsertSet.length,
-            rows: byInsertSet,
-            match_mode: 'exact_required_non_base',
-          }),
-          cardhedge_request: cardhedgeRequestDebug,
         });
       }
     }
@@ -762,14 +636,6 @@ Deno.serve(async (req) => {
       },
       match: searchRowToMatch(chosen),
       alternate_matches,
-      parallel_debug: buildParallelDebugPayload({
-        requested_parallel: parallelName,
-        after_number_count: byNumber.length,
-        after_insert_set_count: byInsertSet.length,
-        rows: byInsertSet,
-        match_mode: parallelMatchMode,
-      }),
-      cardhedge_request: cardhedgeRequestDebug,
       ...(persistMasterVariantId ? { persisted_master } : {}),
     });
   } catch (e) {

@@ -1291,6 +1291,26 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     return !(atBrowseRoot || atSearchRoot);
   }
 
+  /// Browse catalog loading: hide segment row + filter chrome; center fan loader on body.
+  bool get _catalogBlockingLoader {
+    if (_restoringState) return true;
+    if (_scanBootstrapEntry != null && _scanResolving) return true;
+    if (_mode != _CatalogMode.browse) return false;
+    return switch (_catalogStep) {
+      _CatalogStep.browsing =>
+        _browseLoading && _browseResults.isEmpty,
+      _CatalogStep.sets => _browseSetsLoading || _lazyImporting,
+      _ => false,
+    };
+  }
+
+  Widget _catalogBlockingLoaderBody(ColorScheme colors) {
+    return ColoredBox(
+      color: colors.surface,
+      child: const Center(child: CardFanLoader()),
+    );
+  }
+
   String _appBarTitle() {
     if (_mode == _CatalogMode.search) {
       if (_searchSelectedCard != null && (_searchParallels.isEmpty || _searchParallelSelected)) {
@@ -1497,11 +1517,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     Widget? secondary;
     double secondaryHeight = 0;
 
-    if (_restoringState || (_scanBootstrapEntry != null && _scanResolving)) {
-      return (
-        child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
-        heightEstimate: segmentEst,
-      );
+    if (_catalogBlockingLoader) {
+      return (child: const SizedBox.shrink(), heightEstimate: 0);
     }
 
     if (_mode == _CatalogMode.search) {
@@ -1641,7 +1658,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final sticky = _catalogStickyChrome(colors);
+    final blockingLoader = _catalogBlockingLoader;
+    final sticky = blockingLoader
+        ? (child: const SizedBox.shrink(), heightEstimate: 0.0)
+        : _catalogStickyChrome(colors);
     return StickyChromeScaffold(
       stickyHeightEstimate: sticky.heightEstimate,
       stickyChrome: sticky.child,
@@ -1650,29 +1670,29 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         useBlurBackground: true,
         leading: (_catalogStep == _CatalogStep.sportPicker && _mode == _CatalogMode.browse) ||
                  (_mode == _CatalogMode.search && _searchSelectedCard == null) ||
-                 (_scanBootstrapEntry != null && _scanResolving)
+                 (_scanBootstrapEntry != null && _scanResolving) ||
+                 blockingLoader
             ? null
             : AppBarGlassCircleButton(
                 onPressed: _handleStepBack,
                 icon: Icons.chevron_left,
               ),
         centerTitle: false,
-        title: Text(
-          _appBarTitle(),
-          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
-        ),
-        actions: appBarShellTrailingActions(
-          context,
-          omitShellTrailing: _omitCatalogShellTrailing,
-        ),
+        title: blockingLoader
+            ? const SizedBox.shrink()
+            : Text(
+                _appBarTitle(),
+                style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
+              ),
+        actions: blockingLoader
+            ? null
+            : appBarShellTrailingActions(
+                context,
+                omitShellTrailing: _omitCatalogShellTrailing,
+              ),
       ),
       bodyBuilder: (context, contentTopInset) {
-        if (_restoringState || (_scanBootstrapEntry != null && _scanResolving)) {
-          return Padding(
-            padding: EdgeInsets.only(top: contentTopInset),
-            child: const Center(child: CardFanLoader()),
-          );
-        }
+        if (blockingLoader) return _catalogBlockingLoaderBody(colors);
         if (_mode == _CatalogMode.browse) {
           return switch (_catalogStep) {
             _CatalogStep.sportPicker => _buildSportPickerView(colors, contentTopInset),
@@ -1700,12 +1720,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }).toList();
     final listPadTop = contentTopInset;
 
-    if (_browseLoading && _browseResults.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.only(top: listPadTop),
-        child: const Center(child: CardFanLoader()),
-      );
-    }
     if (filtered.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: listPadTop),
@@ -1820,12 +1834,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }).toList();
 
     final listPadTop = contentTopInset;
-    if (_browseSetsLoading || _lazyImporting) {
-      return Padding(
-        padding: EdgeInsets.only(top: listPadTop),
-        child: const Center(child: CardFanLoader()),
-      );
-    }
     if (filtered.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: listPadTop),

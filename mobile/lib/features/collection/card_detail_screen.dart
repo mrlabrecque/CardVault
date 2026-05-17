@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
@@ -140,7 +139,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   Map<String, double?>? _stableGuideRecentPrices;
   GuideCatalogMatchedRow? _guideMatchRowPick;
   MasterCard? _refreshedMaster;
-  String? _guideSyncDebugJson;
 
   bool get _openedFromScanResults => _catalog.openedFromScanResults ?? false;
   bool get _openedFromScanSingleRoute => _catalog.openedFromScanSingleRoute ?? false;
@@ -224,7 +222,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         _linkedGradePricesFromDb = null;
         _guideMatchRowPick = null;
         _refreshedMaster = null;
-        _guideSyncDebugJson = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_syncGuidePricesForMaster());
@@ -283,21 +280,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   void _applyCardhedgeSearchResult(GuideCatalogMatchPayload payload, {MasterCard? master}) {
     if (master != null) _refreshedMaster = master;
-    final hasLink = _resolvedCardhedgeId(master: master, payload: payload).isNotEmpty;
     setState(() {
       _guideMatchResult = payload;
       _guidePricesLoading = false;
-      _guideSyncDebugJson = hasLink ? null : _guidePayloadDebugJson(payload);
     });
-  }
-
-  String _guidePayloadDebugJson(GuideCatalogMatchPayload? payload) {
-    if (payload == null) {
-      return const JsonEncoder.withIndent('  ').convert({
-        'error': 'No CardHedge response (search did not return)',
-      });
-    }
-    return const JsonEncoder.withIndent('  ').convert(payload.toJson());
   }
 
   void _finishGuideSync({
@@ -306,13 +292,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     GuideCatalogMatchPayload? matchResult,
   }) {
     if (master != null) _refreshedMaster = master;
-    final hasLink = _resolvedCardhedgeId(master: master, payload: matchResult).isNotEmpty;
     setState(() {
       _linkedGradePricesFromDb = linkedPrices;
       if (matchResult != null) _guideMatchResult = matchResult;
       if (matchResult == null) _guideMatchRowPick = null;
       _guidePricesLoading = false;
-      _guideSyncDebugJson = hasLink ? null : _guidePayloadDebugJson(matchResult);
     });
   }
 
@@ -539,7 +523,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (!hasCh) {
       return 'This variant has no catalog match yet — no guide price in the app. Try again from the catalog card page.';
     }
-    return 'No guide price for this slab yet. Pull to refresh on Collection or reopen this card in a moment.';
+    return 'No recent prices.';
   }
 
   void _close(BuildContext context) {
@@ -1192,7 +1176,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     double topInset,
     double bottomPad,
   ) {
-    final overlayLoading = _guidePricesLoading || _guideSyncDebugJson != null;
+    final overlayLoading = _guidePricesLoading;
 
     return Stack(
       fit: StackFit.expand,
@@ -1343,11 +1327,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
 
     if (_isCatalog && !hasGuideCatalogLink) {
-      if (!_guidePricesLoading && _guideSyncDebugJson == null) {
+      if (!_guidePricesLoading) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
-            'Market data will appear once this variant is linked to CardHedge.',
+            'Market data will appear once this variant is linked.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colors.onSurface.withValues(alpha: 0.60),
                 ),
@@ -1372,81 +1356,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   Widget _buildGuideSyncOverlay(BuildContext context, ColorScheme colors) {
-    if (_guideSyncDebugJson != null) {
-      return Positioned.fill(
-        child: Material(
-          color: colors.surface,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'No CardHedge link yet',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'CardHedge response (no link saved yet):',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurface.withValues(alpha: 0.65),
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: colors.outline.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(10),
-                        child: SelectableText(
-                          _guideSyncDebugJson!,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontFamily: 'Menlo',
-                                fontFamilyFallback: const ['Courier', 'monospace'],
-                                fontSize: 11,
-                                height: 1.35,
-                              ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  AdaptiveButton.child(
-                    onPressed: () {
-                      setState(() {
-                        _guidePricesLoading = true;
-                        _guideSyncDebugJson = null;
-                      });
-                      unawaited(_syncGuidePricesForMaster());
-                    },
-                    style: AdaptiveButtonStyle.filled,
-                    color: AppTheme.primary,
-                    child: const Text(
-                      'Retry CardHedge link',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     return Positioned.fill(
       child: Material(
         color: colors.surface,

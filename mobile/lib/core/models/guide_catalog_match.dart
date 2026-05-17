@@ -15,9 +15,6 @@ class GuideCatalogMatchPayload {
     this.match,
     this.errorMessage,
     this.persistedMaster,
-    this.parallelDebug,
-    this.cardhedgeRequest,
-    this.vaultRequestToEdge,
   });
 
   final bool matched;
@@ -38,15 +35,6 @@ class GuideCatalogMatchPayload {
   /// Present when catalog search was invoked with persist id: Edge persisted to Postgres
   /// and returned this row (keys match `MasterCard.fromJson` in `cards_service`).
   final Map<String, dynamic>? persistedMaster;
-
-  /// Edge `parallel_debug`: candidate rows (number + variant + card_id) after filters.
-  final Map<String, dynamic>? parallelDebug;
-
-  /// Edge `cardhedge_request`: vault→edge params + exact POST body for CardHedge API replay.
-  final Map<String, dynamic>? cardhedgeRequest;
-
-  /// Client body sent to `cardhedge-search-cards` (not from edge JSON).
-  final Map<String, dynamic>? vaultRequestToEdge;
 
   bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
 
@@ -69,12 +57,6 @@ class GuideCatalogMatchPayload {
     Map<String, dynamic>? persisted;
     final pm = json['persisted_master'];
     if (pm is Map) persisted = Map<String, dynamic>.from(pm);
-    Map<String, dynamic>? parallelDebug;
-    final pd = json['parallel_debug'];
-    if (pd is Map) parallelDebug = Map<String, dynamic>.from(pd);
-    Map<String, dynamic>? cardhedgeRequest;
-    final chr = json['cardhedge_request'];
-    if (chr is Map) cardhedgeRequest = Map<String, dynamic>.from(chr);
 
     return GuideCatalogMatchPayload(
       matched: matched,
@@ -94,31 +76,6 @@ class GuideCatalogMatchPayload {
       match: matchMap != null ? GuideCatalogMatchedRow.fromJson(matchMap) : null,
       errorMessage: json['error'] as String?,
       persistedMaster: persisted,
-      parallelDebug: parallelDebug,
-      cardhedgeRequest: cardhedgeRequest,
-    );
-  }
-
-  GuideCatalogMatchPayload withVaultRequestToEdge(Map<String, dynamic> vault) {
-    return GuideCatalogMatchPayload(
-      matched: matched,
-      minConfidence: minConfidence,
-      reason: reason,
-      confidence: confidence,
-      candidatesEvaluated: candidatesEvaluated,
-      searchQueryUsed: searchQueryUsed,
-      expectedParallel: expectedParallel,
-      gotVariant: gotVariant,
-      resolvedVia: resolvedVia,
-      searchSet: searchSet,
-      searchMeta: searchMeta,
-      alternateMatches: alternateMatches,
-      match: match,
-      errorMessage: errorMessage,
-      persistedMaster: persistedMaster,
-      parallelDebug: parallelDebug,
-      cardhedgeRequest: cardhedgeRequest,
-      vaultRequestToEdge: vault,
     );
   }
 
@@ -127,7 +84,6 @@ class GuideCatalogMatchPayload {
       matched: false,
       minConfidence: 0.9,
       errorMessage: message,
-      parallelDebug: null,
     );
   }
 
@@ -148,9 +104,6 @@ class GuideCatalogMatchPayload {
         if (match != null) 'match': match!.toJson(),
         if (errorMessage != null) 'error': errorMessage,
         if (persistedMaster != null) 'persisted_master': persistedMaster,
-        if (parallelDebug != null) 'parallel_debug': parallelDebug,
-        if (cardhedgeRequest != null) 'cardhedge_request': cardhedgeRequest,
-        if (vaultRequestToEdge != null) 'vault_request_to_edge': vaultRequestToEdge,
       };
 }
 
