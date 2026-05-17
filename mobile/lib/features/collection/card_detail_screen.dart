@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -139,6 +141,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   Map<String, double?>? _stableGuideRecentPrices;
   GuideCatalogMatchedRow? _guideMatchRowPick;
   MasterCard? _refreshedMaster;
+  /// Debug builds: lookup request JSON when CardHedge match did not link.
+  String? _guideSyncDebugJson;
 
   bool get _openedFromScanResults => _catalog.openedFromScanResults ?? false;
   bool get _openedFromScanSingleRoute => _catalog.openedFromScanSingleRoute ?? false;
@@ -222,6 +226,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         _linkedGradePricesFromDb = null;
         _guideMatchRowPick = null;
         _refreshedMaster = null;
+        _guideSyncDebugJson = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_syncGuidePricesForMaster());
@@ -278,11 +283,38 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return '';
   }
 
+  String? _guideLookupDebugJson({
+    GuideCatalogMatchPayload? payload,
+    MasterCard? master,
+  }) {
+    if (!kDebugMode) return null;
+    final hasLink = _resolvedCardhedgeId(master: master, payload: payload).isNotEmpty;
+    if (hasLink) return null;
+
+    final map = <String, dynamic>{};
+    if (payload?.vaultRequestToEdge != null) {
+      map['vault_to_edge'] = payload!.vaultRequestToEdge;
+    }
+    if (payload?.cardhedgeRequest != null) {
+      map['cardhedge_request'] = payload!.cardhedgeRequest;
+    }
+    if (payload != null && map.isEmpty) {
+      map['match_response'] = payload.toJson();
+    }
+    if (map.isEmpty) {
+      return const JsonEncoder.withIndent('  ').convert({
+        'error': 'No CardHedge response (search did not return)',
+      });
+    }
+    return const JsonEncoder.withIndent('  ').convert(map);
+  }
+
   void _applyCardhedgeSearchResult(GuideCatalogMatchPayload payload, {MasterCard? master}) {
     if (master != null) _refreshedMaster = master;
     setState(() {
       _guideMatchResult = payload;
       _guidePricesLoading = false;
+      _guideSyncDebugJson = _guideLookupDebugJson(payload: payload, master: master);
     });
   }
 
@@ -297,6 +329,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       if (matchResult != null) _guideMatchResult = matchResult;
       if (matchResult == null) _guideMatchRowPick = null;
       _guidePricesLoading = false;
+      _guideSyncDebugJson = _guideLookupDebugJson(payload: matchResult, master: master);
     });
   }
 
@@ -1176,7 +1209,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     double topInset,
     double bottomPad,
   ) {
-    final overlayLoading = _guidePricesLoading;
+    final overlayLoading = _guidePricesLoading || _guideSyncDebugJson != null;
 
     return Stack(
       fit: StackFit.expand,
@@ -1327,7 +1360,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
 
     if (_isCatalog && !hasGuideCatalogLink) {
-      if (!_guidePricesLoading) {
+      if (!_guidePricesLoading && _guideSyncDebugJson == null) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
@@ -1356,6 +1389,81 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   Widget _buildGuideSyncOverlay(BuildContext context, ColorScheme colors) {
+    if (_guideSyncDebugJson != null) {
+      return Positioned.fill(
+        child: Material(
+          color: colors.surface,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'CardHedge lookup (no link saved)',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Request JSON (vault → edge → CardHedge):',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurface.withValues(alpha: 0.65),
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: colors.outline.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(10),
+                        child: SelectableText(
+                          _guideSyncDebugJson!,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontFamily: 'Menlo',
+                                fontFamilyFallback: const ['Courier', 'monospace'],
+                                fontSize: 11,
+                                height: 1.35,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  AdaptiveButton.child(
+                    onPressed: () {
+                      setState(() {
+                        _guidePricesLoading = true;
+                        _guideSyncDebugJson = null;
+                      });
+                      unawaited(_syncGuidePricesForMaster());
+                    },
+                    style: AdaptiveButtonStyle.filled,
+                    color: AppTheme.primary,
+                    child: const Text(
+                      'Retry CardHedge lookup',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Positioned.fill(
       child: Material(
         color: colors.surface,

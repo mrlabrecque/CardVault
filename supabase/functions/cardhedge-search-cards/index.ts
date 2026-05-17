@@ -4,8 +4,9 @@
  *
  * Upstream body: `category`, `page`, `page_size`, and `search` where
  * search = Player + Year + Release + #Number + Set. Parallel resolved from `variant` after fetch.
- * **Non-Base** parallels: [parallelExactCatalogVariant] only (`red` ≠ `red stars`);
- * no fuzzy fallback. **Base** uses [pickBestBaseVariantRow]; fuzzy [parallelScore]
+ * **Non-Base** parallels: [parallelExactCatalogVariant] on `variant` (`&` → `and`);
+ * if no exact row, [parallelDescriptionWordMatch] on `description` (all parallel words,
+ * rookie/rookies tolerant). **Base** uses [pickBestBaseVariantRow]; fuzzy [parallelScore]
  * only when Base has zero exact rows.
  * If the chosen row has no persistable `prices`, calls all-prices-by-card before
  * persist and response `match`.
@@ -19,6 +20,7 @@ import {
   insertSetMatchesDescription,
   normLabel,
   parallelExactCatalogVariant,
+  parallelDescriptionWordMatch,
   parallelScore,
   extractCardHedgeSalesFromRow,
   pickBestAmongExactVariantRows,
@@ -74,6 +76,27 @@ function parseLogSampleLimit(): number {
 }
 
 const LOG_TAG = 'cardhedge-search-cards';
+
+/** Echoed in API responses (debug) — vault params + exact CardHedge POST body for replay. */
+function buildCardhedgeRequestDebug(input: {
+  vaultToEdge: Record<string, unknown>;
+  setLabel: string;
+  upstreamPostBody: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    vault_to_edge: input.vaultToEdge,
+    cardhedge_api: {
+      url: CARD_SEARCH_URL,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': '<set in Supabase secrets — not echoed>',
+      },
+    },
+    cardhedge_post_body: input.upstreamPostBody,
+    cardhedge_search_query: input.setLabel,
+  };
+}
 
 function clip(s: string, max: number): string {
   const t = s.replace(/\s+/g, ' ').trim();
@@ -280,6 +303,23 @@ Deno.serve(async (req) => {
     // Drop page from base — loop adds per-page `page`.
     const { page: _dropPage, ...upstreamBaseNoPage } = upstreamBase;
 
+    const cardhedgeRequestDebug = buildCardhedgeRequestDebug({
+      vaultToEdge: {
+        player,
+        year,
+        releaseName,
+        setName: setName || null,
+        cardNumber: cardNumber || null,
+        parallelName: parallelName || null,
+        category,
+        sport: sport || null,
+        page_size: pageSize,
+        persistMasterVariantId: persistMasterVariantId || null,
+      },
+      setLabel: searchQuery,
+      upstreamPostBody: upstreamBase,
+    });
+
     const logSample = parseLogSampleLimit();
 
     const seenIds = new Set<string>();
@@ -332,6 +372,7 @@ Deno.serve(async (req) => {
             error: 'CardHedge search failed',
             status: upstream.status,
             details: text.slice(0, 2000),
+            cardhedge_request: cardhedgeRequestDebug,
           },
           502,
         );
@@ -437,6 +478,7 @@ Deno.serve(async (req) => {
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
+        cardhedge_request: cardhedgeRequestDebug,
       });
     }
 
@@ -460,6 +502,7 @@ Deno.serve(async (req) => {
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
+        cardhedge_request: cardhedgeRequestDebug,
       });
     }
 
@@ -469,6 +512,7 @@ Deno.serve(async (req) => {
       | 'exact_variant'
       | 'base_auto_pick'
       | 'fuzzy_best_no_alternates'
+      | 'description_word_match'
       | 'parallel_unspecified' = 'parallel_unspecified';
     let afterParallelExact = 0;
 
@@ -529,42 +573,63 @@ Deno.serve(async (req) => {
             },
             expected_parallel: stripSerialSuffix(parallelName),
             card_number: cardNumber || null,
+            cardhedge_request: cardhedgeRequestDebug,
           });
         }
         chosen = top;
         alternateRows = [];
         parallelMatchMode = 'fuzzy_best_no_alternates';
       } else {
-        console.log(
-          JSON.stringify({
-            tag: LOG_TAG,
-            event: 'outcome',
-            matched: false,
-            reason: 'no_exact_parallel_match',
-            expected_parallel: stripSerialSuffix(parallelName),
-          }),
+        const descPool = byInsertSet.filter((row) =>
+          parallelDescriptionWordMatch(parallelName, row)
         );
-        return json({
-          matched: false,
-          minConfidence,
-          reason: 'no_exact_parallel_match',
-          confidence: null,
-          resolved_via: 'card_search',
-          search_set: searchQuery,
-          search_meta: {
-            page_size: pageSize,
-            max_pages_scanned: maxPages,
-            total_pages_reported: totalPages,
-            upstream_count: upstreamCount,
-            cards_accumulated: allCards.length,
-            after_number_filter: byNumber.length,
-            after_insert_set_filter: byInsertSet.length,
-            after_parallel_exact_filter: 0,
-            parallel_match: 'exact_required_non_base',
-          },
-          expected_parallel: stripSerialSuffix(parallelName),
-          card_number: cardNumber || null,
-        });
+        if (descPool.length > 0) {
+          const picked = pickBestAmongExactVariantRows(descPool);
+          chosen = picked.chosen;
+          alternateRows = picked.alternates;
+          parallelMatchMode = 'description_word_match';
+          console.log(
+            JSON.stringify({
+              tag: LOG_TAG,
+              event: 'parallel_description_word_match',
+              expected_parallel: stripSerialSuffix(parallelName),
+              pool_size: descPool.length,
+            }),
+          );
+        } else {
+          console.log(
+            JSON.stringify({
+              tag: LOG_TAG,
+              event: 'outcome',
+              matched: false,
+              reason: 'no_exact_parallel_match',
+              expected_parallel: stripSerialSuffix(parallelName),
+            }),
+          );
+          return json({
+            matched: false,
+            minConfidence,
+            reason: 'no_exact_parallel_match',
+            confidence: null,
+            resolved_via: 'card_search',
+            search_set: searchQuery,
+            search_meta: {
+              page_size: pageSize,
+              max_pages_scanned: maxPages,
+              total_pages_reported: totalPages,
+              upstream_count: upstreamCount,
+              cards_accumulated: allCards.length,
+              after_number_filter: byNumber.length,
+              after_insert_set_filter: byInsertSet.length,
+              after_parallel_exact_filter: 0,
+              after_parallel_description_filter: 0,
+              parallel_match: 'exact_required_non_base',
+            },
+            expected_parallel: stripSerialSuffix(parallelName),
+            card_number: cardNumber || null,
+            cardhedge_request: cardhedgeRequestDebug,
+          });
+        }
       }
     }
 
@@ -636,6 +701,7 @@ Deno.serve(async (req) => {
       },
       match: searchRowToMatch(chosen),
       alternate_matches,
+      cardhedge_request: cardhedgeRequestDebug,
       ...(persistMasterVariantId ? { persisted_master } : {}),
     });
   } catch (e) {

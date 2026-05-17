@@ -864,32 +864,47 @@ class CompsService {
       if (raw is Map) {
         final map = Map<String, dynamic>.from(raw);
         if (res.status == 200) {
-          return GuideCatalogMatchPayload.fromJson(map);
+          return GuideCatalogMatchPayload.fromJson(map).withVaultRequestToEdge(body);
         }
         final err = map['error']?.toString() ?? 'Request failed';
         final hint = map['hint']?.toString();
         final details = map['details']?.toString();
+        final errorPayload = GuideCatalogMatchPayload.fromJson({
+          'matched': false,
+          'minConfidence': 0.9,
+          'error': err,
+          if (map.containsKey('cardhedge_request')) 'cardhedge_request': map['cardhedge_request'],
+        }).withVaultRequestToEdge(body);
         if (details != null && details.isNotEmpty) {
           final short = details.length > 200 ? '${details.substring(0, 200)}…' : details;
-          return GuideCatalogMatchPayload.error(
-            hint != null && hint.isNotEmpty ? '$err: $short\n$hint' : '$err: $short',
+          return GuideCatalogMatchPayload(
+            matched: false,
+            minConfidence: 0.9,
+            errorMessage: hint != null && hint.isNotEmpty ? '$err: $short\n$hint' : '$err: $short',
+            cardhedgeRequest: errorPayload.cardhedgeRequest,
+            vaultRequestToEdge: body,
           );
         }
-        return GuideCatalogMatchPayload.error(
-          hint != null && hint.isNotEmpty ? '$err\n$hint' : err,
-        );
+        return errorPayload;
       }
-      return GuideCatalogMatchPayload.error('Catalog search: unexpected response (${res.status})');
+      return GuideCatalogMatchPayload.error('Catalog search: unexpected response (${res.status})')
+          .withVaultRequestToEdge(body);
     } on FunctionException catch (e) {
       final details = e.details;
       if (details is Map) {
         final m = Map<String, dynamic>.from(details);
         final err = m['error']?.toString() ?? 'Request failed';
-        return GuideCatalogMatchPayload.error('$err (${e.status})');
+        return GuideCatalogMatchPayload.fromJson({
+          'matched': false,
+          'minConfidence': 0.9,
+          'error': '$err (${e.status})',
+          if (m.containsKey('cardhedge_request')) 'cardhedge_request': m['cardhedge_request'],
+        }).withVaultRequestToEdge(body);
       }
-      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})');
+      return GuideCatalogMatchPayload.error('Catalog search failed (${e.status})')
+          .withVaultRequestToEdge(body);
     } catch (e) {
-      return GuideCatalogMatchPayload.error(e.toString());
+      return GuideCatalogMatchPayload.error(e.toString()).withVaultRequestToEdge(body);
     }
   }
 }

@@ -5,8 +5,71 @@ export function stripSerialSuffix(s: string): string {
   return s.replace(/\s*\/\d+$/, '').trim();
 }
 
+/** Catalog parallel labels: `&` → `and` before variant / description matching. */
+export function normalizeParallelAmpersand(s: string): string {
+  return s.replace(/\s*&\s*/g, ' and ').replace(/\s+/g, ' ').trim();
+}
+
 export function normLabel(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** Normalized parallel label for Vault ↔ CardHedge matching. */
+export function normParallelSide(s: string): string {
+  return normLabel(normalizeParallelAmpersand(stripSerialSuffix(s)));
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Singular/plural variants (e.g. rookie ↔ rookies) for description token checks. */
+function parallelTokenWordForms(token: string): string[] {
+  const forms = new Set<string>([token]);
+  if (token.endsWith('ies') && token.length > 4) {
+    forms.add(token.slice(0, -3) + 'y');
+    forms.add(token.slice(0, -3));
+  } else if (token.endsWith('es') && token.length > 4) {
+    forms.add(token.slice(0, -2));
+    forms.add(token.slice(0, -1));
+  } else if (token.endsWith('s') && token.length > 3) {
+    forms.add(token.slice(0, -1));
+  } else {
+    forms.add(`${token}s`);
+    if (token.endsWith('y') && token.length > 2) {
+      forms.add(`${token.slice(0, -1)}ies`);
+    }
+  }
+  return [...forms];
+}
+
+function descriptionContainsParallelToken(desc: string, token: string): boolean {
+  if (!token) return true;
+  if (token === 'and') {
+    return /\band\b/.test(desc) || desc.includes('&');
+  }
+  for (const form of parallelTokenWordForms(token)) {
+    if (form.length < 2) continue;
+    if (new RegExp(`\\b${escapeRegExp(form)}\\b`).test(desc)) return true;
+  }
+  return desc.includes(token);
+}
+
+/**
+ * Non-base fallback: every word from the catalog parallel appears in CardHedge `description`
+ * (with rookie/rookies-style plural tolerance). Used only when [parallelExactCatalogVariant] finds nothing.
+ */
+export function parallelDescriptionWordMatch(
+  expectedParallel: string,
+  row: Record<string, unknown>,
+): boolean {
+  const exp = normParallelSide(expectedParallel);
+  if (!exp || catalogParallelImpliesBase(expectedParallel)) return false;
+  const desc = typeof row.description === 'string' ? normLabel(row.description) : '';
+  if (!desc) return false;
+  const tokens = exp.split(' ').filter((t) => t.length > 0);
+  if (tokens.length === 0) return false;
+  return tokens.every((t) => descriptionContainsParallelToken(desc, t));
 }
 
 /**
@@ -22,8 +85,8 @@ export function parallelExactCatalogVariant(
   expectedParallel: string,
   row: Record<string, unknown>,
 ): boolean {
-  const exp = normLabel(stripSerialSuffix(expectedParallel));
-  const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
+  const exp = normParallelSide(expectedParallel);
+  const v = normParallelSide(typeof row.variant === 'string' ? row.variant : '');
   if (!exp || exp === 'base') {
     if (!v || v === 'base' || v === 'base set') return true;
     if (/\bbase\b/.test(v)) return true;
@@ -38,7 +101,7 @@ export function parallelExactCatalogVariant(
  */
 /** Catalog parallel is Vault Base (looser CardHedge exact-match bucket). */
 export function catalogParallelImpliesBase(parallelName: string): boolean {
-  const exp = normLabel(stripSerialSuffix(parallelName));
+  const exp = normParallelSide(parallelName);
   return (
     !exp ||
     exp === 'base' ||
@@ -61,7 +124,7 @@ export function baseVariantPickScore(
   row: Record<string, unknown>,
   setName?: string | null,
 ): number {
-  const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
+  const v = normParallelSide(typeof row.variant === 'string' ? row.variant : '');
   let score = 0;
   if (!v || v === 'base' || v === 'base set') score += 120;
   else if (v === 'base card' || v === 'base parallel') score += 100;
@@ -211,19 +274,19 @@ export function pickBestBaseVariantRow(
   if (topTier.length <= 1) {
     return { chosen: ranked[0]!, alternates: [] };
   }
-  const winnerVariant = normLabel(
-    stripSerialSuffix(typeof ranked[0]!.variant === 'string' ? ranked[0]!.variant : ''),
+  const winnerVariant = normParallelSide(
+    typeof ranked[0]!.variant === 'string' ? ranked[0]!.variant : '',
   );
   const sameVariant = topTier.filter((r) => {
-    const v = normLabel(stripSerialSuffix(typeof r.variant === 'string' ? r.variant : ''));
+    const v = normParallelSide(typeof r.variant === 'string' ? r.variant : '');
     return v === winnerVariant;
   });
   return pickBestAmongExactVariantRows(sameVariant.length > 0 ? sameVariant : topTier);
 }
 
 export function parallelScore(parallelName: string, row: Record<string, unknown>): number {
-  const exp = normLabel(stripSerialSuffix(parallelName));
-  const v = normLabel(stripSerialSuffix(typeof row.variant === 'string' ? row.variant : ''));
+  const exp = normParallelSide(parallelName);
+  const v = normParallelSide(typeof row.variant === 'string' ? row.variant : '');
 
   if (!exp || exp === 'base') {
     if (!v || v === 'base' || /\bbase\b/.test(v)) return 100;
