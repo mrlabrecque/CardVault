@@ -10,12 +10,14 @@ PreferredSizeWidget buildGlassNavBar(
   bool centerTitle = false,
   bool automaticallyImplyLeading = true,
   PreferredSizeWidget? bottom,
+  double? toolbarHeight,
   bool useBlurBackground = true,
   double blurSigma = 10,
   double surfaceTintAlpha = 0.14,
 }) {
   final colors = Theme.of(context).colorScheme;
   return AppBar(
+    toolbarHeight: toolbarHeight ?? kToolbarHeight,
     forceMaterialTransparency: true,
     backgroundColor: Colors.transparent,
     surfaceTintColor: Colors.transparent,

@@ -6,6 +6,7 @@ import 'auth/auth_service.dart';
 import 'models/user_card.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/collection/item_detail_screen.dart';
+import '../features/collection/set_checklist_screen.dart';
 import '../features/collection/master_card_detail_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/comps/comps_screen.dart';
@@ -75,6 +76,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                 return _page(const CollectionScreen());
               }
               return _page(ItemDetailScreen(card: card));
+            },
+          ),
+          GoRoute(
+            path: '/collection/set-checklist',
+            pageBuilder: (_, state) {
+              final args = state.extra;
+              if (args is! SetChecklistArgs) {
+                return _page(const CollectionScreen());
+              }
+              return _page(SetChecklistScreen(args: args));
             },
           ),
           GoRoute(

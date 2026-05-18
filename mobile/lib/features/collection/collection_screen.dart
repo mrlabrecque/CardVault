@@ -1,6 +1,7 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/glass_search_field.dart';
 import '../../core/theme/fonts.dart';
@@ -659,9 +660,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   return SetRowTile(
                     row: row,
                     onOpenChecklist: ({required String parallelName}) {
-                      showSetChecklistSheet(
-                        context,
-                        SetChecklistArgs(
+                      context.push(
+                        '/collection/set-checklist',
+                        extra: SetChecklistArgs(
                           setId: row.setId,
                           setName: row.setName,
                           releaseName: row.releaseName,

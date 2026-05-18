@@ -1,32 +1,18 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../core/models/user_card.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/utils/adaptive_ui.dart';
+import '../../core/widgets/app_bar_action_capsule.dart';
+import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/card_fan_loader.dart';
+import '../../core/widgets/frosted_chrome_layer.dart';
+import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/glass_search_field.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
-
-/// Opens the set checklist in a tall bottom sheet.
-Future<void> showSetChecklistSheet(BuildContext context, SetChecklistArgs args) {
-  return showAdaptiveSheet<void>(
-    context: context,
-    builder: (sheetContext) {
-      final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.92;
-      return SizedBox(
-        height: sheetHeight,
-        child: SetChecklistSheet(args: args),
-      );
-    },
-  );
-}
 
 int _gridCrossAxisCount(double width) {
   const pad = 16.0;
@@ -83,16 +69,16 @@ bool _parallelMatches(String cardParallel, String targetParallel) {
   return card.toLowerCase() == target.toLowerCase();
 }
 
-class SetChecklistSheet extends ConsumerStatefulWidget {
-  const SetChecklistSheet({super.key, required this.args});
+/// Set checklist grid — pushed route (same chrome pattern as [CollectionScreen] / Grading).
+class SetChecklistScreen extends ConsumerStatefulWidget {
+  const SetChecklistScreen({super.key, required this.args});
   final SetChecklistArgs args;
 
   @override
-  ConsumerState<SetChecklistSheet> createState() => _SetChecklistSheetState();
+  ConsumerState<SetChecklistScreen> createState() => _SetChecklistScreenState();
 }
 
-class _SetChecklistSheetState extends ConsumerState<SetChecklistSheet> {
-  static const double _filterTopInset = 4;
+class _SetChecklistScreenState extends ConsumerState<SetChecklistScreen> {
   static const double _scrollEndCushion = 32;
 
   final _searchCtrl = TextEditingController();
@@ -121,107 +107,58 @@ class _SetChecklistSheetState extends ConsumerState<SetChecklistSheet> {
     return parts.isEmpty ? null : parts.join(' ');
   }
 
-  Widget _buildSheetHeader(ColorScheme colors) {
+  Widget _buildCountRow(ColorScheme colors, String countLabel) {
     final releaseSubtitle = _releaseSubtitle;
+    final metaStyle = TextStyle(
+      fontSize: 12,
+      color: colors.onSurface.withValues(alpha: 0.5),
+    );
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 4, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: ChromeMetrics.listCountPadding(
+        bottom: ChromeMetrics.listCountBottomInsetRoomy,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: colors.outline.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(99),
-              ),
+          Expanded(
+            child: Text(countLabel, style: metaStyle),
+          ),
+          if (releaseSubtitle != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              releaseSubtitle,
+              style: metaStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
             ),
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _title,
-                      style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (releaseSubtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        releaseSubtitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.2,
-                          color: colors.onSurface.withValues(alpha: 0.55),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              AdaptiveButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: Icons.close,
-                style: AdaptiveButtonStyle.glass,
-                iconColor: colors.onSurface,
-                size: AdaptiveButtonSize.small,
-                minSize: const Size(46, 46),
-              ),
-            ],
-          ),
+          ],
         ],
       ),
     );
   }
 
-  /// Native iOS 26 [UiKitView] segments break in modal sheets (layout + compositing).
-  /// [GlassSegmentedControl] matches the liquid-glass look without a platform view.
-  Widget _buildFilterSegments(ColorScheme colors) {
-    final segmentHeight = ChromeMetrics.segmentControlHeight;
-    return GlassSegmentedControl(
-      segments: const ['All', 'Owned', 'Missing'],
-      selectedIndex: _filter.index,
-      onSegmentSelected: (i) => setState(() => _filter = _ChecklistFilter.values[i]),
-      height: segmentHeight,
-      borderRadius: segmentHeight / 2,
-      // No backdrop blur parent in this sheet — segment glass is self-contained.
-      useOwnLayer: true,
-      backgroundColor: AppTheme.segmentedTrackBackground(context),
-      indicatorColor: colors.primary,
-      selectedTextStyle: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: colors.onPrimary,
-      ),
-      unselectedTextStyle: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        color: colors.onSurface.withValues(alpha: 0.65),
-      ),
-    );
-  }
-
-  Widget _buildFilterChromeContent(ColorScheme colors) {
+  Widget _buildFilterControls(ColorScheme colors) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         ChromeMetrics.compactHorizontalInset,
-        _filterTopInset,
+        ChromeMetrics.segmentOnlyTopInset,
         ChromeMetrics.compactHorizontalInset,
         ChromeMetrics.searchBarBottomInset,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildFilterSegments(colors),
+          AppSegmentedControl(
+            segmentKey: const ValueKey('set-checklist-filter'),
+            labels: const ['All', 'Owned', 'Missing'],
+            selectedIndex: _filter.index,
+            onValueChanged: (i) => setState(() => _filter = _ChecklistFilter.values[i]),
+            color: colors.primary,
+          ),
           const SizedBox(height: ChromeMetrics.segmentToSearchGap),
           GlassSearchField(
             controller: _searchCtrl,
@@ -233,96 +170,130 @@ class _SetChecklistSheetState extends ConsumerState<SetChecklistSheet> {
     );
   }
 
-  /// Grid only — filters are a fixed sibling above [Expanded], not an overlay, so
-  /// scroll content never passes under [BackdropFilter].
-  Widget _buildScrollArea(ColorScheme colors, List<Widget> bodySlivers) {
-    return ColoredBox(
-      color: colors.surface,
-      child: CustomScrollView(
-        physics: const ClampingScrollPhysics(),
-        cacheExtent: 600,
-        slivers: [
-          ...bodySlivers,
-          const SliverToBoxAdapter(child: SizedBox(height: _scrollEndCushion)),
-        ],
+  Widget _buildPinnedFilters(ColorScheme colors, double navOffset) {
+    return FrostedChromeLayer(
+      child: Padding(
+        padding: EdgeInsets.only(top: navOffset),
+        child: _buildFilterControls(colors),
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(ColorScheme colors) {
+    // No app-bar backdrop blur — one [FrostedChromeLayer] in the pinned sliver
+    // (same as [CollectionScreen]) avoids a seam above the segment row.
+    return buildGlassNavBar(
+      context,
+      useBlurBackground: false,
+      automaticallyImplyLeading: false,
+      centerTitle: false,
+      leading: AppBarGlassCircleButton(
+        onPressed: () => context.pop(),
+        icon: Icons.chevron_left,
+      ),
+      title: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          _title,
+          style: AppFonts.appBarTitle.copyWith(color: colors.onSurface),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScrollContent(
+    ColorScheme colors,
+    double navOffset,
+    List<Widget> bodySlivers,
+  ) {
+    return CustomScrollView(
+      physics: const ClampingScrollPhysics(),
+      cacheExtent: 600,
+      slivers: [
+        SliverFrostedHeader(
+          height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
+          child: _buildPinnedFilters(colors, navOffset),
+        ),
+        const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
+        ...bodySlivers,
+        const SliverToBoxAdapter(child: SizedBox(height: _scrollEndCushion)),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final navOffset = MediaQuery.paddingOf(context).top + kToolbarHeight;
     final slotsAsync = ref.watch(_setChecklistSlotsProvider(widget.args));
     final userCardsAsync = ref.watch(userCardsProvider);
 
-    return Material(
-      color: colors.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildSheetHeader(colors),
-          ColoredBox(
-            color: colors.surface,
-            child: _buildFilterChromeContent(colors),
-          ),
-          Expanded(
-            child: slotsAsync.when(
-              loading: () => _buildScrollArea(
-                colors,
-                const [
-                  SliverFillRemaining(
-                    hasScrollBody: true,
-                    child: Center(child: CardFanLoader()),
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: _buildAppBar(colors),
+      body: slotsAsync.when(
+        loading: () => _buildScrollContent(
+          colors,
+          navOffset,
+          const [
+            SliverFillRemaining(
+              hasScrollBody: true,
+              child: Center(child: CardFanLoader()),
+            ),
+          ],
+        ),
+        error: (e, _) => _buildScrollContent(
+          colors,
+          navOffset,
+          [
+            SliverFillRemaining(
+              hasScrollBody: true,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Could not load checklist.\n$e',
+                    textAlign: TextAlign.center,
                   ),
-                ],
+                ),
               ),
-              error: (e, _) => _buildScrollArea(
-                colors,
-                [
-                  SliverFillRemaining(
-                    hasScrollBody: true,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text('Could not load checklist.\n$e', textAlign: TextAlign.center),
-                      ),
+            ),
+          ],
+        ),
+        data: (slots) {
+          final userCards = userCardsAsync.maybeWhen(
+            data: (cards) => cards,
+            orElse: () => const <UserCard>[],
+          );
+          if (userCardsAsync.hasError) {
+            return _buildScrollContent(
+              colors,
+              navOffset,
+              [
+                SliverFillRemaining(
+                  hasScrollBody: true,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text('Could not load collection.\n${userCardsAsync.error}'),
                     ),
                   ),
-                ],
-              ),
-              data: (slots) {
-                final userCards = userCardsAsync.maybeWhen(
-                  data: (cards) => cards,
-                  orElse: () => const <UserCard>[],
-                );
-                if (userCardsAsync.hasError) {
-                  return _buildScrollArea(
-                    colors,
-                    [
-                      SliverFillRemaining(
-                        hasScrollBody: true,
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text('Could not load collection.\n${userCardsAsync.error}'),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-                return _buildScrollBody(context, colors, slots, userCards);
-              },
-            ),
-          ),
-        ],
+                ),
+              ],
+            );
+          }
+          return _buildChecklistGrid(context, colors, navOffset, slots, userCards);
+        },
       ),
     );
   }
 
-  Widget _buildScrollBody(
+  Widget _buildChecklistGrid(
     BuildContext context,
     ColorScheme colors,
+    double navOffset,
     List<SetChecklistSlot> slots,
     List<UserCard> userCards,
   ) {
@@ -372,24 +343,11 @@ class _SetChecklistSheetState extends ConsumerState<SetChecklistSheet> {
         '$ownedCount of $total collected'
         '${visible.length != rows.length ? ' · ${visible.length} shown' : ''}';
 
-    return _buildScrollArea(
+    return _buildScrollContent(
       colors,
+      navOffset,
       [
-        const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: ChromeMetrics.listCountPadding(
-              bottom: ChromeMetrics.listCountBottomInsetRoomy,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                countLabel,
-                style: TextStyle(fontSize: 12, color: colors.onSurface.withValues(alpha: 0.5)),
-              ),
-            ),
-          ),
-        ),
+        SliverToBoxAdapter(child: _buildCountRow(colors, countLabel)),
         if (visible.isEmpty)
           SliverFillRemaining(
             hasScrollBody: true,
@@ -535,10 +493,7 @@ class _ChecklistGridTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
-        onTap: () {
-          Navigator.of(context).pop();
-          context.push('/collection/card', extra: row.userCard);
-        },
+        onTap: () => context.push('/collection/card', extra: row.userCard),
         child: tile,
       ),
     );
