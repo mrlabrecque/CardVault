@@ -1,6 +1,7 @@
 /**
  * Fetches CardHedge `card-details` + optional `all-prices-by-card` backfill
  * to build a payload for [persistGuidePricesOntoMaster].
+ * Requests `raw_images_only: true` so placeholder images are not persisted.
  */
 import { fetchCardHedgeAllLatestPrices, type CardSearchPriceRow } from './cardhedge_all_prices.ts';
 import { normalizePriceEntry } from './cardhedge_persist_master.ts';
@@ -98,7 +99,7 @@ export async function hydratePersistFieldsFromCardHedgeCardId(
         'Content-Type': 'application/json',
         'X-API-Key': apiKey,
       },
-      body: JSON.stringify({ card_id: id }),
+      body: JSON.stringify({ card_id: id, raw_images_only: true }),
       signal: controller.signal,
     });
     const text = await res.text();

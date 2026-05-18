@@ -283,11 +283,6 @@ Deno.serve(async (req) => {
     const rookie =
       rookieRaw ||
       (body.is_rookie === true || body.isRookie === true ? 'Rookie' : '');
-    const rawImagesOnly =
-      body.raw_images_only === true ||
-      body.rawImagesOnly === true ||
-      Deno.env.get('CARDHEDGE_SEARCH_RAW_IMAGES_ONLY')?.trim() === '1';
-
     const upstreamBase = buildCardHedgeCardSearchBody({
       category,
       player,
@@ -297,7 +292,7 @@ Deno.serve(async (req) => {
       cardNumber: cardNumber || null,
       pageSize,
       page: 1,
-      rawImagesOnly,
+      rawImagesOnly: true,
       rookie: rookie || null,
     });
     // Drop page from base — loop adds per-page `page`.

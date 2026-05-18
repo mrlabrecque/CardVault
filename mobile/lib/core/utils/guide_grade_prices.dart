@@ -626,3 +626,69 @@ ActiveListingVsGuideDelta? computeActiveListingGuideDeal({
     tier: ActiveListingGuideDealTier.badDeal,
   );
 }
+
+// ── Grading recommendations (guide `current_prices`, client-side) ───────────
+
+/// PSA 9 / PSA 10 guide prices for the grading recommendations screen (either may be absent).
+class GradingGuideSnapshot {
+  const GradingGuideSnapshot({
+    this.psa9Price,
+    this.psa10Price,
+  });
+
+  final double? psa9Price;
+  final double? psa10Price;
+
+  bool get hasAnyGrade => psa9Price != null || psa10Price != null;
+
+  /// PSA 9 preferred for tier/profit headline; falls back to PSA 10.
+  double? get primaryGuidePrice => psa9Price ?? psa10Price;
+}
+
+/// Null only when both PSA 9 and PSA 10 are missing from the guide map.
+GradingGuideSnapshot? gradingGuideSnapshotFromGradeMap(Map<String, double?>? gradeToPrice) {
+  if (gradeToPrice == null || gradeToPrice.isEmpty) return null;
+  final p9 = _priceFromGradeMapLoose(gradeToPrice, 'PSA 9');
+  final p10 = _priceFromGradeMapLoose(gradeToPrice, 'PSA 10');
+  if (p9 == null && p10 == null) return null;
+  return GradingGuideSnapshot(psa9Price: p9, psa10Price: p10);
+}
+
+enum GradingRecommendationTier { grade, borderline, skip }
+
+/// Tier from guide profit — PSA 9 when present, else PSA 10 (legacy sold-comps behavior).
+GradingRecommendationTier gradingRecommendationTier({
+  required double guidePrice,
+  required double gradingFee,
+  required double? pricePaid,
+}) {
+  final profit = gradingProfitAfterFee(
+    guidePrice: guidePrice,
+    gradingFee: gradingFee,
+    pricePaid: pricePaid,
+  );
+  if (profit > 25) return GradingRecommendationTier.grade;
+  if (profit >= 0) return GradingRecommendationTier.borderline;
+  return GradingRecommendationTier.skip;
+}
+
+GradingRecommendationTier gradingRecommendationTierFromSnapshot({
+  required GradingGuideSnapshot snapshot,
+  required double gradingFee,
+  required double? pricePaid,
+}) {
+  final guide = snapshot.primaryGuidePrice;
+  if (guide == null) return GradingRecommendationTier.skip;
+  return gradingRecommendationTier(
+    guidePrice: guide,
+    gradingFee: gradingFee,
+    pricePaid: pricePaid,
+  );
+}
+
+double gradingProfitAfterFee({
+  required double guidePrice,
+  required double gradingFee,
+  required double? pricePaid,
+}) =>
+    guidePrice - gradingFee - (pricePaid ?? 0);

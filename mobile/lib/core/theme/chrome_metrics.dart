@@ -54,7 +54,8 @@ class ChromeMetrics {
   static const double searchHeaderExtent = 44;
   static const double lotBasketHeaderExtent = 40;
   static const double lotBrowseHeaderExtent = 92;
-  static const double gradingHeaderExtent = 116;
+  /// Fee card + search row; keep in sync with [GradingScreen] sticky header content.
+  static const double gradingHeaderExtent = 120;
 
   static EdgeInsets segmentOnlyPadding(
     double navOffset, {
