@@ -12,6 +12,7 @@ import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
 import '../../core/utils/adaptive_ui.dart';
+import 'set_checklist_screen.dart';
 import 'widgets/list_item_card.dart';
 import 'widgets/set_row_tile.dart';
 
@@ -653,7 +654,24 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
               ),
               sliver: SliverList.builder(
                 itemCount: filtered.length,
-                itemBuilder: (_, i) => SetRowTile(row: filtered[i]),
+                itemBuilder: (_, i) {
+                  final row = filtered[i];
+                  return SetRowTile(
+                    row: row,
+                    onOpenChecklist: ({required String parallelName}) {
+                      showSetChecklistSheet(
+                        context,
+                        SetChecklistArgs(
+                          setId: row.setId,
+                          setName: row.setName,
+                          releaseName: row.releaseName,
+                          year: row.year,
+                          parallelName: parallelName,
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
         ],

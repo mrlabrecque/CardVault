@@ -21,6 +21,12 @@ class AppTheme {
   static const textMain      = Color(0xFF1F2937);
   static const textMuted     = grayDark;
 
+  /// Unselected segment track — same system fill as native [UISegmentedControl]
+  /// (used by [AdaptiveSegmentedControl] in app-bar chrome).
+  static Color segmentedTrackBackground(BuildContext context) {
+    return CupertinoColors.tertiarySystemFill.resolveFrom(context);
+  }
+
   /// Cupertino typography for widgets that read [CupertinoTheme.of] (e.g.
   /// [CupertinoTextField] inside [AdaptiveTextField]). Uses Oswald while keeping
   /// Apple default sizes/letterSpacing/colors for the current [brightness].

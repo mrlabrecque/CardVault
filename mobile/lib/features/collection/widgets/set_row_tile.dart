@@ -7,8 +7,14 @@ import '../../../core/models/user_card.dart';
 import '../../../core/utils/currency_format.dart';
 
 class SetRowTile extends StatefulWidget {
-  const SetRowTile({super.key, required this.row});
+  const SetRowTile({
+    super.key,
+    required this.row,
+    this.onOpenChecklist,
+  });
+
   final SetRow row;
+  final void Function({required String parallelName})? onOpenChecklist;
 
   @override
   State<SetRowTile> createState() => _SetRowTileState();
@@ -120,20 +126,29 @@ class _SetRowTileState extends State<SetRowTile> {
       ),
     );
 
-    final header = hasMultipleParallels
-        ? (isIOS
-            ? CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: () => setState(() => _expanded = !_expanded),
-                child: body,
-              )
-            : InkWell(
-                onTap: () => setState(() => _expanded = !_expanded),
-                borderRadius: BorderRadius.circular(12),
-                child: body,
-              ))
-        : body;
+    final openChecklist = widget.onOpenChecklist;
+    final defaultParallel = row.parallels.isNotEmpty ? row.parallels.first.parallelName : 'Base';
+
+    Widget header = body;
+    if (hasMultipleParallels) {
+      header = isIOS
+          ? CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => setState(() => _expanded = !_expanded),
+              child: body,
+            )
+          : InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(12),
+              child: body,
+            );
+    } else if (openChecklist != null) {
+      header = _tappable(
+        onTap: () => openChecklist(parallelName: defaultParallel),
+        child: body,
+      );
+    }
 
     return AdaptiveListCard(
       child: Column(
@@ -141,23 +156,52 @@ class _SetRowTileState extends State<SetRowTile> {
           header,
           if (_expanded && hasMultipleParallels) ...[
             Divider(height: 1, color: colors.outlineVariant),
-            ...row.parallels.map((p) => _ParallelRow(parallel: p, progressColor: _progressColor(p.pct))),
+            ...row.parallels.map(
+              (p) => _ParallelRow(
+                parallel: p,
+                progressColor: _progressColor(p.pct),
+                onTap: openChecklist != null
+                    ? () => openChecklist(parallelName: p.parallelName)
+                    : null,
+              ),
+            ),
           ],
         ],
       ),
     );
   }
+
+  Widget _tappable({required VoidCallback onTap, required Widget child}) {
+    if (isIOS) {
+      return CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: onTap,
+        child: child,
+      );
+    }
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: child,
+    );
+  }
 }
 
 class _ParallelRow extends StatelessWidget {
-  const _ParallelRow({required this.parallel, required this.progressColor});
+  const _ParallelRow({
+    required this.parallel,
+    required this.progressColor,
+    this.onTap,
+  });
   final SetParallelRow parallel;
   final Color progressColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Padding(
+    final content = Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,6 +212,10 @@ class _ParallelRow extends StatelessWidget {
               Text(formatUsd(parallel.totalValue), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(width: 8),
               Text('${parallel.ownedCount}/${parallel.cardCount}', style: TextStyle(fontSize: 11, color: colors.onSurface.withValues(alpha: 0.5))),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 16, color: colors.onSurface.withValues(alpha: 0.35)),
+              ],
             ],
           ),
           const SizedBox(height: 6),
@@ -175,6 +223,18 @@ class _ParallelRow extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return content;
+
+    if (isIOS) {
+      return CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: onTap,
+        child: content,
+      );
+    }
+    return InkWell(onTap: onTap, child: content);
   }
 }
 

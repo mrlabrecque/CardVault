@@ -359,6 +359,20 @@ class MasterCard {
   String get displayName => cardNumber != null ? '$player  #$cardNumber' : player;
 }
 
+/// One checklist row for a [set_card] in a set, optionally resolved to a parallel variant.
+class SetChecklistSlot {
+  const SetChecklistSlot({
+    required this.setCardId,
+    required this.masterCardId,
+    required this.card,
+  });
+
+  final String setCardId;
+  /// Variant id for the requested parallel; null when that parallel has no catalog row yet.
+  final String? masterCardId;
+  final MasterCard card;
+}
+
 class CatalogRelease {
   const CatalogRelease({required this.id, required this.name, required this.year, required this.segmentId});
   final String id;
@@ -1386,6 +1400,61 @@ class CardsService {
     }
     final data = await q.order('player', ascending: true).range(offset, offset + limit - 1);
     return (data as List).map((r) => MasterCard.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Full set checklist: one row per [set_card], with the [master_card_definitions] id
+  /// for [parallelName] when that variant exists.
+  Future<List<SetChecklistSlot>> fetchSetChecklistSlots({
+    required String setId,
+    String parallelName = 'Base',
+  }) async {
+    final baseData = await _supabase
+        .from('set_card_base_variants')
+        .select(
+          'id, set_card_id, player, card_number, is_rookie, is_auto, is_patch, is_ssp, serial_max, image_url',
+        )
+        .eq('set_id', setId)
+        .order('card_number', ascending: true, nullsFirst: false)
+        .order('player', ascending: true);
+
+    final baseRows = (baseData as List).cast<Map<String, dynamic>>();
+    if (baseRows.isEmpty) return const [];
+
+    final parallels = await getParallels(setId);
+    final parallel = _chPickParallel(parallels, parallelName);
+    final variantBySetCard = <String, String>{};
+
+    if (parallel != null) {
+      final setCardIds = baseRows.map((r) => r['set_card_id'] as String).toList();
+      const chunk = 200;
+      for (var i = 0; i < setCardIds.length; i += chunk) {
+        final slice = setCardIds.sublist(i, i + chunk > setCardIds.length ? setCardIds.length : i + chunk);
+        final variants = await _supabase
+            .from('master_card_definitions')
+            .select('id, set_card_id')
+            .eq('parallel_id', parallel.id)
+            .inFilter('set_card_id', slice);
+        for (final v in variants as List) {
+          final m = Map<String, dynamic>.from(v as Map);
+          variantBySetCard[m['set_card_id'] as String] = m['id'] as String;
+        }
+      }
+    }
+
+    final isBaseContext = parallelName.trim().isEmpty ||
+        parallelName.trim().toLowerCase() == 'base';
+
+    return baseRows.map((r) {
+      final setCardId = r['set_card_id'] as String;
+      final baseMasterId = r['id'] as String;
+      final variantId = variantBySetCard[setCardId];
+      final ownedMasterId = isBaseContext ? baseMasterId : variantId;
+      return SetChecklistSlot(
+        setCardId: setCardId,
+        masterCardId: ownedMasterId,
+        card: MasterCard.fromJson(r),
+      );
+    }).toList();
   }
 
   /// Loads any catalog variant by `master_card_definitions.id` (not limited to Base —

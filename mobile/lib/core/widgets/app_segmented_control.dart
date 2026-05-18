@@ -18,6 +18,7 @@ class AppSegmentedControl extends StatelessWidget {
     this.sfSymbols,
     this.iconSize,
     this.shrinkWrap,
+    this.height,
     this.preset = AppSegmentedControlPreset.chrome,
   });
 
@@ -32,6 +33,9 @@ class AppSegmentedControl extends StatelessWidget {
   final List<dynamic>? sfSymbols;
   final double? iconSize;
   final bool? shrinkWrap;
+
+  /// Passed through to [AdaptiveSegmentedControl]; defaults by [preset] when null.
+  final double? height;
   final AppSegmentedControlPreset preset;
 
   @override
@@ -49,6 +53,13 @@ class AppSegmentedControl extends StatelessWidget {
           AppSegmentedControlPreset.chrome => false,
         };
 
+    final resolvedHeight = height ??
+        switch (preset) {
+          AppSegmentedControlPreset.compact => 36.0,
+          AppSegmentedControlPreset.iconOnly => 32.0,
+          AppSegmentedControlPreset.chrome => 36.0,
+        };
+
     return AdaptiveSegmentedControl(
       key: segmentKey,
       labels: labels,
@@ -58,6 +69,7 @@ class AppSegmentedControl extends StatelessWidget {
       sfSymbols: sfSymbols,
       iconSize: resolvedIconSize,
       shrinkWrap: resolvedShrinkWrap,
+      height: resolvedHeight,
     );
   }
 }

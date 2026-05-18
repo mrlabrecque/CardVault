@@ -68,11 +68,13 @@ Future<T?> showAdaptiveSheet<T>({
       barrierDismissible: isDismissible,
       builder: (sheetContext) {
         final colors = Theme.of(sheetContext).colorScheme;
-        return Material(
-          color: colors.surface,
-          clipBehavior: Clip.antiAlias,
+        return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          child: builder(sheetContext),
+          child: Material(
+            color: colors.surface,
+            clipBehavior: Clip.none,
+            child: builder(sheetContext),
+          ),
         );
       },
     );
