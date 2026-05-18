@@ -23,19 +23,38 @@ class ChromeMetrics {
   static const EdgeInsets adaptiveBorderedButtonPadding =
       EdgeInsets.symmetric(horizontal: 16, vertical: 8);
 
+  /// Glass search pill height ([GlassSearchField]); keep in sync with widget.
+  static const double searchHeaderExtent = 44;
+
+  /// [AppSegmentedControl] intrinsic height in sticky chrome.
+  static const double segmentControlHeight = 38;
+
+  /// Space below [GlassSearchField] — use everywhere for consistent rhythm.
+  static const double searchBarBottomInset = 6;
+
+  /// Top inset when search sits in secondary sticky chrome below another row.
+  static const double searchBarSecondaryTopInset = 8;
+
   /// Segment-only sticky rhythm.
   static const double segmentOnlyTopInset = 4;
-  static const double segmentOnlyBottomInset = 6;
+  static const double segmentOnlyBottomInset = searchBarBottomInset;
 
   /// Gap between segment row and search/filter row in sticky chrome.
   static const double segmentToSearchGap = 8;
 
+  /// Segment + gap + search pill + bottom inset (excludes [segmentOnlyTopInset]).
+  static const double segmentWithSearchChromeExtent =
+      segmentControlHeight +
+      segmentToSearchGap +
+      searchHeaderExtent +
+      searchBarBottomInset;
+
   /// Default bottom inset when sticky chrome includes multiple rows.
-  static const double multiRowBottomInset = 8;
+  static const double multiRowBottomInset = searchBarBottomInset;
 
   /// Vertical rhythm for sticky headers that only contain a search/filter row.
   static const double searchOnlyTopInset = 4;
-  static const double searchOnlyBottomInset = 6;
+  static const double searchOnlyBottomInset = searchBarBottomInset;
   static const double searchOnlyExtraHeight =
       searchOnlyTopInset + searchOnlyBottomInset;
   static const double searchOnlyTightTopInset = 2;
@@ -49,11 +68,15 @@ class ChromeMetrics {
   static const double listTopInsetAfterCount = 2;
   static const double listTopInsetAfterCountRoomy = 8;
 
-  /// Canonical pinned chrome extents (excluding navOffset).
-  static const double segmentSearchHeaderExtent = 96;
-  static const double searchHeaderExtent = 44;
+  /// Segment row + glass search pill in collection sticky chrome (excludes navOffset).
+  static const double segmentSearchHeaderExtent =
+      segmentOnlyTopInset +
+      segmentControlHeight +
+      segmentToSearchGap +
+      searchHeaderExtent +
+      segmentOnlyBottomInset;
   static const double lotBasketHeaderExtent = 40;
-  static const double lotBrowseHeaderExtent = 92;
+  static const double lotBrowseHeaderExtent = segmentWithSearchChromeExtent;
   /// Fee card + search row; keep in sync with [GradingScreen] sticky header content.
   static const double gradingHeaderExtent = 120;
 
@@ -113,7 +136,33 @@ class ChromeMetrics {
       top: navOffset,
       left: horizontalInset,
       right: horizontalInset,
-      bottom: 6,
+      bottom: searchBarBottomInset,
+    );
+  }
+
+  /// Padding around search in secondary sticky chrome (below segments/filters).
+  static EdgeInsets searchBarSecondaryPadding({
+    double horizontal = compactHorizontalInset,
+    double top = searchBarSecondaryTopInset,
+  }) {
+    return EdgeInsets.fromLTRB(
+      horizontal,
+      top,
+      horizontal,
+      searchBarBottomInset,
+    );
+  }
+
+  /// Horizontal + bottom padding for a standalone search row (e.g. catalog browse).
+  static EdgeInsets searchBarRowPadding({
+    double horizontal = horizontalInset,
+    double top = 0,
+  }) {
+    return EdgeInsets.fromLTRB(
+      horizontal,
+      top,
+      horizontal,
+      searchBarBottomInset,
     );
   }
 }

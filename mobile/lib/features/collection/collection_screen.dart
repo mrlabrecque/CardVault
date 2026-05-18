@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/chrome_metrics.dart';
+import '../../core/widgets/glass_search_field.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/services/cards_service.dart';
@@ -13,7 +14,6 @@ import '../../core/widgets/sliver_frosted_header.dart';
 import '../../core/utils/adaptive_ui.dart';
 import 'widgets/list_item_card.dart';
 import 'widgets/set_row_tile.dart';
-import 'widgets/filter_sort_action_bar.dart';
 
 enum SortOption { dateDesc, playerAz, valueDesc, plPct, movingUp }
 enum SetSortOption { pctDesc, valueDesc, name }
@@ -36,6 +36,13 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   final Set<String> _pendingDeleteStacks = {};
   final Set<String> _setViewSports = {};
   bool _showSets = false;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _setSearchCtrl.dispose();
+    super.dispose();
+  }
 
   List<CardStack> _filter(List<CardStack> stacks) {
     var result = stacks.where((s) {
@@ -167,7 +174,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         ChromeMetrics.compactHorizontalInset,
         ChromeMetrics.segmentOnlyTopInset,
         ChromeMetrics.compactHorizontalInset,
-        ChromeMetrics.segmentOnlyBottomInset,
+        ChromeMetrics.searchBarBottomInset,
       ),
       child: Column(
         children: [
@@ -177,17 +184,18 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             onValueChanged: (index) => setState(() => _showSets = index == 1),
             color: colors.primary,
           ),
-          const SizedBox(height: ChromeMetrics.segmentOnlyBottomInset),
-          FilterSortActionBar<void>(
-            searchText: showSets ? _setQuery : _query,
-            onSearchChanged: (v) => setState(() {
+          const SizedBox(height: ChromeMetrics.segmentToSearchGap),
+          GlassSearchField(
+            controller: showSets ? _setSearchCtrl : _searchCtrl,
+            hint: showSets ? 'Search sets…' : 'Search player, set, sport…',
+            onChanged: (v) => setState(() {
               if (showSets) {
                 _setQuery = v;
               } else {
                 _query = v;
               }
             }),
-            onSearchClear: () {
+            onClear: () {
               if (showSets) {
                 _setSearchCtrl.clear();
                 setState(() => _setQuery = '');
@@ -196,7 +204,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                 setState(() => _query = '');
               }
             },
-            searchHint: showSets ? 'Search sets…' : 'Search player, set, sport…',
           ),
         ],
       ),
@@ -519,7 +526,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         )
                       else
                         SliverPadding(
-                          padding: const EdgeInsets.only(bottom: 100),
+                          padding: const EdgeInsets.only(
+                            bottom: 100,
+                          ),
                           sliver: SliverList.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -639,7 +648,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.only(bottom: 100),
+              padding: const EdgeInsets.only(
+                bottom: 100,
+              ),
               sliver: SliverList.builder(
                 itemCount: filtered.length,
                 itemBuilder: (_, i) => SetRowTile(row: filtered[i]),

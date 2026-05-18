@@ -78,38 +78,38 @@ class _IOSAppShellState extends State<IOSAppShell> {
       bottomNavigationBar: widget.hideTabBar
           ? null
           : AdaptiveBottomNavigationBar(
-        items: const [
-          AdaptiveNavigationDestination(
-            icon: 'house.fill',
-            selectedIcon: 'house.fill',
-            label: 'Dashboard',
-          ),
-          AdaptiveNavigationDestination(
-            icon: 'square.grid.2x2.fill',
-            selectedIcon: 'square.grid.2x2.fill',
-            label: 'Catalog',
-          ),
-          AdaptiveNavigationDestination(
-            icon: 'camera.fill',
-            selectedIcon: 'camera.fill',
-            label: 'Scan',
-          ),
-          AdaptiveNavigationDestination(
-            icon: 'square.stack.3d.up.fill',
-            selectedIcon: 'square.stack.3d.up.fill',
-            label: 'Collection',
-          ),
-          AdaptiveNavigationDestination(
-            icon: 'bookmark.fill',
-            selectedIcon: 'bookmark.fill',
-            label: 'Wishlist',
-          ),
-        ],
-        selectedIndex: widget.selectedIndex,
-        onTap: widget.onTabSelected,
-        useNativeBottomBar: true,
-        selectedItemColor: AppTheme.primary,
-      ),
+              items: const [
+                AdaptiveNavigationDestination(
+                  icon: 'house.fill',
+                  selectedIcon: 'house.fill',
+                  label: 'Dashboard',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: 'square.grid.2x2.fill',
+                  selectedIcon: 'square.grid.2x2.fill',
+                  label: 'Catalog',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: 'camera.fill',
+                  selectedIcon: 'camera.fill',
+                  label: 'Scan',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: 'square.stack.3d.up.fill',
+                  selectedIcon: 'square.stack.3d.up.fill',
+                  label: 'Collection',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: 'bookmark.fill',
+                  selectedIcon: 'bookmark.fill',
+                  label: 'Wishlist',
+                ),
+              ],
+              selectedIndex: widget.selectedIndex,
+              onTap: widget.onTabSelected,
+              useNativeBottomBar: true,
+              selectedItemColor: AppTheme.primary,
+            ),
     );
   }
 }
@@ -163,13 +163,13 @@ class AndroidAppShell extends StatelessWidget {
       bottomNavigationBar: hideTabBar
           ? null
           : NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onTabSelected,
-        backgroundColor: AppTheme.primary,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        destinations: _androidDestinations,
-      ),
+              selectedIndex: selectedIndex,
+              onDestinationSelected: onTabSelected,
+              backgroundColor: AppTheme.primary,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              destinations: _androidDestinations,
+            ),
     );
   }
 }

@@ -23,6 +23,7 @@ import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
 import '../../core/widgets/glass_nav_bar.dart';
+import '../../core/widgets/glass_search_field.dart';
 import '../../core/widgets/sticky_chrome_scaffold.dart';
 import '../wishlist/wishlist_screen.dart' show wishlistProvider;
 import '../wishlist/card_sheet.dart';
@@ -37,9 +38,15 @@ import 'widgets/filter_sort_action_bar.dart';
 /// First-frame hints for [StickyChromeScaffold.stickyHeightEstimate] until layout measures.
 const double _kStickyEstSegment = 52;
 const double _kStickyEstBrowsePlus = 118;
-const double _kStickyEstSetSearch = 72;
-const double _kStickyEstCardSearch = 72;
-const double _kStickyEstGlobalSearch = 64;
+const double _kStickyEstSetSearch =
+    ChromeMetrics.searchBarSecondaryTopInset +
+    ChromeMetrics.searchHeaderExtent +
+    ChromeMetrics.searchBarBottomInset;
+const double _kStickyEstCardSearch = _kStickyEstSetSearch;
+const double _kStickyEstGlobalSearch =
+    ChromeMetrics.searchBarSecondaryTopInset +
+    ChromeMetrics.searchHeaderExtent +
+    ChromeMetrics.searchBarBottomInset;
 
 // Persisted navigation state (browse only)
 class _CatalogNavState {
@@ -1471,40 +1478,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           ),
         ),
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: AdaptiveTextField(
+          padding: ChromeMetrics.searchBarRowPadding(),
+          child: GlassSearchField(
             controller: _browseSearchCtrl,
+            hint: 'Search releases…',
             onChanged: (_) => setState(() {}),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            placeholder: 'Search releases…',
-            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-            suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                ? GestureDetector(
-                    onTap: () => setState(() => _browseSearchCtrl.clear()),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.close, size: 16),
-                    ),
-                  )
-                : null,
-            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
-            decoration: InputDecoration(
-              labelText: 'Search releases',
-              hintText: 'Search releases…',
-              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-              suffixIcon: _browseSearchCtrl.text.isNotEmpty
-                  ? GestureDetector(
-                      onTap: () => setState(() => _browseSearchCtrl.clear()),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(Icons.close, size: 16),
-                      ),
-                    )
-                  : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              isDense: true,
-            ),
+            onClear: () => setState(() => _browseSearchCtrl.clear()),
           ),
         ),
       ],
@@ -1542,9 +1521,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       }
       secondaryHeight = _kStickyEstGlobalSearch;
       secondary = Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: ChromeMetrics.searchBarSecondaryPadding(),
         child: FilterSortActionBar<void>(
-          searchText: _globalSearchCtrl.text,
+          searchController: _globalSearchCtrl,
           onSearchChanged: _onSearchChanged,
           onSearchClear: () => setState(() {
             _globalSearchCtrl.clear();
@@ -1574,62 +1553,33 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       case _CatalogStep.sets:
         secondaryHeight = _kStickyEstSetSearch;
         secondary = Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: AdaptiveTextField(
+          padding: ChromeMetrics.searchBarSecondaryPadding(
+            horizontal: ChromeMetrics.horizontalInset,
+            top: 12,
+          ),
+          child: GlassSearchField(
             controller: _setSearchCtrl,
+            hint: 'Search sets…',
             onChanged: (_) => setState(() {}),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            placeholder: 'Search sets…',
-            prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-            suffixIcon: _setSearchCtrl.text.isNotEmpty
-                ? GestureDetector(
-                    onTap: () => setState(() => _setSearchCtrl.clear()),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.close, size: 16),
-                    ),
-                  )
-                : null,
-            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context, radius: 10),
-            decoration: InputDecoration(
-              labelText: 'Search sets',
-              hintText: 'Search sets…',
-              hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-              prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-              suffixIcon: _setSearchCtrl.text.isNotEmpty
-                  ? GestureDetector(
-                      onTap: () => setState(() => _setSearchCtrl.clear()),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(Icons.close, size: 16),
-                      ),
-                    )
-                  : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              isDense: true,
-            ),
+            onClear: () => setState(() => _setSearchCtrl.clear()),
           ),
         );
         break;
       case _CatalogStep.card:
         secondaryHeight = _kStickyEstCardSearch;
         secondary = Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: AdaptiveTextField(
+          padding: ChromeMetrics.searchBarSecondaryPadding(
+            horizontal: ChromeMetrics.horizontalInset,
+            top: 12,
+          ),
+          child: GlassSearchField(
             controller: _cardCtrl,
+            hint: 'Search player name…',
             onChanged: _searchCards,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            placeholder: 'Search player name…',
-            prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-            cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
-            decoration: InputDecoration(
-              labelText: 'Search players',
-              hintText: 'Search player name…',
-              hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-              prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
-            ),
+            onClear: () {
+              _cardCtrl.clear();
+              _searchCards('');
+            },
           ),
         );
         break;

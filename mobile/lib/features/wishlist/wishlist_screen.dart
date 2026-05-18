@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/fonts.dart';
+import '../../core/widgets/frosted_chrome_layer.dart';
+import '../../core/widgets/glass_search_field.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/utils/currency_format.dart';
@@ -16,10 +18,8 @@ import '../../core/widgets/card_thumbnail.dart';
 import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
-import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
-import '../collection/widgets/filter_sort_action_bar.dart';
 import 'wishlist_form_sheet.dart';
 
 int? _tryParseInt(dynamic value) {
@@ -353,19 +353,19 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
         SliverFrostedHeader(
           height:
               navOffset +
-              ChromeMetrics.searchHeaderExtent +
-              ChromeMetrics.searchOnlyTightExtraHeight,
+              GlassSearchField.pillHeight +
+              ChromeMetrics.searchOnlyExtraHeight,
           child: FrostedChromeLayer(
             child: Padding(
-              padding: ChromeMetrics.searchOnlyTightPadding(navOffset),
-              child: FilterSortActionBar<String>(
-                searchText: _searchQuery,
-                onSearchChanged: (v) => setState(() => _searchQuery = v),
-                onSearchClear: () {
+              padding: ChromeMetrics.searchOnlyPadding(navOffset),
+              child: GlassSearchField(
+                controller: _searchCtrl,
+                hint: 'Search player, set, parallel…',
+                onChanged: (v) => setState(() => _searchQuery = v),
+                onClear: () {
                   _searchCtrl.clear();
                   setState(() => _searchQuery = '');
                 },
-                searchHint: 'Search player, set, card #…',
               ),
             ),
           ),

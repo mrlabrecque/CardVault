@@ -8,7 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/comps_service.dart';
 import '../../core/models/comp.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/widgets/adaptive_list_card.dart';
+import '../../core/widgets/glass_search_field.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
 
 class CompsScreen extends ConsumerStatefulWidget {
@@ -127,60 +129,48 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         children: [
           // ── Search bar ──────────────────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: AdaptiveTextField(
-                  controller: _searchCtrl,
-                  onSubmitted: (_) => _search(),
-                  textInputAction: TextInputAction.search,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  placeholder: 'Search player, set, year, grade…',
-                  prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
-                  style: const TextStyle(fontSize: 14),
-                  decoration: InputDecoration(
-                    labelText: 'Comp search',
-                    hintText: 'Search player, set, year, grade…',
-                    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF9CA3AF)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4))),
+          Padding(
+            padding: const EdgeInsets.only(bottom: ChromeMetrics.searchBarBottomInset),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GlassSearchField(
+                    controller: _searchCtrl,
+                    hint: 'Search player, set, year, grade…',
+                    onChanged: (_) {},
+                    onSubmitted: (_) => _search(),
+                    textInputAction: TextInputAction.search,
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: _loading
-                    ? Container(
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: _loading
+                      ? Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(12),
                           ),
+                          child: const Center(
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            ),
+                          ),
+                        )
+                      : AdaptiveButton.icon(
+                          onPressed: _search,
+                          icon: Icons.search,
+                          style: AdaptiveButtonStyle.filled,
+                          color: AppTheme.primary,
+                          iconColor: Colors.white,
+                          padding: EdgeInsets.zero,
                         ),
-                      )
-                    : AdaptiveButton.icon(
-                        onPressed: _search,
-                        icon: Icons.search,
-                        style: AdaptiveButtonStyle.filled,
-                        color: AppTheme.primary,
-                        iconColor: Colors.white,
-                        padding: EdgeInsets.zero,
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
 
           // ── Error ───────────────────────────────────────────────────────────

@@ -218,6 +218,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
                         _buildFeeCard(),
                         const SizedBox(height: ChromeMetrics.segmentToSearchGap),
                         FilterSortActionBar<String>(
+                          searchController: _searchController,
                           searchText: _search,
                           onSearchChanged: (v) => setState(() => _search = v),
                           onSearchClear: () {

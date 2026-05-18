@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/glass_search_field.dart';
 import '../../../core/widgets/filter_pill.dart';
 
 class SortMenuOption<T> {
@@ -20,6 +20,7 @@ class SortMenuOption<T> {
 class FilterSortActionBar<T> extends StatelessWidget {
   const FilterSortActionBar({
     super.key,
+    this.searchController,
     this.searchText,
     this.onSearchChanged,
     this.onSearchClear,
@@ -32,6 +33,7 @@ class FilterSortActionBar<T> extends StatelessWidget {
     this.actionButton,
   });
 
+  final TextEditingController? searchController;
   final String? searchText;
   final ValueChanged<String>? onSearchChanged;
   final VoidCallback? onSearchClear;
@@ -45,9 +47,11 @@ class FilterSortActionBar<T> extends StatelessWidget {
   final ValueChanged<T>? onSortSelected;
   final Widget? actionButton;
 
+  bool get _showsSearch =>
+      searchController != null || (searchText != null && onSearchChanged != null);
+
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final adaptiveSortItems = sortOptions
         ?.map<AdaptivePopupMenuEntry>(
           (opt) => AdaptivePopupMenuItem<T>(
@@ -60,57 +64,15 @@ class FilterSortActionBar<T> extends StatelessWidget {
 
     return Column(
       children: [
-        // Row 1: Search + Sort (only if search is enabled)
-        if (searchText != null) ...[
+        if (_showsSearch) ...[
           Row(
             children: [
               Expanded(
-                child: AdaptiveTextField(
+                child: GlassSearchField(
+                  controller: searchController,
+                  hint: searchHint ?? 'Search',
                   onChanged: onSearchChanged!,
-                  placeholder: searchHint,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                  suffixIcon: searchText!.isNotEmpty
-                      ? GestureDetector(
-                          onTap: onSearchClear!,
-                          child: const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Icon(Icons.clear, size: 16),
-                          ),
-                        )
-                      : null,
-                  cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
-                  style: const TextStyle(fontSize: 14),
-                  decoration: InputDecoration(
-                    labelText: searchHint == null || searchHint!.isEmpty ? 'Search' : searchHint,
-                    hintText: searchHint,
-                    hintStyle: TextStyle(color: colors.onSurface.withValues(alpha: 0.4), fontSize: 14),
-                    prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                    suffixIcon: searchText!.isNotEmpty
-                        ? GestureDetector(
-                            onTap: onSearchClear!,
-                            child: const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(Icons.clear, size: 16),
-                            ),
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: colors.outline),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: colors.outline),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: colors.primary.withValues(alpha: 0.4)),
-                    ),
-                  ),
+                  onClear: onSearchClear,
                 ),
               ),
               if (adaptiveSortItems != null && onSortSelected != null) ...[
@@ -128,7 +90,6 @@ class FilterSortActionBar<T> extends StatelessWidget {
             ],
           ),
         ] else if (adaptiveSortItems != null && onSortSelected != null) ...[
-          // If no search but sort is enabled, just show sort button
           Align(
             alignment: Alignment.centerRight,
             child: AdaptivePopupMenuButton.icon<T>(
@@ -143,7 +104,6 @@ class FilterSortActionBar<T> extends StatelessWidget {
           ),
         ],
 
-        // Row 2: Filters + Action
         if (filters.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),

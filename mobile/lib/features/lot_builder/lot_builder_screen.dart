@@ -337,7 +337,7 @@ class _BrowseView extends ConsumerWidget {
                         top: navOffset + ChromeMetrics.segmentOnlyTopInset,
                         left: ChromeMetrics.horizontalInset,
                         right: ChromeMetrics.horizontalInset,
-                        bottom: ChromeMetrics.multiRowBottomInset,
+                        bottom: ChromeMetrics.searchBarBottomInset,
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -352,6 +352,7 @@ class _BrowseView extends ConsumerWidget {
                           ),
                           const SizedBox(height: ChromeMetrics.segmentToSearchGap),
                           FilterSortActionBar<_SortOption>(
+                            searchController: searchCtrl,
                             searchText: query,
                             onSearchChanged: onQueryChanged,
                             onSearchClear: () {

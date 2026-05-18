@@ -11,6 +11,7 @@ import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_breadcrumb.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/glass_nav_bar.dart';
+import '../../core/widgets/glass_search_field.dart';
 import '../../core/widgets/sticky_chrome_scaffold.dart';
 
 const _sports = [
@@ -366,41 +367,13 @@ class _AdminCatalogScreenState extends ConsumerState<AdminCatalogScreen> {
                   ),
                 ),
               const SizedBox(height: 12),
-              AdaptiveTextField(
+              GlassSearchField(
                 controller: _searchCtrl,
+                hint: 'Filter catalog by name or year…',
                 onChanged: (_) => setState(() {}),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                placeholder: 'Filter catalog by name or year…',
-                prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? GestureDetector(
-                        onTap: () => setState(() => _searchCtrl.clear()),
-                        child: const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Icon(Icons.close, size: 16),
-                        ),
-                      )
-                    : null,
-                cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
-                decoration: InputDecoration(
-                  labelText: 'Filter releases',
-                  hintText: 'Filter catalog by name or year…',
-                  hintStyle: TextStyle(fontSize: 14, color: colors.onSurface.withValues(alpha: 0.4)),
-                  prefixIcon: Icon(Icons.search, size: 18, color: colors.onSurface.withValues(alpha: 0.4)),
-                  suffixIcon: _searchCtrl.text.isNotEmpty
-                      ? GestureDetector(
-                          onTap: () => setState(() => _searchCtrl.clear()),
-                          child: const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Icon(Icons.close, size: 16),
-                          ),
-                        )
-                      : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  isDense: true,
-                ),
+                onClear: () => setState(() => _searchCtrl.clear()),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: ChromeMetrics.searchBarBottomInset),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
