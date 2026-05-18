@@ -95,11 +95,14 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     return avgs.values.any((v) => v != null && v > 0);
   }
 
-  /// Grade passed to [CardCompsSection]. Hidden only on the first fetch (nothing mounted yet)
-  /// so the child does not race the edge write; keep mounted during refresh/scroll rebuilds.
+  /// Grade passed to [CardCompsSection]. Hidden while a grade fetch is in flight.
   String? get _mountedCompsGrade {
+    if (_guideSoldCompsLoading) return null;
+    final selection =
+        _compsGradeSelection.trim().isEmpty ? 'Raw' : _compsGradeSelection.trim();
     final mounted = _guideSoldCompsGrade ?? _autoDbCompsGrade;
-    if (_guideSoldCompsLoading && mounted == null) return null;
+    if (mounted == null) return null;
+    if (!currentPricesGradeLooselyEqual(mounted, selection)) return null;
     return mounted;
   }
 
@@ -222,9 +225,8 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       _compsGradeSelection = g;
       _guideSoldCompsLoading = true;
       _guideSoldCompsFetchingGrade = g;
-      if (!currentPricesGradeLooselyEqual(_guideSoldCompsGrade ?? '', g)) {
-        _guideSoldCompsGrade = null;
-      }
+      _guideSoldCompsGrade = null;
+      _autoDbCompsGrade = null;
       _guideSoldCompsEmpty = false;
       _compsGradeLow = null;
       _compsGradeHigh = null;
@@ -254,7 +256,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     if (!hasSales && showErrorSnackBar && mounted) {
       AdaptiveSnackBar.show(
         context,
-        message: 'Could not load sold comps for $g.',
+        message: PriceGuideCopy.noSoldCompsForGrade(g),
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -311,7 +313,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
         _mountedCompsGrade != null) {
       return;
     }
-    unawaited(_loadCompsForGrade(picked));
+    unawaited(_loadCompsForGrade(picked, showErrorSnackBar: false));
   }
 
   bool get _guideGradeMenuEnabled =>
@@ -458,9 +460,7 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
                         child: Center(child: CardFanLoader(size: 72)),
                       ),
                     ],
-                    if (_guideSoldCompsEmpty &&
-                        !_guideSoldCompsLoading &&
-                        _mountedCompsGrade == null) ...[
+                    if (_guideSoldCompsEmpty && !_guideSoldCompsLoading) ...[
                       _SoldCompsNotFoundBanner(gradeLabel: _compsGradeSelection),
                       const SizedBox(height: 12),
                     ],
@@ -671,8 +671,8 @@ class _SoldCompsNotFoundBanner extends StatelessWidget {
 
     return MarketSectionNotice(
       icon: isIOS ? CupertinoIcons.info : Icons.info_outline,
-      title: 'No sold comps found',
-      message: 'No sold comps were found for $grade.',
+      title: PriceGuideCopy.noSoldCompsTitle,
+      message: PriceGuideCopy.noSoldCompsForGrade(grade),
       highlightBorderColor: colors.outline.withValues(alpha: 0.28),
     );
   }
@@ -780,7 +780,7 @@ class _GuideSoldCompsEmptyPanel extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return MarketSectionNotice(
       icon: isIOS ? CupertinoIcons.info : Icons.info_outline,
-      title: 'No sold comps found',
+      title: PriceGuideCopy.noSoldCompsTitle,
       message: message,
       highlightBorderColor: colors.outline.withValues(alpha: 0.28),
     );

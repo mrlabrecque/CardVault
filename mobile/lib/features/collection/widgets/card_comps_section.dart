@@ -1,20 +1,34 @@
 import 'dart:async';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/models/comp.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/comps_outlier_utils.dart';
 import '../../../core/utils/currency_format.dart';
 import '../../../core/ui/price_guide_copy.dart';
+import '../../../core/utils/platform_utils.dart';
 import '../../../core/widgets/adaptive_list_card.dart';
-import '../../../core/widgets/card_fan_loader.dart';
 import '../../../core/widgets/inline_notice_container.dart';
 import '../../../core/services/comps_service.dart';
 import 'comps_market_filters.dart';
-import 'market_listings_list.dart' show MarketListingRow, MarketListingsList, formatMarketListingMetaDate;
+import 'market_listings_list.dart'
+    show MarketListingRow, MarketListingsList, MarketSectionNotice, formatMarketListingMetaDate;
+
+Widget soldCompsSectionEmptyNotice(
+  BuildContext context, {
+  required String message,
+}) {
+  final colors = Theme.of(context).colorScheme;
+  return MarketSectionNotice(
+    icon: isIOS ? CupertinoIcons.info : Icons.info_outline,
+    title: PriceGuideCopy.noSoldCompsTitle,
+    message: message,
+    highlightBorderColor: colors.outline.withValues(alpha: 0.28),
+  );
+}
 
 class CardCompsSection extends ConsumerStatefulWidget {
   const CardCompsSection({
@@ -214,13 +228,25 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
     return CompsOutlierStats.averagePrice(comps);
   }
 
-  /// One chart point per included sold listing (chronological); outliers omitted.
+  /// One chart point per calendar day with sales (daily average price); outliers omitted.
   List<_CompChartPoint> _getChartPoints() {
-    final withDates = _compsForStats.where((c) => c.soldAt != null).toList()
-      ..sort((a, b) => a.soldAt!.compareTo(b.soldAt!));
+    final withDates = _compsForStats.where((c) => c.soldAt != null);
+    if (withDates.isEmpty) return const [];
+
+    final pricesByDay = <DateTime, List<double>>{};
+    for (final c in withDates) {
+      final sold = c.soldAt!;
+      final day = DateTime(sold.year, sold.month, sold.day);
+      pricesByDay.putIfAbsent(day, () => []).add(c.price);
+    }
+
+    final days = pricesByDay.keys.toList()..sort();
     return [
-      for (final c in withDates)
-        _CompChartPoint(soldAt: c.soldAt!, price: c.price),
+      for (final day in days)
+        _CompChartPoint(
+          soldAt: day,
+          price: pricesByDay[day]!.reduce((a, b) => a + b) / pricesByDay[day]!.length,
+        ),
     ];
   }
 
@@ -231,19 +257,14 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    if (widget.embeddedGuideSoldComps && _loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 24),
-        child: Center(child: CardFanLoader(size: 72)),
-      );
+    if (widget.embeddedGuideSoldComps &&
+        (_loading || (_fetchInProgress && _allComps.isEmpty))) {
+      return const SizedBox.shrink();
     }
 
     if (_isRefreshingUi && _allComps.isEmpty) {
       if (widget.embeddedGuideSoldComps) {
-        return const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 24),
-          child: Center(child: CardFanLoader(size: 72)),
-        );
+        return const SizedBox.shrink();
       }
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -282,31 +303,9 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
 
     if (_allComps.isEmpty) {
       if (widget.embeddedGuideSoldComps) {
-        if (_fetchInProgress) {
-          return const SizedBox.shrink();
-        }
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerHighest.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: colors.outline.withValues(alpha: 0.25)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.55)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  PriceGuideCopy.noPriceGuideSalesForGrade(_selectedGrade),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.72),
-                        height: 1.35,
-                      ),
-                ),
-              ),
-            ],
-          ),
+        return soldCompsSectionEmptyNotice(
+          context,
+          message: PriceGuideCopy.noSoldCompsForGrade(_selectedGrade),
         );
       }
       return Container(
@@ -448,29 +447,36 @@ class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
         ],
 
         if (_filteredComps.isEmpty)
-          InlineNoticeContainer(
-            icon: Icon(Icons.info_outline, size: 20, color: colors.onSurface.withValues(alpha: 0.60)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'No recent sales',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colors.onSurface,
+          widget.embeddedGuideSoldComps
+              ? soldCompsSectionEmptyNotice(
+                  context,
+                  message: PriceGuideCopy.noPriceGuideSalesInRange(_selectedGrade),
+                )
+              : InlineNoticeContainer(
+                  icon: Icon(
+                    Icons.info_outline,
+                    size: 20,
+                    color: colors.onSurface.withValues(alpha: 0.60),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No recent sales',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colors.onSurface,
+                            ),
                       ),
-                ),
-                Text(
-                  widget.embeddedGuideSoldComps
-                      ? PriceGuideCopy.noPriceGuideSalesInRange(_selectedGrade)
-                      : 'No recent eBay sales found at $_selectedGrade grade.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.60),
+                      Text(
+                        'No recent eBay sales found at $_selectedGrade grade.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colors.onSurface.withValues(alpha: 0.60),
+                            ),
                       ),
-                ),
-              ],
-            ),
-          )
+                    ],
+                  ),
+                )
         else
           MarketListingsList(
             countLabel: _listingsCountLabel(outlierStats),
@@ -714,8 +720,56 @@ class _CompChartPoint {
   final double price;
 }
 
-bool _isSameCalendarDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+const int _compsChartMaxAxisLabels = 5;
+
+/// Evenly spaced x-axis label indices (always includes first and last sale day).
+List<int> compsChartBottomLabelIndices(int pointCount, {int maxLabels = _compsChartMaxAxisLabels}) {
+  if (pointCount <= 0) return const [];
+  if (pointCount == 1) return const [0];
+  if (pointCount <= maxLabels) {
+    return List.generate(pointCount, (i) => i);
+  }
+  final seen = <int>{};
+  final out = <int>[];
+  for (var i = 0; i < maxLabels; i++) {
+    final idx = (i * (pointCount - 1) / (maxLabels - 1)).round();
+    if (seen.add(idx)) out.add(idx);
+  }
+  return out;
+}
+
+/// Evenly spaced values between [min] and [max] (inclusive), for chart axes.
+List<double> compsChartAxisValues({
+  required double min,
+  required double max,
+  int maxLabels = _compsChartMaxAxisLabels,
+}) {
+  if (maxLabels <= 1 || (max - min).abs() < 1e-9) {
+    return [min];
+  }
+  final seen = <int>{};
+  final out = <double>[];
+  for (var i = 0; i < maxLabels; i++) {
+    final v = min + (max - min) * i / (maxLabels - 1);
+    final key = (v * 100).round();
+    if (seen.add(key)) {
+      out.add(double.parse(v.toStringAsFixed(2)));
+    }
+  }
+  return out;
+}
+
+bool compsChartAxisValueShows(double value, List<double> ticks) {
+  if (ticks.isEmpty) return false;
+  final span = (ticks.last - ticks.first).abs();
+  final tol = span < 1e-6 ? 0.5 : span * 0.04;
+  for (final t in ticks) {
+    if ((value - t).abs() <= tol) return true;
+  }
+  return false;
+}
+
+String _compsChartDateLabel(DateTime date) => '${date.month}/${date.day}';
 
 /// Pill badge drawn at the period-average point (right end of the avg segment).
 class _AvgPillDotPainter extends FlDotPainter {
@@ -824,12 +878,6 @@ class _PriceChart extends StatelessWidget {
   /// Mean price of all sold comps in the selected grade + date window (listings, not daily points).
   final double? listingsAverage;
 
-  /// One x-axis label per calendar day (first point of each day in the series).
-  bool _showBottomDateLabel(int index) {
-    if (index == 0) return true;
-    return !_isSameCalendarDay(points[index].soldAt, points[index - 1].soldAt);
-  }
-
   @override
   Widget build(BuildContext context) {
     if (points.isEmpty) {
@@ -845,8 +893,11 @@ class _PriceChart extends StatelessWidget {
       fontSize: 11,
     );
 
-    var minPrice = points.map((p) => p.price).reduce((a, b) => a < b ? a : b);
-    var maxPrice = points.map((p) => p.price).reduce((a, b) => a > b ? a : b);
+    final dailyPrices = [for (final p in points) p.price];
+    var minPrice = dailyPrices.reduce((a, b) => a < b ? a : b);
+    var maxPrice = dailyPrices.reduce((a, b) => a > b ? a : b);
+    final bottomLabelIndices = compsChartBottomLabelIndices(points.length);
+    final bottomLabelSet = bottomLabelIndices.toSet();
     final avg = listingsAverage;
     if (avg != null) {
       if (avg < minPrice) minPrice = avg;
@@ -856,6 +907,13 @@ class _PriceChart extends StatelessWidget {
     if (axisSpan < 1e-6) {
       axisSpan = (minPrice.abs() * 0.05) + 1;
     }
+
+    final chartMinY = minPrice - axisSpan * 0.08;
+    final chartMaxY = maxPrice + axisSpan * 0.22;
+    final leftLabelValues = compsChartAxisValues(min: chartMinY, max: chartMaxY);
+    final leftLabelInterval = leftLabelValues.length <= 1
+        ? 1.0
+        : (chartMaxY - chartMinY) / (leftLabelValues.length - 1);
 
     final spots = <FlSpot>[
       for (var i = 0; i < points.length; i++)
@@ -868,20 +926,20 @@ class _PriceChart extends StatelessWidget {
     final lastX = (points.length - 1).toDouble();
     final pillCenterX = lastX / 2.0;
 
-    const lineColor = AppTheme.primary;
+    final primary = colors.primary;
 
     final lineBars = <LineChartBarData>[
       LineChartBarData(
         spots: spots,
         isCurved: true,
-        color: lineColor,
+        color: primary,
         barWidth: 2.5,
         dotData: FlDotData(
           show: true,
           getDotPainter: (spot, percent, barData, index) {
             return FlDotCirclePainter(
               radius: 4,
-              color: lineColor,
+              color: primary,
               strokeWidth: 2,
               strokeColor: colors.surface,
             );
@@ -889,7 +947,7 @@ class _PriceChart extends StatelessWidget {
         ),
         belowBarData: BarAreaData(
           show: true,
-          color: lineColor.withValues(alpha: 0.1),
+          color: primary.withValues(alpha: 0.12),
         ),
       ),
     ];
@@ -899,13 +957,16 @@ class _PriceChart extends StatelessWidget {
         LineChartBarData(
           spots: [FlSpot(0, avg), FlSpot(lastX, avg)],
           isCurved: false,
-          color: colors.primary.withValues(alpha: 0.42),
+          color: primary.withValues(alpha: 0.45),
           barWidth: 2,
           dashArray: [6, 4],
           dotData: const FlDotData(show: false),
           belowBarData: BarAreaData(show: false),
         ),
       );
+    }
+
+    if (avg != null) {
       lineBars.add(
         LineChartBarData(
           spots: [FlSpot(pillCenterX, avg)],
@@ -916,7 +977,7 @@ class _PriceChart extends StatelessWidget {
             show: true,
             getDotPainter: (spot, percent, barData, index) {
               return _AvgPillDotPainter(
-                fillColor: colors.primary,
+                fillColor: primary,
                 textColor: colors.onPrimary,
                 label: formatUsd(avg),
               );
@@ -934,8 +995,11 @@ class _PriceChart extends StatelessWidget {
           show: true,
           drawHorizontalLine: true,
           drawVerticalLine: false,
-          horizontalInterval: axisSpan / 4,
+          horizontalInterval: leftLabelInterval,
           getDrawingHorizontalLine: (value) {
+            if (!compsChartAxisValueShows(value, leftLabelValues)) {
+              return const FlLine(color: Colors.transparent, strokeWidth: 0);
+            }
             return FlLine(
               color: const Color(0xFFF3F4F6),
               strokeWidth: 1,
@@ -947,32 +1011,48 @@ class _PriceChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              interval: leftLabelInterval,
               getTitlesWidget: (value, meta) {
-                return Text(formatUsd(value), style: axisLabelStyle);
+                if (!compsChartAxisValueShows(value, leftLabelValues)) {
+                  return const SizedBox.shrink();
+                }
+                return SideTitleWidget(
+                  meta: meta,
+                  space: 6,
+                  child: Text(
+                    formatUsdCompact(value),
+                    style: axisLabelStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                  ),
+                );
               },
-              reservedSize: 40,
+              reservedSize: 44,
             ),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 1,
+              interval: points.length <= 1
+                  ? 1
+                  : (points.length - 1) / (bottomLabelIndices.length - 1).clamp(1, 999),
               getTitlesWidget: (value, meta) {
-                final index = value.round();
-                if (index < 0 || index >= points.length) return const SizedBox.shrink();
-                if (!_showBottomDateLabel(index)) return const SizedBox.shrink();
-                final date = points[index].soldAt;
-                final month = date.month.toString().padLeft(2, '0');
-                final day = date.day.toString().padLeft(2, '0');
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                final index = value.round().clamp(0, points.length - 1);
+                if (!bottomLabelSet.contains(index)) {
+                  return const SizedBox.shrink();
+                }
+                return SideTitleWidget(
+                  meta: meta,
+                  space: 4,
                   child: Text(
-                    '$month/$day',
+                    _compsChartDateLabel(points[index].soldAt),
                     style: axisLabelStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
                   ),
                 );
               },
-              reservedSize: 26,
+              reservedSize: 28,
             ),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -1039,8 +1119,8 @@ class _PriceChart extends StatelessWidget {
             },
           ),
         ),
-        minY: minPrice - axisSpan * 0.08,
-        maxY: maxPrice + axisSpan * 0.22,
+        minY: chartMinY,
+        maxY: chartMaxY,
         lineBarsData: lineBars,
       ),
     );

@@ -49,4 +49,9 @@ abstract final class PriceGuideCopy {
 
   static String noPriceGuideSalesInRange(String grade) =>
       'No price guide sales in the selected date range at $grade.';
+
+  static const noSoldCompsTitle = 'No sold comps found';
+
+  static String noSoldCompsForGrade(String grade) =>
+      'No sold comps were found for $grade.';
 }
