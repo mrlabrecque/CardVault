@@ -10,6 +10,84 @@ const LISTING_NOISE = new Set([
   'single', 'color', 'colour',
 ]);
 
+/** Extra tokens that are not reliable set differentiators in listing titles. */
+const SET_NAME_NOISE = new Set([
+  ...LISTING_NOISE,
+  'base', 'hobby', 'blaster', 'retail', 'mega', 'cell', 'pack', 'box',
+  'subset', 'draft', 'choice', 'hanger', 'fat', 'jumbo', 'cello',
+]);
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Words from a set name that should appear in a matching listing title (e.g. "kings", "house"). */
+export function distinctiveSetTitleTokens(setName: string): string[] {
+  const label = setName.trim();
+  if (!label || label.toLowerCase() === 'base') return [];
+  const out: string[] = [];
+  for (const word of label.toLowerCase().split(/\s+/)) {
+    const w = word.replace(/[^a-z0-9]/gi, '');
+    if (w.length >= 3 && !SET_NAME_NOISE.has(w)) out.push(w);
+  }
+  return [...new Set(out)];
+}
+
+/** True when the listing title clearly references an insert/subset name. */
+export function titleReferencesSet(title: string, setName: string): boolean {
+  const label = setName.trim();
+  if (!label || label.toLowerCase() === 'base') return false;
+  const t = title.toLowerCase();
+  const phrase = label.toLowerCase().replace(/\s+/g, ' ');
+  if (phrase.length >= 4 && t.includes(phrase)) return true;
+  const tokens = distinctiveSetTitleTokens(setName);
+  if (tokens.length === 0) return false;
+  return tokens.every((tok) => new RegExp(`\\b${escapeRegex(tok)}\\b`, 'i').test(title));
+}
+
+export function buildSiblingSetExclusionList(
+  ourSetName: string,
+  allSetNamesInRelease: string[],
+): Set<string> {
+  const our = ourSetName.trim().toLowerCase();
+  return new Set(
+    allSetNamesInRelease
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.toLowerCase() !== our),
+  );
+}
+
+function titleHasExcludedSet(title: string, exclusionList: Set<string>): boolean {
+  for (const setName of exclusionList) {
+    if (titleReferencesSet(title, setName)) return true;
+  }
+  return false;
+}
+
+/** Exact #card_number match — avoids matching "2" inside "2024" or "#23". */
+export function cardNumberMatchesListingTitle(
+  title: string,
+  cardNumber: string | null | undefined,
+): { ok: boolean; reason?: string } {
+  if (!cardNumber) return { ok: true };
+  const ourNum = String(cardNumber).replace(/^#/, '').trim();
+  if (!ourNum || !/^\d{1,4}$/.test(ourNum)) return { ok: true };
+
+  const hashMatches = [...title.matchAll(/#(\d{1,4})\b/gi)].map((m) => m[1]);
+  if (hashMatches.length > 0) {
+    if (!hashMatches.some((n) => n === ourNum)) {
+      return { ok: false, reason: 'card_number_missing' };
+    }
+    if (hashMatches.some((n) => n !== ourNum)) {
+      return { ok: false, reason: 'card_number_conflict' };
+    }
+    return { ok: true };
+  }
+
+  if (new RegExp(`\\b${escapeRegex(ourNum)}\\b`).test(title)) return { ok: true };
+  return { ok: false, reason: 'card_number_missing' };
+}
+
 export function buildCardEbayQuery(card: Record<string, unknown>): string {
   const {
     year, release_name, set_name, player, card_number,
@@ -75,6 +153,7 @@ export function parseAndFilterSoldComps(
   cardNumber?: string | null,
   setName?: string,
   debugRejects?: Array<{ title: string; reason: string }>,
+  siblingSetNames: string[] = [],
 ): any[] {
   const yearMatch = query.match(/\b(19|20)\d{2}\b/);
   const serialMatch = query.match(/\/(\d{1,4})\b/);
@@ -95,6 +174,11 @@ export function parseAndFilterSoldComps(
   const is_auto = /\bauto(graph)?\b/i.test(query);
   const is_patch = /\b(patch|relic|jersey)\b/i.test(query);
   const parallelExclusionList = buildParallelExclusionList(selectedParallelName, allParallelNames);
+  const siblingSetExclusionList = buildSiblingSetExclusionList(
+    setName ?? '',
+    siblingSetNames,
+  );
+  const requireSetInTitle = distinctiveSetTitleTokens(setName ?? '').length > 0;
   const reject = (item: any, reason: string) => {
     if (!debugRejects) return;
     debugRejects.push({
@@ -108,11 +192,15 @@ export function parseAndFilterSoldComps(
     if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) { reject(item, 'player_word_mismatch'); return false; }
     if (year && !title.includes(String(year))) { reject(item, 'year_mismatch'); return false; }
     if (/\blot\b/i.test(title)) { reject(item, 'lot_listing'); return false; }
-    if (cardNumber) {
-      const ourNum = String(cardNumber).toLowerCase();
-      if (!title.includes(ourNum)) { reject(item, 'card_number_missing'); return false; }
-      const otherCardNums = title.match(/#(\d{1,4})\b/g) ?? [];
-      if (otherCardNums.some((m: string) => !m.includes(ourNum))) { reject(item, 'card_number_conflict'); return false; }
+    const cardNumCheck = cardNumberMatchesListingTitle(item.title ?? '', cardNumber);
+    if (!cardNumCheck.ok) { reject(item, cardNumCheck.reason ?? 'card_number_mismatch'); return false; }
+    if (requireSetInTitle && setName && !titleReferencesSet(item.title, setName)) {
+      reject(item, 'set_name_missing');
+      return false;
+    }
+    if (titleHasExcludedSet(item.title, siblingSetExclusionList)) {
+      reject(item, 'excluded_set_match');
+      return false;
     }
     const hasSerial = /\/\d{1,4}\b/.test(title);
     if (!serial_max && hasSerial) { reject(item, 'unexpected_serial'); return false; }

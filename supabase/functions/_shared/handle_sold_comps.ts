@@ -118,7 +118,7 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
       set_parallels!parallel_id ( name ),
       set_cards (
         player, card_number, is_rookie, set_id,
-        sets ( id, name, releases ( year, name, sport ) )
+        sets ( id, name, release_id, releases ( id, year, name, sport ) )
       )
     `)
         .eq('id', masterCardId)
@@ -131,12 +131,27 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
       const sc = (masterCard as any).set_cards ?? {};
       const setData = sc.sets ?? {};
       const setIdForParallels = setData.id as string | undefined;
+      const releaseId = (setData.release_id ?? setData.releases?.id) as string | undefined;
 
-      const { data: allParallels } = await admin
-        .from('set_parallels')
-        .select('name')
-        .eq('set_id', setIdForParallels ?? sc.set_id);
+      let siblingSetsQuery = releaseId
+        ? admin.from('sets').select('name').eq('release_id', releaseId)
+        : null;
+      if (siblingSetsQuery && setData.id) {
+        siblingSetsQuery = siblingSetsQuery.neq('id', setData.id);
+      }
+
+      const [{ data: allParallels }, siblingSetsResult] = await Promise.all([
+        admin
+          .from('set_parallels')
+          .select('name')
+          .eq('set_id', setIdForParallels ?? sc.set_id),
+        siblingSetsQuery ?? Promise.resolve({ data: [] as { name?: string }[] }),
+      ]);
+      const siblingSets = siblingSetsResult.data;
       const allParallelNames = (allParallels as any[])?.map((p: any) => p.name) ?? [];
+      const siblingSetNames = ((siblingSets as { name?: string }[]) ?? [])
+        .map((row) => (row.name ?? '').trim())
+        .filter((name) => name.length > 0);
 
       const mcd = masterCard as any;
       const release = setData.releases ?? {};
@@ -273,6 +288,7 @@ export async function handleSoldCompsUnified(req: Request): Promise<Response> {
         sc.card_number ?? undefined,
         setData.name ?? undefined,
         rejectDebug,
+        siblingSetNames,
       );
       console.log(`[sold-comps/refresh] filtered rows: ${items.length}`);
       if (items.length === 0) {

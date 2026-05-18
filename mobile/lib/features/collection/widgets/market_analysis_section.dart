@@ -111,16 +111,35 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     return g.isEmpty ? 'Raw' : g;
   }
 
+  /// Sold Comps when guide prices or cached DB comps exist; For Sale is the fallback.
+  int _preferredInitialSegment() {
+    if (_hasUsableGuidePrices) return 0;
+    if (widget.guidePriceCardId?.trim().isNotEmpty == true) return 0;
+    if (widget.showDbSoldCompsWhenAvailable) return 0;
+    if (_showGuidePricesRequiredNotice) return 1;
+    return 0;
+  }
+
+  void _syncSegmentWithAvailableData() {
+    if (!mounted) return;
+    final preferSoldComps = _hasUsableGuidePrices ||
+        _cachedCompsGrades.isNotEmpty ||
+        widget.showDbSoldCompsWhenAvailable ||
+        widget.guidePriceCardId?.trim().isNotEmpty == true;
+    final next = preferSoldComps ? 0 : (_showGuidePricesRequiredNotice ? 1 : 0);
+    if (next != _segment) setState(() => _segment = next);
+  }
+
   @override
   void initState() {
     super.initState();
     _compsGradeSelection = _defaultCompsGrade();
-    if (_showGuidePricesRequiredNotice) {
-      _segment = 1;
-    }
+    _segment = _preferredInitialSegment();
     Future.microtask(() async {
       await _refreshCachedCompsGrades();
+      if (mounted) _syncSegmentWithAvailableData();
       if (mounted) await _tryAutoShowDbComps();
+      if (mounted) _syncSegmentWithAvailableData();
     });
   }
 
@@ -128,7 +147,10 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
     final id = widget.masterCardId.trim();
     if (id.isEmpty) return;
     final grades = await ref.read(compsServiceProvider).listCachedCompsGradesForMaster(id);
-    if (mounted) setState(() => _cachedCompsGrades = grades);
+    if (mounted) {
+      setState(() => _cachedCompsGrades = grades);
+      _syncSegmentWithAvailableData();
+    }
   }
 
   @override
@@ -138,9 +160,14 @@ class _MarketAnalysisSectionState extends ConsumerState<MarketAnalysisSection> {
       oldWidget.guideRecentPrices,
       widget.guideRecentPrices,
     )) {
-      unawaited(_refreshCachedCompsGrades());
+      unawaited(_refreshCachedCompsGrades().then((_) {
+        if (mounted) _syncSegmentWithAvailableData();
+      }));
       final hadPrices = guideGradeMapHasAnyPrice(oldWidget.guideRecentPrices ?? const {});
-      if (hadPrices && _showGuidePricesRequiredNotice && _segment == 0) {
+      final hasPricesNow = guideGradeMapHasAnyPrice(widget.guideRecentPrices ?? const {});
+      if (!hadPrices && hasPricesNow && _segment == 1) {
+        setState(() => _segment = 0);
+      } else if (hadPrices && !hasPricesNow && _showGuidePricesRequiredNotice && _segment == 0) {
         setState(() => _segment = 1);
       }
     }

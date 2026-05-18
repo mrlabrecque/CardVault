@@ -13,6 +13,7 @@ import '../../core/widgets/frosted_chrome_layer.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/glass_search_field.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
+import 'master_card_detail_screen.dart';
 
 int _gridCrossAxisCount(double width) {
   const pad = 16.0;
@@ -105,6 +106,39 @@ class _SetChecklistScreenState extends ConsumerState<SetChecklistScreen> {
       if (widget.args.releaseName != null) widget.args.releaseName!,
     ];
     return parts.isEmpty ? null : parts.join(' ');
+  }
+
+  void _onSlotTap(BuildContext context, _ChecklistRow row) {
+    if (row.owned && row.userCard != null) {
+      context.push('/collection/card', extra: row.userCard);
+      return;
+    }
+
+    final c = row.slot.card;
+    final catalogMasterId = row.slot.masterCardId ?? c.id;
+    context.push(
+      '/catalog/master',
+      extra: MasterCardDetailArgs(
+        masterCard: MasterCard(
+          id: catalogMasterId,
+          player: c.player,
+          cardNumber: c.cardNumber,
+          isRookie: c.isRookie,
+          isAuto: c.isAuto,
+          isPatch: c.isPatch,
+          isSSP: c.isSSP,
+          serialMax: c.serialMax,
+          imageUrl: c.imageUrl,
+          guidePriceCardId: c.guidePriceCardId,
+          gain: c.gain,
+        ),
+        parallelName: widget.args.parallelName,
+        releaseName: widget.args.releaseName,
+        setName: widget.args.setName,
+        year: widget.args.year,
+        setId: widget.args.setId,
+      ),
+    );
   }
 
   Widget _buildCountRow(ColorScheme colors, String countLabel) {
@@ -373,7 +407,10 @@ class _SetChecklistScreenState extends ConsumerState<SetChecklistScreen> {
                 childAspectRatio: 0.68,
               ),
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _ChecklistGridTile(row: visible[i]),
+                (context, i) => _ChecklistGridTile(
+                  row: visible[i],
+                  onTap: () => _onSlotTap(context, visible[i]),
+                ),
                 childCount: visible.length,
               ),
             ),
@@ -398,8 +435,9 @@ final _setChecklistSlotsProvider = FutureProvider.family<List<SetChecklistSlot>,
 );
 
 class _ChecklistGridTile extends StatelessWidget {
-  const _ChecklistGridTile({required this.row});
+  const _ChecklistGridTile({required this.row, required this.onTap});
   final _ChecklistRow row;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -485,15 +523,11 @@ class _ChecklistGridTile extends StatelessWidget {
       ],
     );
 
-    if (!row.owned || row.userCard == null) {
-      return tile;
-    }
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
-        onTap: () => context.push('/collection/card', extra: row.userCard),
+        onTap: onTap,
         child: tile,
       ),
     );

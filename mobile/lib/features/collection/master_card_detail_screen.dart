@@ -19,6 +19,9 @@ class MasterCardDetailScreen extends StatelessWidget {
     this.sport,
     this.onAddToCollection,
     this.onAddToWishlist,
+    this.setId,
+    this.parallelId,
+    this.releaseId,
     this.openedFromScanResults,
     this.openedFromScanSingleRoute,
     this.resyncGuidePricesFromCatalog,
@@ -32,6 +35,9 @@ class MasterCardDetailScreen extends StatelessWidget {
   final String? setName;
   final int? year;
   final String? sport;
+  final String? setId;
+  final String? parallelId;
+  final String? releaseId;
   final VoidCallback? onAddToCollection;
   final VoidCallback? onAddToWishlist;
   final bool? openedFromScanResults;
@@ -51,6 +57,9 @@ class MasterCardDetailScreen extends StatelessWidget {
         setName: setName,
         year: year,
         sport: sport,
+        setId: setId,
+        parallelId: parallelId,
+        releaseId: releaseId,
         onAddToCollection: onAddToCollection,
         onAddToWishlist: onAddToWishlist,
         openedFromScanResults: openedFromScanResults,

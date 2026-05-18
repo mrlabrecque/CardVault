@@ -25,6 +25,7 @@ import '../../core/widgets/card_attributes_wrap.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/inline_notice_container.dart';
 import '../../core/widgets/modal_sheet_scaffold.dart';
+import '../wishlist/card_sheet.dart';
 import '../wishlist/wishlist_screen.dart';
 import 'widgets/active_state_indicator.dart';
 import 'widgets/detail_property_tile.dart';
@@ -59,6 +60,9 @@ class MasterCardDetailArgs {
     this.sport,
     this.onAddToCollection,
     this.onAddToWishlist,
+    this.setId,
+    this.parallelId,
+    this.releaseId,
     this.openedFromScanResults,
     this.openedFromScanSingleRoute,
     this.resyncGuidePricesFromCatalog,
@@ -72,6 +76,10 @@ class MasterCardDetailArgs {
   final String? setName;
   final int? year;
   final String? sport;
+  /// Catalog set id — used to resolve [parallelId] and add-card form.
+  final String? setId;
+  final String? parallelId;
+  final String? releaseId;
   final VoidCallback? onAddToCollection;
   final VoidCallback? onAddToWishlist;
   final bool? openedFromScanResults;
@@ -190,9 +198,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     if (_isCatalog) {
-      _guidePricesLoading = _catalogNeedsBlockingGuideOverlay;
+      _guidePricesLoading = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_syncGuidePricesForMaster());
+        if (mounted) unawaited(_bootstrapCatalogDetail());
       });
     } else {
       final c = widget.card!;
@@ -220,9 +228,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         o.sport != n.sport ||
         (o.openedFromScanResults ?? false) != (n.openedFromScanResults ?? false) ||
         (o.openedFromScanSingleRoute ?? false) != (n.openedFromScanSingleRoute ?? false) ||
-        o.resyncGuidePricesFromCatalog != n.resyncGuidePricesFromCatalog) {
+        o.resyncGuidePricesFromCatalog != n.resyncGuidePricesFromCatalog ||
+        o.setId != n.setId ||
+        o.parallelId != n.parallelId ||
+        o.releaseId != n.releaseId) {
       setState(() {
-        _guidePricesLoading = _catalogNeedsBlockingGuideOverlay;
+        _guidePricesLoading = true;
         _guideMatchResult = null;
         _linkedGradePricesFromDb = null;
         _guideMatchRowPick = null;
@@ -230,10 +241,229 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         _guideSyncDebugJson = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_syncGuidePricesForMaster());
+        if (mounted) unawaited(_bootstrapCatalogDetail());
       });
     }
   }
+
+  Future<void> _bootstrapCatalogDetail() async {
+    await _resolveCatalogVariantMaster();
+    if (!mounted) return;
+    await _syncGuidePricesForMaster();
+  }
+
+  Future<void> _resolveCatalogVariantMaster() async {
+    final cards = ref.read(cardsServiceProvider);
+    final parallel = await _lookupCatalogParallel();
+    if (!mounted) return;
+    try {
+      final variantId = await cards.ensureCatalogVariant(
+        catalogVariantId: _catalog.masterCard.id,
+        parallelId: parallel?.id ?? _catalog.parallelId,
+      );
+      if (!mounted) return;
+      final fetched = await cards.fetchMasterCardById(variantId);
+      if (!mounted) return;
+      if (fetched != null) _refreshedMaster = fetched;
+    } catch (e, st) {
+      debugPrint('Catalog variant resolve: $e\n$st');
+    }
+  }
+
+  Future<SetParallel?> _lookupCatalogParallel() async {
+    final setId = _catalog.setId?.trim();
+    if (setId == null || setId.isEmpty) return null;
+    try {
+      final parallels = await ref.read(cardsServiceProvider).getParallels(setId);
+      final target = _catalog.parallelName.trim().toLowerCase();
+      for (final p in parallels) {
+        if (p.name.trim().toLowerCase() == target) return p;
+      }
+      if (target.isEmpty || target == 'base') {
+        for (final p in parallels) {
+          if (p.name.trim().toLowerCase() == 'base') return p;
+        }
+      }
+    } catch (e, st) {
+      debugPrint('lookupCatalogParallel: $e\n$st');
+    }
+    return null;
+  }
+
+  Future<void> _openCatalogAddToCollectionSheet() async {
+    final master = _refreshedMaster ?? _catalog.masterCard;
+    final parallel = await _lookupCatalogParallel();
+    if (!mounted) return;
+    final parallelLabel = (parallel?.name.trim().isNotEmpty ?? false)
+        ? parallel!.name.trim()
+        : _catalog.parallelName.trim();
+    final pricePaidCtrl = TextEditingController();
+    final serialNumberCtrl = TextEditingController();
+    final gradeValueCtrl = TextEditingController();
+    var isGraded = false;
+    var grader = 'PSA';
+
+    if (!mounted) return;
+    await showAdaptiveSheet(
+      context: context,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return CardSheet(
+        title: 'Add to Your Collection',
+        card: master,
+        setName: _catalog.setName,
+        releaseName: _catalog.releaseName,
+        year: _catalog.year,
+        previewParallelName: parallelLabel,
+        previewParallelSerialMax: parallel?.serialMax ?? _catalog.parallelSerialMax,
+        previewParallelIsAuto: parallel?.isAuto ?? _catalog.parallelIsAuto,
+        showPricePaid: true,
+        pricePaidCtrl: pricePaidCtrl,
+        showSerialNumber: (parallel?.serialMax ?? _catalog.parallelSerialMax) != null,
+        serialNumberCtrl: serialNumberCtrl,
+        showGraded: true,
+        isGraded: isGraded,
+        grader: grader,
+        gradeValueCtrl: gradeValueCtrl,
+        onGradedChanged: (v) => setSheetState(() => isGraded = v),
+        onGraderChanged: (g) => setSheetState(() => grader = g ?? 'PSA'),
+        onSave: (_) async {
+          try {
+            final variantId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+                  catalogVariantId: master.id,
+                  parallelId: parallel?.id ?? _catalog.parallelId,
+                );
+            final form = AddCardFormData(
+              masterCardId: variantId,
+              setId: _catalog.setId,
+              player: master.player,
+              cardNumber: master.cardNumber,
+              serialMax: master.serialMax,
+              isRookie: master.isRookie,
+              isAuto: master.isAuto,
+              isPatch: master.isPatch,
+              isSSP: master.isSSP,
+              parallelId: parallel?.id ?? _catalog.parallelId,
+              parallelName: parallelLabel,
+              pricePaid: parseUsdInput(pricePaidCtrl.text),
+              serialNumber: serialNumberCtrl.text.trim().isEmpty
+                  ? null
+                  : serialNumberCtrl.text.trim(),
+              isGraded: isGraded,
+              grader: isGraded ? grader : 'PSA',
+              gradeValue: isGraded && gradeValueCtrl.text.trim().isNotEmpty
+                  ? gradeValueCtrl.text.trim()
+                  : null,
+            );
+            final created = await ref.read(cardsServiceProvider).addCard(form);
+            await ref
+                .read(compsServiceProvider)
+                .syncMasterCatalogPricingForVariant(created.masterCardId);
+            ref.invalidate(userCardsProvider);
+            await ref.read(userCardsProvider.future);
+            unawaited(
+              ref.read(compsServiceProvider).fetchCardImage(created.masterCardId),
+            );
+            if (mounted) {
+              AdaptiveSnackBar.show(
+                context,
+                message: 'Card added!',
+                type: AdaptiveSnackBarType.success,
+                duration: const Duration(seconds: 2),
+              );
+            }
+            return null;
+          } catch (e) {
+            return e.toString();
+          }
+        },
+            );
+          },
+        );
+      },
+    );
+
+    pricePaidCtrl.dispose();
+    serialNumberCtrl.dispose();
+    gradeValueCtrl.dispose();
+  }
+
+  Future<void> _openCatalogAddToWishlistSheet() async {
+    final master = _refreshedMaster ?? _catalog.masterCard;
+    final parallel = await _lookupCatalogParallel();
+    if (!mounted) return;
+    final parallelLabel = (parallel?.name.trim().isNotEmpty ?? false)
+        ? parallel!.name.trim()
+        : _catalog.parallelName.trim();
+    final targetPriceCtrl = TextEditingController();
+
+    if (!mounted) return;
+    await showAdaptiveSheet(
+      context: context,
+      builder: (_) => CardSheet(
+        title: 'Add to Wishlist',
+        card: master,
+        setName: _catalog.setName,
+        releaseName: _catalog.releaseName,
+        year: _catalog.year,
+        previewParallelName: parallelLabel,
+        previewParallelSerialMax: parallel?.serialMax ?? _catalog.parallelSerialMax,
+        previewParallelIsAuto: parallel?.isAuto ?? _catalog.parallelIsAuto,
+        showTargetPrice: true,
+        targetPriceCtrl: targetPriceCtrl,
+        showGraded: false,
+        onSave: (_) async {
+          try {
+            final variantId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+                  catalogVariantId: master.id,
+                  parallelId: parallel?.id ?? _catalog.parallelId,
+                );
+            await ref.read(wishlistProvider.notifier).add({
+              'player': master.player.trim(),
+              'year': _catalog.year,
+              'set_name': _catalog.releaseName,
+              'card_number': (master.cardNumber ?? '').trim(),
+              'parallel': parallelLabel,
+              'is_rookie': master.isRookie,
+              'is_auto': master.isAuto,
+              'is_patch': master.isPatch,
+              'serial_max': master.serialMax,
+              'grade': null,
+              'ebay_query': null,
+              'exclude_terms': <String>[],
+              'target_price': parseUsdInput(targetPriceCtrl.text),
+              'master_card_id': variantId,
+              'release_id': _catalog.releaseId,
+              'set_id': _catalog.setId,
+              'sport': _catalog.sport,
+            });
+            ref.invalidate(wishlistProvider);
+            if (mounted) {
+              AdaptiveSnackBar.show(
+                context,
+                message: 'Added to wishlist!',
+                type: AdaptiveSnackBarType.success,
+                duration: const Duration(seconds: 2),
+              );
+            }
+            return null;
+          } catch (e) {
+            return e.toString();
+          }
+        },
+      ),
+    );
+
+    targetPriceCtrl.dispose();
+  }
+
+  VoidCallback get _onAddToCollection =>
+      _catalog.onAddToCollection ??
+      () => unawaited(_openCatalogAddToCollectionSheet());
+
+  VoidCallback get _onAddToWishlist =>
+      _catalog.onAddToWishlist ?? () => unawaited(_openCatalogAddToWishlistSheet());
 
   @override
   void dispose() {
@@ -314,7 +544,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (master != null) _refreshedMaster = master;
     setState(() {
       _guideMatchResult = payload;
-      _guidePricesLoading = false;
       _guideSyncDebugJson = _guideLookupDebugJson(payload: payload, master: master);
     });
   }
@@ -868,7 +1097,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final topInset = padding.top;
     final onLight = _scrolledPastHero;
     final iconTint = onLight ? colors.onSurface : Colors.white;
-    final catalogGuideSpinner = _isCatalog && _guidePricesLoading;
 
     if (_isCatalog) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -888,22 +1116,20 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         foregroundColor: iconTint,
         shape: const RoundedRectangleBorder(side: BorderSide.none),
         iconTheme: IconThemeData(color: iconTint),
-        leadingWidth: catalogGuideSpinner ? 0 : 64,
+        leadingWidth: 64,
         automaticallyImplyLeading: false,
-        leading: catalogGuideSpinner
-            ? null
-            : Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: Center(
-                  child: GlassCircleIconButton(
-                    icon: Icons.arrow_back_ios_new,
-                    onPressed: _handleBack,
-                    tooltip: 'Back',
-                    iconSize: 17,
-                    onDarkSurface: !onLight,
-                  ),
-                ),
-              ),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: GlassCircleIconButton(
+              icon: Icons.arrow_back_ios_new,
+              onPressed: _handleBack,
+              tooltip: 'Back',
+              iconSize: 17,
+              onDarkSurface: !onLight,
+            ),
+          ),
+        ),
         actions: widget.isOwned
             ? [
                 Padding(
@@ -951,7 +1177,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (!_isCatalog) return scaffold;
 
     return PopScope(
-      canPop: !_needsDoublePopFromScan && !catalogGuideSpinner,
+      canPop: !_needsDoublePopFromScan,
       onPopInvokedWithResult: (didPop, result) {
         if (_needsDoublePopFromScan && !didPop) {
           _handleBack();
@@ -1159,7 +1385,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   label: 'In Collection ($copyCount)',
                 )
               : AdaptiveButton.child(
-                  onPressed: _catalog.onAddToCollection,
+                  onPressed: _onAddToCollection,
                   style: AdaptiveButtonStyle.filled,
                   color: AppTheme.primary,
                   child: const Text(
@@ -1179,7 +1405,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   label: 'In Wishlist',
                 )
               : AdaptiveButton.child(
-                  onPressed: _catalog.onAddToWishlist,
+                  onPressed: _onAddToWishlist,
                   style: AdaptiveButtonStyle.bordered,
                   color: AppTheme.primary,
                   padding: ChromeMetrics.adaptiveBorderedButtonPadding,
@@ -1210,14 +1436,19 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     double topInset,
     double bottomPad,
   ) {
-    final overlayLoading = _guidePricesLoading || _guideSyncDebugJson != null;
+    if (_guidePricesLoading) {
+      return _buildCatalogLoadingPane(context, colors);
+    }
+    if (_guideSyncDebugJson != null) {
+      return _buildGuideSyncDebugPane(context, colors);
+    }
+    return _buildDetailListView(context, colors, topInset, bottomPad);
+  }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _buildDetailListView(context, colors, topInset, bottomPad),
-        if (overlayLoading) _buildGuideSyncOverlay(context, colors),
-      ],
+  Widget _buildCatalogLoadingPane(BuildContext context, ColorScheme colors) {
+    return Material(
+      color: colors.surface,
+      child: const Center(child: CardFanLoader(size: 72)),
     );
   }
 
@@ -1344,7 +1575,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       guideId = guidePriceCardId;
       recentPrices = guideRecentPrices;
       skipScraper = true;
-      showDbComps = hasUsableGuidePrices;
+      showDbComps = hasUsableGuidePrices || hasGuideCatalogLink;
       gain = titleGain;
     }
 
@@ -1389,10 +1620,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  Widget _buildGuideSyncOverlay(BuildContext context, ColorScheme colors) {
-    if (_guideSyncDebugJson != null) {
-      return Positioned.fill(
-        child: Material(
+  Widget _buildGuideSyncDebugPane(BuildContext context, ColorScheme colors) {
+      return Material(
           color: colors.surface,
           child: SafeArea(
             child: Padding(
@@ -1445,7 +1674,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         _guidePricesLoading = true;
                         _guideSyncDebugJson = null;
                       });
-                      unawaited(_syncGuidePricesForMaster());
+                      unawaited(_bootstrapCatalogDetail());
                     },
                     style: AdaptiveButtonStyle.filled,
                     color: AppTheme.primary,
@@ -1461,18 +1690,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               ),
             ),
           ),
-        ),
-      );
-    }
-
-    return Positioned.fill(
-      child: Material(
-        color: colors.surface,
-        child: const Center(
-          child: CardFanLoader(size: 72),
-        ),
-      ),
-    );
+        );
   }
 }
 

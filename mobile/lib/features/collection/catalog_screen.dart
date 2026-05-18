@@ -1036,6 +1036,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         setName: set?.name,
         year: release?.year,
         sport: release?.sport,
+        setId: set?.id,
+        parallelId: parallel?.id,
+        releaseId: release?.id,
         onAddToCollection: () => _showAddCopySheet(
               catalogMasterIdOverride: resolvedId,
               catalogParallelOverride: parallel,
