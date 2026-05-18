@@ -405,29 +405,19 @@ class _CardRow extends StatelessWidget {
   }
 
   Widget _buildInfo(_Tier tier) {
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: CardInfoSection.fromUserCard(card, isGraded: false),
-            ),
-            if (tier != _Tier.unavailable) ...[
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: _TierBadge(tier: tier),
-              ),
-            ],
-          ],
+        Expanded(
+          child: CardInfoSection.fromUserCard(card, isGraded: false),
         ),
-        const SizedBox(height: 4),
-        Text(
-          '${formatUsdOrNa(card.pricePaid, zeroIsNa: false)} paid · ${formatUsdOrNa(card.displayValue)} raw',
-          style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-        ),
+        if (tier != _Tier.unavailable) ...[
+          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _TierBadge(tier: tier),
+          ),
+        ],
       ],
     );
   }

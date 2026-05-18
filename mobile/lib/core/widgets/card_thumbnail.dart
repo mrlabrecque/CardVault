@@ -15,8 +15,9 @@ class CardThumbnail extends StatelessWidget {
     this.borderRadius = 6,
   });
 
-  /// List rows — wide enough for slab-style art.
-  static const double listRowWidth = 100;
+  /// List rows (collection, wishlist, lot builder, grading).
+  /// Portrait aspect is always 2.5 × 3.5 via [_thumbHeight].
+  static const double listRowWidth = 72;
 
   final String? imageUrl;
   final String sport;
