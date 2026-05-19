@@ -1,4 +1,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  ensureSetParallelsFromCardsight,
+  pickBaseParallelId,
+} from '../_shared/catalog_set_parallels.ts';
 
 const CARDSIGHT_BASE = 'https://api.cardsight.ai';
 const CORS = {
@@ -13,23 +17,6 @@ function json(data: unknown, status = 200) {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
-}
-
-/** Prefer `Base`, else lowest sort_order / name. */
-function pickBaseParallelId(
-  rows: { id: string; name: string; sort_order: number | null }[],
-): string | null {
-  if (!rows.length) return null;
-  const sorted = [...rows].sort((a, b) => {
-    const ab = a.name.trim().toLowerCase() === 'base' ? 0 : 1;
-    const bb = b.name.trim().toLowerCase() === 'base' ? 0 : 1;
-    if (ab !== bb) return ab - bb;
-    const sa = a.sort_order ?? 999999;
-    const sb = b.sort_order ?? 999999;
-    if (sa !== sb) return sa - sb;
-    return a.name.localeCompare(b.name);
-  });
-  return sorted[0]?.id ?? null;
 }
 
 Deno.serve(async (req) => {
@@ -112,16 +99,12 @@ Deno.serve(async (req) => {
       return json({ error: 'Set not found in DB. Import the set first via catalog-import-sets.' }, 400);
     }
 
-    const { data: parallelRows, error: parErr } = await supabase
-      .from('set_parallels')
-      .select('id, name, sort_order')
-      .eq('set_id', dbSetId);
+    const { rows: parallelRows, importedFromCardsight: parallelsImported } =
+      await ensureSetParallelsFromCardsight(supabase, apiKey, dbSetId, cardsightSetId);
 
-    if (parErr) throw new Error(parErr.message);
-
-    const baseParallelId = pickBaseParallelId(parallelRows ?? []);
+    const baseParallelId = pickBaseParallelId(parallelRows);
     if (!baseParallelId) {
-      return json({ error: 'No parallels defined for this set; add parallels before importing cards.' }, 400);
+      return json({ error: 'Could not resolve a base parallel for this set after catalog import.' }, 500);
     }
 
     const cardMap = new Map<string, {
@@ -242,6 +225,7 @@ Deno.serve(async (req) => {
     return json({
       imported: upsertedSetCards?.length ?? 0,
       total: cardMap.size,
+      parallelsImported,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

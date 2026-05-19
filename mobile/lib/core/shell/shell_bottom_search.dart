@@ -10,7 +10,9 @@ bool shellTabSupportsSearch(int tabIndex) =>
 bool shellLocationSupportsSearch(String location) =>
     location.startsWith('/catalog') ||
     location.startsWith('/collection') ||
-    location.startsWith('/wishlist');
+    location.startsWith('/wishlist') ||
+    location.startsWith('/grading') ||
+    location.startsWith('/lot-builder');
 
 String shellSearchHintForTab(int tabIndex) => switch (tabIndex) {
       1 => 'Search releases, sets, cards…',
@@ -27,6 +29,9 @@ String shellSearchHintForLocation(String location) {
   }
   if (location.startsWith('/wishlist')) {
     return 'Search player, set, parallel…';
+  }
+  if (location.startsWith('/grading') || location.startsWith('/lot-builder')) {
+    return 'Search player, set, sport…';
   }
   return shellSearchHintForTab(0);
 }
@@ -76,6 +81,16 @@ class ShellBottomSearch extends Notifier<ShellBottomSearchState> {
       controller.clear();
       focusNode.unfocus();
     }
+  }
+
+  /// Expands the bottom-bar search pill and focuses the field (e.g. Catalog Search tab).
+  void openSearch() {
+    setActive(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!focusNode.hasFocus) {
+        focusNode.requestFocus();
+      }
+    });
   }
 
   void clearQuery() {

@@ -17,9 +17,9 @@ import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/frosted_chrome_layer.dart';
+import '../../core/shell/shell_bottom_search.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
-import '../collection/widgets/filter_sort_action_bar.dart';
 
 enum _SortOption { dateDesc, playerAz, valueDesc }
 
@@ -31,24 +31,16 @@ class LotBuilderScreen extends ConsumerStatefulWidget {
 }
 
 class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
-  final _searchCtrl = TextEditingController();
-  String _query = '';
   final Set<String> _filters = {};
   _SortOption _sort = _SortOption.dateDesc;
   bool _showBasket = false;
 
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  List<UserCard> _filtered(List<UserCard> all) {
+  List<UserCard> _filtered(List<UserCard> all, String shellQuery) {
     var result = all
         .where((c) => c.displayValue != null && c.displayValue! > 0)
         .toList();
-    if (_query.isNotEmpty) {
-      final q = _query.toLowerCase();
+    if (shellQuery.isNotEmpty) {
+      final q = shellQuery.toLowerCase();
       result = result.where((c) =>
         c.player.toLowerCase().contains(q) ||
         (c.set?.toLowerCase().contains(q) ?? false) ||
@@ -75,8 +67,9 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final lot       = ref.watch(lotProvider);
-    final notifier  = ref.read(lotProvider.notifier);
+    final lot = ref.watch(lotProvider);
+    final notifier = ref.read(lotProvider.notifier);
+    final shellQuery = ref.watch(shellBottomSearchProvider).query;
     final colors = Theme.of(context).colorScheme;
     final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
     final hasActiveFilter = _filters.isNotEmpty;
@@ -175,15 +168,10 @@ class _LotBuilderScreenState extends ConsumerState<LotBuilderScreen> {
               child: _BrowseView(
                 navOffset: navOffset,
                 onToggleBrowseBasket: (v) => setState(() => _showBasket = v),
-                searchCtrl: _searchCtrl,
-                query: _query,
-                sort: _sort,
-                onSortChanged: (s) => setState(() => _sort = s),
+                shellQuery: shellQuery,
                 filters: _filters,
                 notifier: notifier,
-                onQueryChanged: (v) => setState(() => _query = v),
-                onFilterToggle: _toggleFilter,
-                filteredCards: _filtered,
+                filteredCards: (all) => _filtered(all, shellQuery),
               ),
             ),
         ],
@@ -285,30 +273,20 @@ class _BrowseView extends ConsumerWidget {
   const _BrowseView({
     required this.navOffset,
     required this.onToggleBrowseBasket,
-    required this.searchCtrl,
-    required this.query,
-    required this.sort,
-    required this.onSortChanged,
+    required this.shellQuery,
     required this.filters,
     required this.notifier,
-    required this.onQueryChanged,
-    required this.onFilterToggle,
     required this.filteredCards,
   });
 
   final double navOffset;
   final ValueChanged<bool> onToggleBrowseBasket;
-  final TextEditingController searchCtrl;
-  final String query;
-  final _SortOption sort;
-  final ValueChanged<_SortOption> onSortChanged;
+  final String shellQuery;
   final Set<String> filters;
   final LotNotifier notifier;
-  final ValueChanged<String> onQueryChanged;
-  final ValueChanged<String> onFilterToggle;
   final List<UserCard> Function(List<UserCard>) filteredCards;
 
-  /// Chrome below app bar: segments + gap + search row + bottom inset (tight fit; avoids dead blur padding).
+  /// Chrome below app bar: segment row only (search uses shell bottom pill).
   static const double _browseChromeExtentBelowNav =
       ChromeMetrics.lotBrowseHeaderExtent + ChromeMetrics.segmentOnlyTopInset;
 
@@ -339,29 +317,12 @@ class _BrowseView extends ConsumerWidget {
                         right: ChromeMetrics.horizontalInset,
                         bottom: ChromeMetrics.searchBarBottomInset,
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          AppSegmentedControl(
-                            key: ValueKey<String>('browse_tab_${lot.items.length}'),
-                            labels: ['Browse', basketLabel],
-                            selectedIndex: 0,
-                            onValueChanged: (index) => onToggleBrowseBasket(index == 1),
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(height: ChromeMetrics.segmentToSearchGap),
-                          FilterSortActionBar<_SortOption>(
-                            searchController: searchCtrl,
-                            searchText: query,
-                            onSearchChanged: onQueryChanged,
-                            onSearchClear: () {
-                              searchCtrl.clear();
-                              onQueryChanged('');
-                            },
-                            searchHint: 'Search player, set, sport…',
-                          ),
-                        ],
+                      child: AppSegmentedControl(
+                        key: ValueKey<String>('browse_tab_${lot.items.length}'),
+                        labels: ['Browse', basketLabel],
+                        selectedIndex: 0,
+                        onValueChanged: (index) => onToggleBrowseBasket(index == 1),
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   );
@@ -391,7 +352,7 @@ class _BrowseView extends ConsumerWidget {
               )
             else if (cards.isEmpty &&
                 allCards.isNotEmpty &&
-                query.isEmpty &&
+                shellQuery.isEmpty &&
                 filters.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,

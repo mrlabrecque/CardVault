@@ -22,8 +22,8 @@ import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/app_segmented_control.dart';
 import '../../core/widgets/adaptive_dropdown.dart';
+import '../../core/shell/shell_bottom_search.dart';
 import '../../core/widgets/glass_nav_bar.dart';
-import '../../core/widgets/glass_search_field.dart';
 import '../../core/widgets/sticky_chrome_scaffold.dart';
 import '../wishlist/wishlist_screen.dart' show wishlistProvider;
 import '../wishlist/card_sheet.dart';
@@ -33,20 +33,11 @@ import 'master_card_detail_screen.dart';
 import 'widgets/active_state_indicator.dart';
 import 'widgets/card_detail_view.dart';
 import 'widgets/card_comps_section.dart';
-import 'widgets/filter_sort_action_bar.dart';
 
 /// First-frame hints for [StickyChromeScaffold.stickyHeightEstimate] until layout measures.
-const double _kStickyEstSegment = 52;
-const double _kStickyEstBrowsePlus = 118;
-const double _kStickyEstSetSearch =
-    ChromeMetrics.searchBarSecondaryTopInset +
-    ChromeMetrics.searchHeaderExtent +
-    ChromeMetrics.searchBarBottomInset;
-const double _kStickyEstCardSearch = _kStickyEstSetSearch;
-const double _kStickyEstGlobalSearch =
-    ChromeMetrics.searchBarSecondaryTopInset +
-    ChromeMetrics.searchHeaderExtent +
-    ChromeMetrics.searchBarBottomInset;
+const double _kStickyEstSegment = ChromeMetrics.segmentOnlyHeaderExtent;
+/// Year dropdown row in browse release list (no inline search — shell pill handles query).
+const double _kStickyEstYearFilter = 58;
 
 // Persisted navigation state (browse only)
 class _CatalogNavState {
@@ -156,8 +147,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   // ── Catalog mode (Browse vs Search) ──────────────────────────
   _CatalogMode _mode = _CatalogMode.browse;
 
-  // ── Global search state ──────────────────────────────────────
-  final _globalSearchCtrl = TextEditingController();
+  // ── Global search state (query text lives in [shellBottomSearchProvider]) ──
   List<dynamic> _globalSearchResults = [];
   bool _globalSearchLoading = false;
   Timer? _searchDebounceTimer;
@@ -174,7 +164,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   _CatalogStep _catalogStep = _CatalogStep.sportPicker;
   String _catalogFilterYear = '';
   String _catalogFilterSport = '';
-  final _browseSearchCtrl = TextEditingController();
   bool _restoringState = true;
 
   // ── Browse step (release list) ───────────────────────────────
@@ -189,15 +178,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   List<SetRecord> _browseSets = [];
   bool _browseSetsLoading = false;
   bool _lazyImporting = false;
-  final _setSearchCtrl = TextEditingController();
 
   // ── Card step: Release + Set (set after browsing) ────────────
   ReleaseRecord? _selectedRelease;
   SetRecord? _selectedSet;
 
   // ── Step 3: Card ─────────────────────────────────────────────
-  final _cardCtrl = TextEditingController();
-  List<MasterCard> _cardResults = [];
   List<MasterCard> _allCards = [];
   MasterCard? _selectedCard;
   bool _isNewCard = false;
@@ -236,6 +222,25 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   /// for a frame, which would wrongly run [_restoreNavigationState] and flash
   /// the browse catalog before scan resolve runs.
   CatalogScanEntry? _scanBootstrapEntry;
+
+  void _setShellQuery(String text) {
+    final notifier = ref.read(shellBottomSearchProvider.notifier);
+    if (notifier.controller.text != text) {
+      notifier.controller.text = text;
+    }
+  }
+
+  void _clearShellQuery() {
+    ref.read(shellBottomSearchProvider.notifier).clearQuery();
+  }
+
+  void _openShellSearch() {
+    ref.read(shellBottomSearchProvider.notifier).openSearch();
+  }
+
+  void _closeShellSearch() {
+    ref.read(shellBottomSearchProvider.notifier).setActive(false);
+  }
 
   @override
   void initState() {
@@ -303,11 +308,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         if (saved != null && mounted) {
           setState(() {
             _catalogStep = saved.step;
-            _browseSearchCtrl.text = saved.browseSearchQuery;
             _catalogFilterYear = saved.browseFilterYear;
             _catalogFilterSport = saved.browseFilterSport;
-            _setSearchCtrl.text = saved.setSearchQuery;
           });
+          final restoredQuery = switch (saved.step) {
+            _CatalogStep.sets => saved.setSearchQuery,
+            _CatalogStep.browsing => saved.browseSearchQuery,
+            _ => '',
+          };
+          if (restoredQuery.isNotEmpty) {
+            _setShellQuery(restoredQuery);
+          }
 
           // Load data based on which step we're restoring to
           if (saved.step == _CatalogStep.browsing) {
@@ -452,8 +463,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       _mode = _CatalogMode.browse;
       _catalogFilterSport = catalogSport;
       _catalogFilterYear = card.year?.trim() ?? '';
-      _browseSearchCtrl.text = releaseHint;
-      _setSearchCtrl.clear();
+      _setShellQuery(releaseHint);
       _catalogStep = _CatalogStep.browsing;
       _browseSelectedRelease = null;
       _selectedRelease = null;
@@ -565,10 +575,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         final nameQ = (card.name?.trim().isNotEmpty == true) ? card.name!.trim() : '';
         final numQ = (card.number?.trim().isNotEmpty == true) ? card.number!.trim() : '';
         final primaryQ = nameQ.isNotEmpty ? nameQ : numQ;
-        setState(() {
-          _cardCtrl.text = primaryQ;
-        });
-        _searchCards(primaryQ);
+        _setShellQuery(primaryQ);
 
         final scanParallel = card.parallel;
         final matchedParallel = pickCatalogParallel(
@@ -596,9 +603,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           );
         }
       } else {
-        setState(() {
-          _setSearchCtrl.text = setHint;
-        });
+        _setShellQuery(setHint);
         if (mounted) {
           AdaptiveSnackBar.show(
             context,
@@ -759,9 +764,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_saveNavigationState());
     _searchDebounceTimer?.cancel();
-    _browseSearchCtrl.dispose();
-    _setSearchCtrl.dispose();
-    _cardCtrl.dispose();
     _newPlayerCtrl.dispose();
     _newCardNumberCtrl.dispose();
     _newSerialMaxCtrl.dispose();
@@ -769,19 +771,20 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     _serialNumberCtrl.dispose();
     _targetPriceCtrl.dispose();
     _gradeValueCtrl.dispose();
-    _globalSearchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _saveNavigationState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final shellQuery = ref.read(shellBottomSearchProvider).query;
       final state = _CatalogNavState(
         step: _catalogStep,
-        browseSearchQuery: _browseSearchCtrl.text,
+        browseSearchQuery:
+            _catalogStep == _CatalogStep.browsing ? shellQuery : '',
         browseFilterYear: _catalogFilterYear,
         browseFilterSport: _catalogFilterSport,
-        setSearchQuery: _setSearchCtrl.text,
+        setSearchQuery: _catalogStep == _CatalogStep.sets ? shellQuery : '',
         selectedReleaseId: _browseSelectedRelease?.id ?? _selectedRelease?.id,
         selectedSetId: _selectedSet?.id,
         selectedCardId: _selectedCard?.id,
@@ -884,6 +887,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         cards = await ref.read(cardsServiceProvider).searchMasterCards(set.id, '', limit: 10000);
       }
 
+      _clearShellQuery();
       setState(() {
         _selectedRelease = release;
         _selectedSet = set;
@@ -891,10 +895,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         _selectedParallel = null;
         _parallelName = 'Base';
         _selectedCard = null;
-        _cardCtrl.clear();
-        _setSearchCtrl.clear();
         _allCards = cards;
-        _cardResults = cards;
         _isNewCard = false;
         _catalogStep = _CatalogStep.card;
       });
@@ -905,41 +906,31 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-  // ── Card search ───────────────────────────────────────────────
+  // ── Card search (query from shell bottom search pill) ─────────
 
-  void _searchCards(String query) {
-    if (_selectedSet == null) {
-      setState(() { _cardResults = []; });
-      return;
-    }
+  List<MasterCard> _filterMasterCards(String query) {
+    if (_selectedSet == null || _allCards.isEmpty) return const [];
     final raw = query.trim().toLowerCase();
-    if (raw.isEmpty) {
-      setState(() => _cardResults = List<MasterCard>.from(_allCards));
-      return;
-    }
+    if (raw.isEmpty) return List<MasterCard>.from(_allCards);
     final q = raw.replaceFirst(RegExp(r'^#'), '');
-    setState(() {
-      _cardResults = _allCards.where((card) {
-        final player = card.player.toLowerCase();
-        if (player.contains(raw) || player.contains(q)) return true;
-        final numRaw = (card.cardNumber ?? '').trim().toLowerCase();
-        if (numRaw.isEmpty) return false;
-        final numNorm = numRaw.replaceFirst(RegExp(r'^#'), '');
-        if (numNorm == q || numNorm.contains(q) || q.contains(numNorm)) return true;
-        final qi = int.tryParse(q);
-        final ni = int.tryParse(numNorm);
-        if (qi != null && ni != null && qi == ni) return true;
-        return false;
-      }).toList();
-    });
+    return _allCards.where((card) {
+      final player = card.player.toLowerCase();
+      if (player.contains(raw) || player.contains(q)) return true;
+      final numRaw = (card.cardNumber ?? '').trim().toLowerCase();
+      if (numRaw.isEmpty) return false;
+      final numNorm = numRaw.replaceFirst(RegExp(r'^#'), '');
+      if (numNorm == q || numNorm.contains(q) || q.contains(numNorm)) return true;
+      final qi = int.tryParse(q);
+      final ni = int.tryParse(numNorm);
+      if (qi != null && ni != null && qi == ni) return true;
+      return false;
+    }).toList();
   }
 
   void _selectCard(MasterCard card) {
     final hasParallels = _parallels.isNotEmpty;
     setState(() {
       _selectedCard = card;
-      _cardCtrl.text = card.displayName;
-      _cardResults = [];
       _isNewCard = false;
       _selectedParallel = null;
       _parallelName = 'Base';
@@ -1096,11 +1087,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       if (mounted) {
         AdaptiveSnackBar.show(context, message: 'Card added!', type: AdaptiveSnackBarType.success, duration: const Duration(seconds: 2));
         unawaited(_clearNavigationState());
+        _clearShellQuery();
         setState(() {
           _catalogStep = _CatalogStep.sets;
           _selectedCard = null;
-          _cardCtrl.clear();
-          _cardResults = [];
           _isNewCard = false;
           _selectedRelease = null;
           _selectedSet = null;
@@ -1377,18 +1367,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           _browseResults = [];
         });
       case _CatalogStep.sets:
+        _clearShellQuery();
         setState(() {
           _catalogStep = _CatalogStep.browsing;
           _browseSelectedRelease = null;
           _browseSets = [];
-          _setSearchCtrl.clear();
         });
       case _CatalogStep.card:
+        _clearShellQuery();
         setState(() {
           _catalogStep = _CatalogStep.sets;
           _selectedCard = null;
-          _cardCtrl.clear();
-          _cardResults = [];
           _isNewCard = false;
           _selectedSet = null;
         });
@@ -1396,8 +1385,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         setState(() {
           _catalogStep = _CatalogStep.card;
           _selectedCard = null;
-          _cardCtrl.clear();
-          _cardResults = _allCards;
           _isNewCard = false;
         });
       case _CatalogStep.detail:
@@ -1407,8 +1394,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
           } else {
             _catalogStep = _CatalogStep.card;
             _selectedCard = null;
-            _cardCtrl.clear();
-            _cardResults = _allCards;
             _isNewCard = false;
           }
         });
@@ -1445,51 +1430,49 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         labels: const ['Browse', 'Search'],
         selectedIndex: _mode == _CatalogMode.browse ? 0 : 1,
         onValueChanged: (index) {
-          setState(() {
-            _mode = index == 0 ? _CatalogMode.browse : _CatalogMode.search;
-          });
+          final toSearch = index == 1;
+          if (toSearch) {
+            _clearShellQuery();
+            setState(() {
+              _mode = _CatalogMode.search;
+              _globalSearchResults = [];
+              _globalSearchLoading = false;
+            });
+            _openShellSearch();
+          } else {
+            _closeShellSearch();
+            setState(() {
+              _mode = _CatalogMode.browse;
+              _globalSearchResults = [];
+              _globalSearchLoading = false;
+            });
+          }
         },
         color: colors.primary,
       ),
     );
   }
 
-  Widget _browseReleaseFiltersColumn(ColorScheme colors) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          child: AdaptiveDropdown<String>(
-            value: _catalogFilterYear,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            ),
-            items: [
-              const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
-              ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
-            ],
-            onChanged: (v) {
-              setState(() {
-                _catalogFilterYear = v ?? '';
-                _browseSearchCtrl.clear();
-              });
-              _loadBrowseReleases(reset: true);
-            },
-          ),
+  Widget _browseReleaseYearFilter(ColorScheme colors) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, ChromeMetrics.searchBarBottomInset),
+      child: AdaptiveDropdown<String>(
+        value: _catalogFilterYear,
+        decoration: InputDecoration(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         ),
-        Container(
-          padding: ChromeMetrics.searchBarRowPadding(),
-          child: GlassSearchField(
-            controller: _browseSearchCtrl,
-            hint: 'Search releases…',
-            onChanged: (_) => setState(() {}),
-            onClear: () => setState(() => _browseSearchCtrl.clear()),
-          ),
-        ),
-      ],
+        items: [
+          const DropdownMenuItem(value: '', child: Text('Any year', style: TextStyle(fontSize: 13))),
+          ..._catalogYears.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))),
+        ],
+        onChanged: (v) {
+          _clearShellQuery();
+          setState(() => _catalogFilterYear = v ?? '');
+          _loadBrowseReleases(reset: true);
+        },
+      ),
     );
   }
 
@@ -1504,88 +1487,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
 
     if (_mode == _CatalogMode.search) {
-      if (_searchSelectedCard != null && _searchParallelsLoading) {
-        return (
-          child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
-          heightEstimate: segmentEst,
-        );
-      }
-      if (_searchSelectedCard != null && _searchParallels.isNotEmpty && !_searchParallelSelected) {
-        return (
-          child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
-          heightEstimate: segmentEst,
-        );
-      }
-      if (_searchSelectedCard != null) {
-        return (
-          child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
-          heightEstimate: segmentEst,
-        );
-      }
-      secondaryHeight = _kStickyEstGlobalSearch;
-      secondary = Padding(
-        padding: ChromeMetrics.searchBarSecondaryPadding(),
-        child: FilterSortActionBar<void>(
-          searchController: _globalSearchCtrl,
-          onSearchChanged: _onSearchChanged,
-          onSearchClear: () => setState(() {
-            _globalSearchCtrl.clear();
-            _globalSearchResults = [];
-          }),
-          searchHint: 'Search releases, sets, or cards…',
-        ),
-      );
       return (
-        heightEstimate: segmentEst + secondaryHeight,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _catalogSegmentRow(colors, hasSecondaryChrome: true),
-            secondary,
-          ],
-        ),
+        child: _catalogSegmentRow(colors, hasSecondaryChrome: false),
+        heightEstimate: segmentEst,
       );
     }
 
     switch (_catalogStep) {
       case _CatalogStep.browsing:
-        secondaryHeight = _kStickyEstBrowsePlus;
-        secondary = _browseReleaseFiltersColumn(colors);
+        secondaryHeight = _kStickyEstYearFilter;
+        secondary = _browseReleaseYearFilter(colors);
         break;
       case _CatalogStep.sets:
-        secondaryHeight = _kStickyEstSetSearch;
-        secondary = Padding(
-          padding: ChromeMetrics.searchBarSecondaryPadding(
-            horizontal: ChromeMetrics.horizontalInset,
-            top: 12,
-          ),
-          child: GlassSearchField(
-            controller: _setSearchCtrl,
-            hint: 'Search sets…',
-            onChanged: (_) => setState(() {}),
-            onClear: () => setState(() => _setSearchCtrl.clear()),
-          ),
-        );
-        break;
       case _CatalogStep.card:
-        secondaryHeight = _kStickyEstCardSearch;
-        secondary = Padding(
-          padding: ChromeMetrics.searchBarSecondaryPadding(
-            horizontal: ChromeMetrics.horizontalInset,
-            top: 12,
-          ),
-          child: GlassSearchField(
-            controller: _cardCtrl,
-            hint: 'Search player name…',
-            onChanged: _searchCards,
-            onClear: () {
-              _cardCtrl.clear();
-              _searchCards('');
-            },
-          ),
-        );
-        break;
       case _CatalogStep.sportPicker:
       case _CatalogStep.parallel:
       case _CatalogStep.detail:
@@ -1611,6 +1525,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final shellQuery = ref.watch(shellBottomSearchProvider).query;
+    ref.listen<ShellBottomSearchState>(shellBottomSearchProvider, (previous, next) {
+      if (_mode != _CatalogMode.search) return;
+      if (_searchSelectedCard != null) return;
+      if (previous?.query == next.query) return;
+      _onSearchChanged(next.query);
+    });
     final blockingLoader = _catalogBlockingLoader;
     final sticky = blockingLoader
         ? (child: const SizedBox.shrink(), heightEstimate: 0.0)
@@ -1649,23 +1570,23 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         if (_mode == _CatalogMode.browse) {
           return switch (_catalogStep) {
             _CatalogStep.sportPicker => _buildSportPickerView(colors, contentTopInset),
-            _CatalogStep.browsing  => _buildBrowseView(colors, contentTopInset),
-            _CatalogStep.sets      => _buildSetsView(colors, contentTopInset),
-            _CatalogStep.card      => _buildCardSearchView(colors, contentTopInset),
+            _CatalogStep.browsing  => _buildBrowseView(colors, contentTopInset, shellQuery),
+            _CatalogStep.sets      => _buildSetsView(colors, contentTopInset, shellQuery),
+            _CatalogStep.card      => _buildCardSearchView(colors, contentTopInset, shellQuery),
             _CatalogStep.parallel  => _buildParallelView(colors, contentTopInset),
             _CatalogStep.detail    => _buildCardDetailView(colors, contentTopInset),
             _CatalogStep.addCopy   => _buildYourCopyFormView(colors, contentTopInset),
           };
         }
-        return _buildSearchMode(colors, contentTopInset);
+        return _buildSearchMode(colors, contentTopInset, shellQuery);
       },
     );
   }
 
   // ── Browse view (release list) ────────────────────────────────
 
-  Widget _buildBrowseView(ColorScheme colors, double contentTopInset) {
-    final searchQuery = _browseSearchCtrl.text.toLowerCase();
+  Widget _buildBrowseView(ColorScheme colors, double contentTopInset, String shellQuery) {
+    final searchQuery = shellQuery.toLowerCase();
     final filtered = _browseResults.where((r) {
       final name = r.displayName.toLowerCase();
       final sport = (r.sport ?? '').toLowerCase();
@@ -1739,10 +1660,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         final (name, value, emoji, tintColor) = sport;
         return GestureDetector(
           onTap: () {
+            _clearShellQuery();
             setState(() {
               _catalogFilterSport = value;
               _catalogFilterYear = '';
-              _browseSearchCtrl.clear();
             });
             _loadBrowseReleases(reset: true);
             setState(() => _catalogStep = _CatalogStep.browsing);
@@ -1780,8 +1701,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Sets view ─────────────────────────────────────────────────
 
-  Widget _buildSetsView(ColorScheme colors, double contentTopInset) {
-    final searchQuery = _setSearchCtrl.text.toLowerCase();
+  Widget _buildSetsView(ColorScheme colors, double contentTopInset, String shellQuery) {
+    final searchQuery = shellQuery.toLowerCase();
     final filtered = _browseSets.where((s) {
       return s.name.toLowerCase().contains(searchQuery);
     }).toList();
@@ -1817,8 +1738,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Card search view ─────────────────────────────────────────────────────
 
-  Widget _buildCardSearchView(ColorScheme colors, double contentTopInset) {
-    return _buildCardResultsArea(colors, topInset: contentTopInset);
+  Widget _buildCardSearchView(ColorScheme colors, double contentTopInset, String shellQuery) {
+    return _buildCardResultsArea(colors, topInset: contentTopInset, shellQuery: shellQuery);
   }
 
   // ── Parallel step ─────────────────────────────────────────────
@@ -2031,8 +1952,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
                   label: _selectedCard!.displayName,
                   onClear: () => setState(() {
                     _selectedCard = null;
-                    _cardCtrl.clear();
-                    _cardResults = [];
                     _catalogStep = _CatalogStep.card;
                   }),
                 ),
@@ -2132,22 +2051,33 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
 
   // ── Card results area ─────────────────────────────────────────
 
-  Widget _buildCardResultsArea(ColorScheme colors, {double topInset = 0}) {
-    if (_cardResults.isEmpty) {
+  Widget _buildCardResultsArea(
+    ColorScheme colors, {
+    double topInset = 0,
+    required String shellQuery,
+  }) {
+    final filtered = _filterMasterCards(shellQuery);
+    if (filtered.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: topInset),
         child: Center(
-          child: Text('No cards found.',
-              style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4))),
+          child: Text(
+            _allCards.isEmpty
+                ? 'No cards found.'
+                : shellQuery.trim().isEmpty
+                    ? 'No cards found.'
+                    : 'No results match your search.',
+            style: TextStyle(color: colors.onSurface.withValues(alpha: 0.4)),
+          ),
         ),
       );
     }
     return ListView.separated(
       padding: EdgeInsets.only(top: topInset),
-      itemCount: _cardResults.length,
+      itemCount: filtered.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (_, i) {
-        final c = _cardResults[i];
+        final c = filtered[i];
         final attrs = _cardAttributePills(c);
         return AdaptiveListTile(
           hideBottomDivider: true,
@@ -2288,7 +2218,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
     }
   }
 
-Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
+Widget _buildSearchMode(ColorScheme colors, double contentTopInset, String shellQuery) {
     // Show loader while parallels are loading
     if (_searchSelectedCard != null && _searchParallelsLoading) {
       return Padding(
@@ -2339,7 +2269,6 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
     // detail screen is opened as a pushed route — see [_openMasterCardDetail]
     // calls in the search-result tap and parallel-tile tap handlers above.
 
-    // Show search results list (search field lives in [_catalogStickyChrome])
     final listPadTop = contentTopInset;
     if (_globalSearchLoading) {
       return Padding(
@@ -2348,13 +2277,14 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset) {
       );
     }
     if (_globalSearchResults.isEmpty) {
+      if (shellQuery.isEmpty) {
+        return const SizedBox.shrink();
+      }
       return Padding(
         padding: EdgeInsets.only(top: listPadTop),
         child: Center(
           child: Text(
-            _globalSearchCtrl.text.isEmpty
-                ? 'Search releases, sets, or cards…'
-                : 'No results found.',
+            'No results found.',
             style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
           ),
         ),

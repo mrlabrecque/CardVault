@@ -97,9 +97,14 @@ class ChromeMetrics {
       searchHeaderExtent +
       segmentOnlyBottomInset;
   static const double lotBasketHeaderExtent = 40;
-  static const double lotBrowseHeaderExtent = segmentWithSearchChromeExtent;
-  /// Fee card + search row; keep in sync with [GradingScreen] sticky header content.
-  static const double gradingHeaderExtent = 120;
+  static const double lotBrowseHeaderExtent = segmentOnlyHeaderExtent;
+  /// Fee card only (search uses shell bottom pill); keep in sync with [GradingScreen].
+  static const double gradingHeaderTopInset = 10;
+  static const double gradingFeeCardPaddingTop = 10;
+  static const double gradingFeeCardPaddingBottom = 10;
+  static const double gradingHeaderBottomInset = 6;
+  /// [gradingHeaderTopInset] + fee card + [gradingHeaderBottomInset] (excludes nav bar).
+  static const double gradingHeaderExtent = 72;
 
   static EdgeInsets segmentOnlyPadding(
     double navOffset, {
@@ -154,10 +159,10 @@ class ChromeMetrics {
 
   static EdgeInsets gradingHeaderPadding(double navOffset) {
     return EdgeInsets.only(
-      top: navOffset,
+      top: navOffset + gradingHeaderTopInset,
       left: horizontalInset,
       right: horizontalInset,
-      bottom: searchBarBottomInset,
+      bottom: gradingHeaderBottomInset,
     );
   }
 

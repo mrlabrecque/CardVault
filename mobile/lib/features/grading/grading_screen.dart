@@ -1,10 +1,12 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../core/models/user_card.dart';
+import '../../core/shell/shell_glass_settings.dart';
 import '../../core/services/cards_service.dart';
-import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/chrome_metrics.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/card_info_section.dart';
 import '../../core/utils/currency_format.dart';
@@ -16,9 +18,9 @@ import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/widgets/frosted_chrome_layer.dart';
+import '../../core/shell/shell_bottom_search.dart';
 import '../../core/widgets/glass_nav_bar.dart';
 import '../../core/widgets/sliver_frosted_header.dart';
-import '../collection/widgets/filter_sort_action_bar.dart';
 
 // ── Tier classification ──────────────────────────────────────────────────────
 
@@ -49,11 +51,9 @@ class GradingScreen extends ConsumerStatefulWidget {
 
 class _GradingScreenState extends ConsumerState<GradingScreen> {
   double _gradingFee = 40;
-  String _search = '';
   String _tierFilterKey = 'all';
   String _sortBy = 'value-desc';
 
-  final _searchController = TextEditingController();
   final _gradingFeeUsdFmt = createUsdCurrencyInputFormatter();
   late final TextEditingController _gradingFeeCtrl;
 
@@ -70,7 +70,6 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   @override
   void dispose() {
     _gradingFeeCtrl.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -82,8 +81,8 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     _ => null,
   };
 
-  List<UserCard> _applyFiltersAndSort(List<UserCard> raw) {
-    final q = _search.toLowerCase();
+  List<UserCard> _applyFiltersAndSort(List<UserCard> raw, String shellQuery) {
+    final q = shellQuery.toLowerCase();
     final tierFilter = _tierFromKey(_tierFilterKey);
 
     var cards = raw.where((c) {
@@ -131,6 +130,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
   @override
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(userCardsProvider);
+    final shellQuery = ref.watch(shellBottomSearchProvider).query;
     final colors = Theme.of(context).colorScheme;
     final hasActiveFilter = _tierFilterKey != 'all';
     final hasActiveSort = _sortBy != 'value-desc';
@@ -138,6 +138,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
       extendBodyBehindAppBar: true,
       appBar: buildGlassNavBar(
         context,
+        useBlurBackground: false,
         automaticallyImplyLeading: false,
         centerTitle: false,
         title: Text(
@@ -200,7 +201,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (allCards) {
           final ungradedCards = allCards.where((c) => !c.isGraded).toList();
-          final display = _applyFiltersAndSort(ungradedCards);
+          final display = _applyFiltersAndSort(ungradedCards, shellQuery);
           final analyzedCount = ungradedCards
               .where((c) => gradingGuideSnapshotFromGradeMap(c.embeddedGuideGradePrices) != null)
               .length;
@@ -213,22 +214,7 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
                 child: FrostedChromeLayer(
                   child: Padding(
                     padding: ChromeMetrics.gradingHeaderPadding(navOffset),
-                    child: Column(
-                      children: [
-                        _buildFeeCard(),
-                        const SizedBox(height: ChromeMetrics.segmentToSearchGap),
-                        FilterSortActionBar<String>(
-                          searchController: _searchController,
-                          searchText: _search,
-                          onSearchChanged: (v) => setState(() => _search = v),
-                          onSearchClear: () {
-                            _searchController.clear();
-                            setState(() => _search = '');
-                          },
-                          searchHint: 'Search player, set, sport…',
-                        ),
-                      ],
-                    ),
+                    child: _buildFeeCard(context),
                   ),
                 ),
               ),
@@ -287,61 +273,85 @@ class _GradingScreenState extends ConsumerState<GradingScreen> {
     );
   }
 
-  Widget _buildFeeCard() {
-    return AdaptiveListCard(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Grading Fee',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Deducted from profit calculation',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(
-              width: 112,
-              child: TextFormField(
-                controller: _gradingFeeCtrl,
-                inputFormatters: [_gradingFeeUsdFmt],
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
+  Widget _buildFeeCard(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
+    final muted = colors.onSurface.withValues(alpha: 0.55);
+    final fieldBorder = colors.outline.withValues(alpha: 0.35);
+
+    return GlassCard(
+      useOwnLayer: true,
+      settings: ShellGlassSettings.bottomBarGlass(brightness),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        ChromeMetrics.gradingFeeCardPaddingTop,
+        16,
+        ChromeMetrics.gradingFeeCardPaddingBottom,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Grading Fee',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: colors.onSurface,
+                    height: 1.2,
                   ),
                 ),
-                onChanged: (v) {
-                  final parsed = parseUsdInput(v);
-                  if (parsed != null) setState(() => _gradingFee = parsed);
-                },
-              ),
+                const SizedBox(height: 2),
+                Text(
+                  'Deducted from profit calculation',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: muted,
+                    height: 1.2,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          SizedBox(
+            width: 112,
+            child: AdaptiveTextField(
+              controller: _gradingFeeCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [_gradingFeeUsdFmt],
+              textInputAction: TextInputAction.done,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              placeholder: '\$0.00',
+              cupertinoDecoration: AppTheme.cupertinoTextFieldDecoration(context),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: colors.surface.withValues(alpha: 0.45),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: fieldBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: fieldBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+              ),
+              onChanged: (v) {
+                final parsed = parseUsdInput(v);
+                if (parsed != null) setState(() => _gradingFee = parsed);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

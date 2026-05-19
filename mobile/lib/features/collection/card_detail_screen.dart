@@ -142,8 +142,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   bool get _isCatalog => widget.isCatalog;
   MasterCardDetailArgs get _catalog => widget.catalog!;
 
-  // ── Catalog / CardHedge guide sync (catalog mode only) ───────────────────
-  bool _guidePricesLoading = true;
+  // ── Guide sync / blocking loader (catalog + owned item detail) ─────────────
+  bool _guidePricesLoading = false;
   GuideCatalogMatchPayload? _guideMatchResult;
   Map<String, double?>? _linkedGradePricesFromDb;
   /// Stable instance for [MarketAnalysisSection] — scroll rebuilds must not allocate a new map.
@@ -204,9 +204,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       });
     } else {
       final c = widget.card!;
-      if (c.masterCardId != null && (c.displayValue ?? 0) <= 0) {
-        Future.microtask(() {
-          if (mounted) ref.invalidate(userCardsProvider);
+      final masterId = c.masterCardId?.trim();
+      if (masterId != null && masterId.isNotEmpty && (c.displayValue ?? 0) <= 0) {
+        _guidePricesLoading = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_bootstrapOwnedDetail());
         });
       }
     }
@@ -250,6 +252,21 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     await _resolveCatalogVariantMaster();
     if (!mounted) return;
     await _syncGuidePricesForMaster();
+  }
+
+  Future<void> _bootstrapOwnedDetail() async {
+    final masterId = widget.card!.masterCardId?.trim();
+    if (masterId == null || masterId.isEmpty) {
+      if (mounted) setState(() => _guidePricesLoading = false);
+      return;
+    }
+    try {
+      await ref.read(compsServiceProvider).syncMasterCatalogPricingForVariant(masterId);
+      ref.invalidate(userCardsProvider);
+      await ref.read(userCardsProvider.future);
+    } finally {
+      if (mounted) setState(() => _guidePricesLoading = false);
+    }
   }
 
   Future<void> _resolveCatalogVariantMaster() async {
@@ -1116,21 +1133,23 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         foregroundColor: iconTint,
         shape: const RoundedRectangleBorder(side: BorderSide.none),
         iconTheme: IconThemeData(color: iconTint),
-        leadingWidth: 64,
+        leadingWidth: _guidePricesLoading ? 0 : 64,
         automaticallyImplyLeading: false,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Center(
-            child: GlassCircleIconButton(
-              icon: Icons.arrow_back_ios_new,
-              onPressed: _handleBack,
-              tooltip: 'Back',
-              iconSize: 17,
-              onDarkSurface: !onLight,
-            ),
-          ),
-        ),
-        actions: widget.isOwned
+        leading: _guidePricesLoading
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Center(
+                  child: GlassCircleIconButton(
+                    icon: Icons.arrow_back_ios_new,
+                    onPressed: _handleBack,
+                    tooltip: 'Back',
+                    iconSize: 17,
+                    onDarkSurface: !onLight,
+                  ),
+                ),
+              ),
+        actions: widget.isOwned && !_guidePricesLoading
             ? [
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
@@ -1169,9 +1188,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               ]
             : null,
       ),
-      body: _isCatalog
-          ? _buildCatalogBody(context, colors, topInset, bottomPad)
-          : _buildDetailListView(context, colors, topInset, bottomPad),
+      body: _guidePricesLoading
+          ? _buildDetailLoadingPane(context, colors)
+          : _isCatalog
+              ? _buildCatalogBody(context, colors, topInset, bottomPad)
+              : _buildDetailListView(context, colors, topInset, bottomPad),
     );
 
     if (!_isCatalog) return scaffold;
@@ -1436,16 +1457,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     double topInset,
     double bottomPad,
   ) {
-    if (_guidePricesLoading) {
-      return _buildCatalogLoadingPane(context, colors);
-    }
     if (_guideSyncDebugJson != null) {
       return _buildGuideSyncDebugPane(context, colors);
     }
     return _buildDetailListView(context, colors, topInset, bottomPad);
   }
 
-  Widget _buildCatalogLoadingPane(BuildContext context, ColorScheme colors) {
+  Widget _buildDetailLoadingPane(BuildContext context, ColorScheme colors) {
     return Material(
       color: colors.surface,
       child: const Center(child: CardFanLoader(size: 72)),
