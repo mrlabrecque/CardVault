@@ -4,7 +4,6 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/chrome_metrics.dart';
-import '../utils/platform_utils.dart';
 import 'shell_glass_settings.dart';
 
 /// App shell bottom chrome using [GlassSearchableBottomBar] from
@@ -59,13 +58,18 @@ class GlassShellBottomBar extends StatelessWidget {
     final barHeight = ChromeMetrics.shellTabBarBarHeight;
     final borderRadius = _barBorderRadius(barHeight);
 
+    // Standard (not premium): each pill uses its own shape-clipped glass.
+    // Premium batches all shapes into one layer whose backdrop rect spans the
+    // full bar width, which blurs the gap between the tab pill and search pill
+    // in mini / search-collapsed mode.
     final bar = GlassSearchableBottomBar(
       tabs: shellTabs,
       selectedIndex: selectedIndex,
       onTabSelected: onTabSelected,
       isSearchActive: isSearchActive,
       searchConfig: searchConfig,
-      quality: isIOS ? GlassQuality.premium : GlassQuality.standard,
+      quality: GlassQuality.standard,
+      blendAmount: 0,
       maskingQuality: MaskingQuality.high,
       interactionBehavior: GlassInteractionBehavior.scaleOnly,
       pressScale: 1.04,

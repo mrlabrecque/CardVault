@@ -10,8 +10,8 @@ abstract final class ShellGlassSettings {
     final isDark = brightness == Brightness.dark;
     return LiquidGlassSettings(
       glassColor: isDark
-          ? const Color(0xAA1C1C1E)
-          : const Color(0xB3F2F2F7), // iOS grouped fill on light lists
+          ? const Color(0x904E4E52)
+          : const Color(0xD9FFFFFF),
       thickness: 30,
       blur: 2,
       chromaticAberration: 0.01,
@@ -49,10 +49,10 @@ abstract final class ShellGlassSettings {
     );
   }
 
-  /// Solid pill behind the selected tab (visible at rest on the frosted bar).
+  /// Selected-tab pill — slightly darker than the frosted bar body.
   static Color indicatorFill(Brightness brightness, ColorScheme colors) {
     return brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: 0.22)
+        ? Colors.black.withValues(alpha: 0.32)
         : Colors.black.withValues(alpha: 0.14);
   }
 
