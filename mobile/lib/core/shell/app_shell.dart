@@ -1,175 +1,192 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../scan_immersive.dart';
-import '../theme/app_theme.dart';
-import '../utils/platform_utils.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-class AppShell extends ConsumerWidget {
+import '../scan_immersive.dart';
+import '../theme/chrome_metrics.dart';
+import '../utils/platform_utils.dart';
+import 'glass_shell_bottom_bar.dart';
+import 'shell_bottom_search.dart';
+
+/// Scroll offset past which the tab bar morphs to mini mode (Apple Music demo).
+const kShellScrollMiniModeThreshold = 50.0;
+
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
   final Widget child;
 
-  static const _paths = [
+  /// Primary bottom-bar destinations (Wishlist is in the overflow menu).
+  static const tabPaths = [
     '/dashboard',
     '/catalog',
     '/scan',
     '/collection',
-    '/wishlist',
   ];
 
-  int _selectedIndex(String location) {
-    final idx = _paths.indexWhere((p) => location.startsWith(p));
-    return idx < 0 ? 0 : idx;
+  @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  int _lastTabIndex = 0;
+  bool _isMiniMode = false;
+
+  int _tabBarSelectedIndex(String location) {
+    final idx = AppShell.tabPaths.indexWhere((p) => location.startsWith(p));
+    if (idx >= 0) {
+      _lastTabIndex = idx;
+      return idx;
+    }
+    return _lastTabIndex;
   }
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  /// Apple Music demo: float over the home indicator on iOS; clear Android nav.
+  double _barBottomOffset(BuildContext context) {
+    if (isIOS) return ChromeMetrics.shellTabBarOuterBottomInset;
+    return MediaQuery.viewPaddingOf(context).bottom +
+        ChromeMetrics.shellTabBarOuterBottomInset;
+  }
+
+  void _setMiniMode(bool mini) {
+    if (_isMiniMode == mini) return;
+    setState(() => _isMiniMode = mini);
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    final mini = notification.metrics.pixels > kShellScrollMiniModeThreshold;
+    if (mini != _isMiniMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _setMiniMode(mini);
+      });
+    }
+    return false;
+  }
+
+  void _scrollActiveTabToTop(BuildContext context) {
+    final controller = PrimaryScrollController.maybeOf(context);
+    if (controller != null && controller.hasClients) {
+      controller.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _expandFromMiniMode(BuildContext context) {
+    _setMiniMode(false);
+    _scrollActiveTabToTop(context);
+  }
+
+  void _onTabSelected(int index) {
     final location = GoRouterState.of(context).matchedLocation;
-    final selectedIdx = _selectedIndex(location);
+    final currentIdx = _tabBarSelectedIndex(location);
 
-    return ValueListenableBuilder<bool>(
-      valueListenable: scanImmersiveMode,
-      builder: (context, hideTabBar, _) {
-        if (isIOS) {
-          return IOSAppShell(
-            selectedIndex: selectedIdx,
-            onTabSelected: (i) => context.go(_paths[i]),
-            hideTabBar: hideTabBar,
-            child: child,
+    if (index == currentIdx && _isMiniMode) {
+      _expandFromMiniMode(context);
+      return;
+    }
+
+    final router = GoRouter.of(context);
+    final target = AppShell.tabPaths[index];
+    if (!router.state.matchedLocation.startsWith(target)) {
+      router.go(target);
+      _setMiniMode(false);
+    }
+    _dismissSearch();
+  }
+
+  void _dismissSearch() {
+    ref.read(shellBottomSearchProvider.notifier).setActive(false);
+  }
+
+  void _onSearchToggle(bool active) {
+    final location = GoRouterState.of(context).matchedLocation;
+
+    if (active && !shellLocationSupportsSearch(location)) {
+      ref.read(shellBottomSearchProvider.notifier).setActive(true);
+      context.go(AppShell.tabPaths[1]);
+      return;
+    }
+
+    ref.read(shellBottomSearchProvider.notifier).setActive(active);
+
+    if (!active && _isMiniMode) {
+      _expandFromMiniMode(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final location = GoRouterState.of(context).matchedLocation;
+    final selectedIdx = _tabBarSelectedIndex(location);
+    final shellSearch = ref.watch(shellBottomSearchProvider);
+    final searchNotifier = ref.read(shellBottomSearchProvider.notifier);
+    final barMorphActive = shellSearch.isActive || _isMiniMode;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final systemOverlay = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: systemOverlay,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: scanImmersiveMode,
+        builder: (context, hideTabBar, _) {
+          return GlassBackdropScope(
+            child: Scaffold(
+              extendBody: true,
+              resizeToAvoidBottomInset: false,
+              body: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _onScrollNotification,
+                      child: widget.child,
+                    ),
+                  ),
+                  if (!hideTabBar)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: _barBottomOffset(context),
+                      child: ListenableBuilder(
+                        listenable: searchNotifier.controller,
+                        builder: (context, _) {
+                          return GlassShellBottomBar(
+                            selectedIndex: selectedIdx,
+                            onTabSelected: _onTabSelected,
+                            isSearchActive: barMorphActive,
+                            searchConfig: shellGlassSearchConfig(
+                              context: context,
+                              controller: searchNotifier.controller,
+                              focusNode: searchNotifier.focusNode,
+                              hintText: shellSearchHintForLocation(location),
+                              onSearchToggle: _onSearchToggle,
+                              onChanged: (_) {},
+                              selectedTabIndex: selectedIdx,
+                              isMiniMode: _isMiniMode,
+                              isSearching: shellSearch.isActive,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
           );
-        }
-
-        return AndroidAppShell(
-          selectedIndex: selectedIdx,
-          onTabSelected: (i) => context.go(_paths[i]),
-          hideTabBar: hideTabBar,
-          child: child,
-        );
-      },
-    );
-  }
-}
-
-class IOSAppShell extends StatefulWidget {
-  const IOSAppShell({
-    super.key,
-    required this.child,
-    required this.selectedIndex,
-    required this.onTabSelected,
-    this.hideTabBar = false,
-  });
-
-  final Widget child;
-  final int selectedIndex;
-  final ValueChanged<int> onTabSelected;
-  final bool hideTabBar;
-
-  @override
-  State<IOSAppShell> createState() => _IOSAppShellState();
-}
-
-class _IOSAppShellState extends State<IOSAppShell> {
-  @override
-  Widget build(BuildContext context) {
-    return AdaptiveScaffold(
-      minimizeBehavior: TabBarMinimizeBehavior.automatic,
-      body: widget.child,
-      bottomNavigationBar: widget.hideTabBar
-          ? null
-          : AdaptiveBottomNavigationBar(
-              items: const [
-                AdaptiveNavigationDestination(
-                  icon: 'house.fill',
-                  selectedIcon: 'house.fill',
-                  label: 'Dashboard',
-                ),
-                AdaptiveNavigationDestination(
-                  icon: 'square.grid.2x2.fill',
-                  selectedIcon: 'square.grid.2x2.fill',
-                  label: 'Catalog',
-                ),
-                AdaptiveNavigationDestination(
-                  icon: 'camera.fill',
-                  selectedIcon: 'camera.fill',
-                  label: 'Scan',
-                ),
-                AdaptiveNavigationDestination(
-                  icon: 'square.stack.3d.up.fill',
-                  selectedIcon: 'square.stack.3d.up.fill',
-                  label: 'Collection',
-                ),
-                AdaptiveNavigationDestination(
-                  icon: 'bookmark.fill',
-                  selectedIcon: 'bookmark.fill',
-                  label: 'Wishlist',
-                ),
-              ],
-              selectedIndex: widget.selectedIndex,
-              onTap: widget.onTabSelected,
-              useNativeBottomBar: true,
-              selectedItemColor: AppTheme.primary,
-            ),
-    );
-  }
-}
-
-class AndroidAppShell extends StatelessWidget {
-  const AndroidAppShell({
-    super.key,
-    required this.child,
-    required this.selectedIndex,
-    required this.onTabSelected,
-    this.hideTabBar = false,
-  });
-
-  final Widget child;
-  final int selectedIndex;
-  final ValueChanged<int> onTabSelected;
-  final bool hideTabBar;
-
-  static const _androidDestinations = <NavigationDestination>[
-    NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home),
-      label: 'Dashboard',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.search_outlined),
-      selectedIcon: Icon(Icons.search),
-      label: 'Catalog',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.camera_alt_outlined),
-      selectedIcon: Icon(Icons.camera_alt_rounded),
-      label: 'Scan',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.credit_card_outlined),
-      selectedIcon: Icon(Icons.credit_card),
-      label: 'Collection',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.bookmark_outline),
-      selectedIcon: Icon(Icons.bookmark),
-      label: 'Wishlist',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: hideTabBar
-          ? null
-          : NavigationBar(
-              selectedIndex: selectedIndex,
-              onDestinationSelected: onTabSelected,
-              backgroundColor: AppTheme.primary,
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              destinations: _androidDestinations,
-            ),
+        },
+      ),
     );
   }
 }

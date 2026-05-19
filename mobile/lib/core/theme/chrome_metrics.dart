@@ -4,9 +4,26 @@ import 'package:flutter/widgets.dart';
 class ChromeMetrics {
   const ChromeMetrics._();
 
-  /// Bottom inset for scroll / actions above the shell tab bar (Material [NavigationBar]
-  /// and native iOS tab heights are in this ballpark).
-  static const double shellTabBarReserveHeight = 72;
+  /// [GlassShellBottomBar] pill height (tab row) — tighter than package default 64.
+  static const double shellTabBarBarHeight = 56;
+
+  /// [GlassSearchableBottomBar] height when search is expanded.
+  static const double shellTabBarSearchHeight = 50;
+
+  /// In-bar horizontal inset (inside [AdaptiveLiquidGlassLayer], demo: 20).
+  static const double shellTabBarHorizontalPadding = 20;
+
+  /// In-bar vertical breathing room (demo: 16).
+  static const double shellTabBarVerticalPadding = 16;
+
+  /// Float above home indicator on iOS; extra lift on Android gesture/nav bar.
+  static const double shellTabBarOuterBottomInset = 8;
+
+  /// Scroll padding: bar + in-bar padding + outer float.
+  static const double shellTabBarReserveHeight =
+      shellTabBarBarHeight +
+      shellTabBarVerticalPadding * 2 +
+      shellTabBarOuterBottomInset;
 
   /// Vertical space between sticky chrome and first scroll content.
   static const double contentTopGap = 12;
@@ -38,6 +55,10 @@ class ChromeMetrics {
   /// Segment-only sticky rhythm.
   static const double segmentOnlyTopInset = 4;
   static const double segmentOnlyBottomInset = searchBarBottomInset;
+
+  /// Pinned segment row without an inline search field (shell search pill instead).
+  static const double segmentOnlyHeaderExtent =
+      segmentOnlyTopInset + segmentControlHeight + segmentOnlyBottomInset;
 
   /// Gap between segment row and search/filter row in sticky chrome.
   static const double segmentToSearchGap = 8;

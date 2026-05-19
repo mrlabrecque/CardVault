@@ -34,7 +34,7 @@ import 'widgets/market_analysis_section.dart';
 
 // Bottom scroll padding when this route is shown inside [AppShell] so the last
 // section clears the floating tab bar (matches collection / wishlist lists).
-const double _kShellTabBarScrollInset = 100;
+const double _kShellTabBarScrollInset = ChromeMetrics.shellTabBarReserveHeight + 24;
 
 bool _parallelLabelImpliesDefaultBase(String parallelName) {
   final n = parallelName.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');

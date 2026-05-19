@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router.dart';
@@ -9,15 +10,16 @@ import 'core/router.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await LiquidGlassWidgets.initialize();
+
   // Edge-to-edge on Android — let Flutter draw behind status bar + nav bar
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  // Status bar: transparent, nav bar: match our tab bar color
+  // Edge-to-edge chrome; shell sets per-route overlay (login keeps burgundy in-page).
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,       // white icons (over burgundy login)
-    systemNavigationBarColor: AppTheme.primary,
-    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
   ));
 
   // Lock to portrait — cards app doesn't need landscape
@@ -41,7 +43,12 @@ Future<void> main() async {
     anonKey: supabaseAnonKey,
   );
 
-  runApp(const ProviderScope(child: CardVaultApp()));
+  runApp(
+    LiquidGlassWidgets.wrap(
+      adaptiveQuality: true,
+      child: const ProviderScope(child: CardVaultApp()),
+    ),
+  );
 }
 
 class CardVaultApp extends ConsumerWidget {
@@ -56,8 +63,12 @@ class CardVaultApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => Builder(
-        builder: (context) => _CupertinoTypographyBridge(child: child!),
+      builder: (context, child) => GlassTheme(
+        data: const GlassThemeData(
+          light: GlassThemeVariant.light,
+          dark: GlassThemeVariant.dark,
+        ),
+        child: _CupertinoTypographyBridge(child: child!),
       ),
     );
   }

@@ -126,8 +126,8 @@ class AppTheme {
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.light,
           statusBarBrightness: Brightness.dark,
-          systemNavigationBarColor: primary,
-          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
         ),
         titleTextStyle: TextStyle(
           fontSize: 18,
@@ -139,31 +139,12 @@ class AppTheme {
 
       iconButtonTheme: IconButtonThemeData(style: _iconButtonOnSolidBarStyle()),
 
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: primary,
+      // Shell uses [GlassShellBottomBar], not Material [NavigationBar].
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.transparent,
         elevation: 0,
-        indicatorColor: Colors.white.withValues(alpha: 0.18),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          return IconThemeData(
-            color: states.contains(WidgetState.selected)
-                ? Colors.white
-                : Colors.white.withValues(alpha: 0.55),
-            size: 22,
-          );
-        }),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          return TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.2,
-            color: states.contains(WidgetState.selected)
-                ? Colors.white
-                : Colors.white.withValues(alpha: 0.55),
-          );
-        }),
-        height: 72,
+        height: 0,
       ),
 
       cardTheme: CardThemeData(
@@ -257,18 +238,11 @@ class AppTheme {
 
       iconButtonTheme: IconButtonThemeData(style: _iconButtonOnSolidBarStyle()),
 
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: primaryDark,
-        indicatorColor: Colors.white.withValues(alpha: 0.18),
-        iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-          color: states.contains(WidgetState.selected) ? Colors.white : Colors.white.withValues(alpha: 0.5),
-          size: 22,
-        )),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-          fontSize: 10, fontWeight: FontWeight.w500,
-          color: states.contains(WidgetState.selected) ? Colors.white : Colors.white.withValues(alpha: 0.5),
-        )),
-        height: 72,
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        height: 0,
       ),
 
       cardTheme: CardThemeData(

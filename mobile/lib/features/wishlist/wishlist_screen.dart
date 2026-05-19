@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/shell/shell_bottom_search.dart';
 import '../../core/theme/fonts.dart';
-import '../../core/widgets/frosted_chrome_layer.dart';
-import '../../core/widgets/glass_search_field.dart';
 import '../../core/theme/chrome_metrics.dart';
 import '../../core/utils/adaptive_ui.dart';
 import '../../core/utils/currency_format.dart';
@@ -19,7 +18,6 @@ import '../../core/widgets/adaptive_list_card.dart';
 import '../../core/widgets/card_fan_loader.dart';
 import '../../core/widgets/app_bar_action_capsule.dart';
 import '../../core/widgets/glass_nav_bar.dart';
-import '../../core/widgets/sliver_frosted_header.dart';
 import 'wishlist_form_sheet.dart';
 
 int? _tryParseInt(dynamic value) {
@@ -184,17 +182,9 @@ class WishlistScreen extends ConsumerStatefulWidget {
 }
 
 class _WishlistScreenState extends ConsumerState<WishlistScreen> {
-  final _searchCtrl = TextEditingController();
   final _expandedMatches = <String>{};
   String? _deletingId;
-  String _searchQuery = '';
   final Set<String> _activeFilters = {};
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
 
   void _toggleFilter(String f) => setState(() {
     _activeFilters.contains(f)
@@ -202,9 +192,9 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
         : _activeFilters.add(f);
   });
 
-  List<WishlistItem> _filterItems(List<WishlistItem> items) {
-    if (_searchQuery.isEmpty && _activeFilters.isEmpty) return items;
-    final q = _searchQuery.toLowerCase();
+  List<WishlistItem> _filterItems(List<WishlistItem> items, String query) {
+    if (query.isEmpty && _activeFilters.isEmpty) return items;
+    final q = query.toLowerCase();
     return items.where((item) {
       if (q.isNotEmpty) {
         final matches =
@@ -282,10 +272,13 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
       body: async.when(
         loading: () => const Center(child: CardFanLoader()),
         error: (e, _) => Center(child: Text('Error: $e')),
-        data: (items) => RefreshIndicator(
-          onRefresh: () => ref.read(wishlistProvider.notifier).reload(),
-          child: items.isEmpty ? _buildEmpty() : _buildList(items),
-        ),
+        data: (items) {
+          final shellQuery = ref.watch(shellBottomSearchProvider).query;
+          return RefreshIndicator(
+            onRefresh: () => ref.read(wishlistProvider.notifier).reload(),
+            child: items.isEmpty ? _buildEmpty() : _buildList(items, shellQuery),
+          );
+        },
       ),
     );
   }
@@ -344,33 +337,13 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     );
   }
 
-  Widget _buildList(List<WishlistItem> items) {
-    final filtered = _filterItems(items);
+  Widget _buildList(List<WishlistItem> items, String shellQuery) {
+    final filtered = _filterItems(items, shellQuery);
     final navOffset = MediaQuery.of(context).padding.top + kToolbarHeight;
 
     return CustomScrollView(
       slivers: [
-        SliverFrostedHeader(
-          height:
-              navOffset +
-              GlassSearchField.pillHeight +
-              ChromeMetrics.searchOnlyExtraHeight,
-          child: FrostedChromeLayer(
-            child: Padding(
-              padding: ChromeMetrics.searchOnlyPadding(navOffset),
-              child: GlassSearchField(
-                controller: _searchCtrl,
-                hint: 'Search player, set, parallel…',
-                onChanged: (v) => setState(() => _searchQuery = v),
-                onClear: () {
-                  _searchCtrl.clear();
-                  setState(() => _searchQuery = '');
-                },
-              ),
-            ),
-          ),
-        ),
-        const SliverChromeGap(height: ChromeMetrics.contentTopGapTight),
+        SliverToBoxAdapter(child: SizedBox(height: navOffset)),
         SliverToBoxAdapter(
           child: Padding(
             padding: ChromeMetrics.listCountPadding(),
@@ -382,7 +355,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             hasScrollBody: false,
             child: Center(
               child: Text(
-                _searchQuery.isNotEmpty
+                shellQuery.isNotEmpty
                     ? 'No cards match your search.'
                     : 'No wishlist items yet.',
                 textAlign: TextAlign.center,
@@ -398,7 +371,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
           )
         else
           SliverPadding(
-            padding: ChromeMetrics.listBodyPadding(horizontal: 0),
+            padding: ChromeMetrics.listBodyPadding(
+              horizontal: 0,
+              bottom: ChromeMetrics.shellTabBarReserveHeight + 24,
+            ),
             sliver: SliverList.builder(
               itemCount: filtered.length,
               itemBuilder: (_, i) {

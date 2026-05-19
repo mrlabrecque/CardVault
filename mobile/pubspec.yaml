@@ -52,7 +52,9 @@ dependencies:
   crypto: ^3.0.6
   adaptive_platform_ui: ^0.1.106
   image: ^4.5.4
-  liquid_glass_widgets: ^0.10.6
+  # Patched: selected-tab row renders all icons so the lens can slide with content.
+  liquid_glass_widgets:
+    path: packages/liquid_glass_widgets
   intl: ^0.20.2
   currency_text_input_formatter: ^2.3.0
   camera: ^0.12.0+1

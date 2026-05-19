@@ -17,8 +17,8 @@ import {
 } from '../_shared/cardhedge_all_prices.ts';
 import { persistGuidePricesOntoMaster } from '../_shared/cardhedge_persist_master.ts';
 
-/** Max distinct stale masters to refresh per invocation. */
-const DAILY_LIMIT = 10;
+/** Max distinct stale masters per run (×3 grades ≈ 99 batch items, under API cap of 100). */
+const DAILY_LIMIT = 33;
 const STALE_MS = 23 * 60 * 60 * 1000;
 const DELAY_MS = 400;
 /** Rows to load before JS sort/dedupe (many copies can share one master). */

@@ -2,8 +2,8 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide showAdaptiveDialog;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/shell/shell_bottom_search.dart';
 import '../../core/theme/chrome_metrics.dart';
-import '../../core/widgets/glass_search_field.dart';
 import '../../core/theme/fonts.dart';
 import '../../core/widgets/app_bar_shell_trailing_actions.dart';
 import '../../core/services/cards_service.dart';
@@ -28,10 +28,6 @@ class CollectionScreen extends ConsumerStatefulWidget {
 }
 
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
-  final _searchCtrl = TextEditingController();
-  final _setSearchCtrl = TextEditingController();
-  String _query = '';
-  String _setQuery = '';
   SortOption _sort = SortOption.dateDesc;
   SetSortOption _setSort = SetSortOption.pctDesc;
   final Set<String> _activeFilters = {};
@@ -39,18 +35,11 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   final Set<String> _setViewSports = {};
   bool _showSets = false;
 
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    _setSearchCtrl.dispose();
-    super.dispose();
-  }
-
-  List<CardStack> _filter(List<CardStack> stacks) {
+  List<CardStack> _filter(List<CardStack> stacks, String query) {
     var result = stacks.where((s) {
       if (_pendingDeleteStacks.contains(_stackKey(s))) return false;
-      if (_query.isNotEmpty) {
-        final q = _query.toLowerCase();
+      if (query.isNotEmpty) {
+        final q = query.toLowerCase();
         if (!s.player.toLowerCase().contains(q) &&
             !(s.set?.toLowerCase().contains(q) ?? false) &&
             !s.sport.toLowerCase().contains(q)) { return false; }
@@ -186,27 +175,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             onValueChanged: (index) => setState(() => _showSets = index == 1),
             color: colors.primary,
           ),
-          const SizedBox(height: ChromeMetrics.segmentToSearchGap),
-          GlassSearchField(
-            controller: showSets ? _setSearchCtrl : _searchCtrl,
-            hint: showSets ? 'Search sets…' : 'Search player, set, sport…',
-            onChanged: (v) => setState(() {
-              if (showSets) {
-                _setQuery = v;
-              } else {
-                _query = v;
-              }
-            }),
-            onClear: () {
-              if (showSets) {
-                _setSearchCtrl.clear();
-                setState(() => _setQuery = '');
-              } else {
-                _searchCtrl.clear();
-                setState(() => _query = '');
-              }
-            },
-          ),
         ],
       ),
     );
@@ -277,6 +245,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final shellQuery = ref.watch(shellBottomSearchProvider).query;
     final colors = Theme.of(context).colorScheme;
     // Clear pending-delete keys once the provider returns fresh data —
     // those stacks will already be absent (or, on failure, restored).
@@ -483,15 +452,15 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                 // [UserCard.displayValue] = `current_prices` for master + slab (see CardsService.loadUserCards).
                 final stacks = CardStack.fromCards(allCards);
                 if (_showSets) {
-                  return _buildSetsView(allCards, colors, navOffset);
+                  return _buildSetsView(allCards, colors, navOffset, shellQuery);
                 }
-                final filtered = _filter(stacks);
+                final filtered = _filter(stacks, shellQuery);
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(userCardsProvider),
                   child: CustomScrollView(
                     slivers: [
                       SliverFrostedHeader(
-                        height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
+                        height: navOffset + ChromeMetrics.segmentOnlyHeaderExtent,
                         child: _buildPinnedChromeHeader(
                           colors: colors,
                           showSets: false,
@@ -519,7 +488,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                           hasScrollBody: false,
                           child: Center(
                             child: Text(
-                              _query.isNotEmpty || _activeFilters.isNotEmpty
+                              shellQuery.isNotEmpty || _activeFilters.isNotEmpty
                                   ? 'No cards match your filters.'
                                   : 'No cards yet. Tap Add Card to get started!',
                               style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
@@ -528,8 +497,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         )
                       else
                         SliverPadding(
-                          padding: const EdgeInsets.only(
-                            bottom: 100,
+                          padding: EdgeInsets.only(
+                            bottom: ChromeMetrics.shellTabBarReserveHeight + 24,
                           ),
                           sliver: SliverList.builder(
                             itemCount: filtered.length,
@@ -561,7 +530,12 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     );
   }
 
-  Widget _buildSetsView(List<UserCard> cards, ColorScheme colors, double navOffset) {
+  Widget _buildSetsView(
+    List<UserCard> cards,
+    ColorScheme colors,
+    double navOffset,
+    String query,
+  ) {
     final allRows = SetRow.fromCards(cards, sortBy: _setSortKey);
 
     // Get unique sports for filtering
@@ -573,8 +547,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     var filtered = _setViewSports.isEmpty
         ? allRows
         : allRows.where((row) => _setViewSports.contains(row.sport?.toUpperCase())).toList();
-    if (_setQuery.isNotEmpty) {
-      final q = _setQuery.toLowerCase();
+    if (query.isNotEmpty) {
+      final q = query.toLowerCase();
       filtered = filtered.where((row) => row.setName.toLowerCase().contains(q)).toList();
     }
 
@@ -582,7 +556,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       return CustomScrollView(
         slivers: [
             SliverFrostedHeader(
-              height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
+              height: navOffset + ChromeMetrics.segmentOnlyHeaderExtent,
               child: _buildPinnedChromeHeader(
                 colors: colors,
                 showSets: true,
@@ -613,7 +587,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       child: CustomScrollView(
         slivers: [
           SliverFrostedHeader(
-            height: navOffset + ChromeMetrics.segmentSearchHeaderExtent,
+            height: navOffset + ChromeMetrics.segmentOnlyHeaderExtent,
             child: _buildPinnedChromeHeader(
               colors: colors,
               showSets: true,
@@ -641,17 +615,19 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
               hasScrollBody: false,
               child: Center(
                 child: Text(
-                  _setViewSports.isNotEmpty
-                      ? 'No sets match your sport filter.'
-                      : 'No sets in your collection.',
+                  query.isNotEmpty
+                      ? 'No sets match your search.'
+                      : _setViewSports.isNotEmpty
+                          ? 'No sets match your sport filter.'
+                          : 'No sets in your collection.',
                   style: TextStyle(color: colors.onSurface.withValues(alpha: 0.5)),
                 ),
               ),
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.only(
-                bottom: 100,
+              padding: EdgeInsets.only(
+                bottom: ChromeMetrics.shellTabBarReserveHeight + 24,
               ),
               sliver: SliverList.builder(
                 itemCount: filtered.length,
