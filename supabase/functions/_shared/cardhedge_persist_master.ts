@@ -105,7 +105,6 @@ export async function persistGuidePricesOntoMaster(
   if (updErr) console.error('[guide_persist_master] master update', updErr);
 
   if (Array.isArray(input.prices) && input.prices.length > 0) {
-    await admin.from('current_prices').delete().eq('master_card_id', masterVariantId);
     const rows = input.prices
       .map((p) => {
         const norm = normalizePriceEntry(p);
@@ -119,7 +118,9 @@ export async function persistGuidePricesOntoMaster(
       })
       .filter(Boolean) as Record<string, unknown>[];
 
+    // Only replace rows when at least one price normalizes — avoid wiping on bad upstream payloads.
     if (rows.length > 0) {
+      await admin.from('current_prices').delete().eq('master_card_id', masterVariantId);
       const { error: insErr } = await admin.from('current_prices').insert(rows);
       if (insErr) console.error('[guide_persist_master] current_prices insert', insErr);
     }

@@ -101,7 +101,7 @@ export async function fetchActiveListingsBrowse(
     const useCategoryFilter = options?.useCategoryFilter ?? true;
     const categoryPart = useCategoryFilter ? '&category_ids=261328' : '';
     const url =
-      `${EBAY_API_BASE_URL}/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}${categoryPart}&limit=50`;
+      `${EBAY_API_BASE_URL}/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}${categoryPart}&limit=100`;
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,

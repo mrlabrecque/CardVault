@@ -260,6 +260,11 @@ Deno.serve(async (req) => {
   }
   const browseRows = await fetchActiveWithFallbackQueries(queryVariants);
   const raw = browseRows.map(browseRowToFilterShape);
+  const parseOpts = {
+    forActiveListings: true as const,
+    activeMultiSetRelease: siblingSetNames.length > 0,
+  };
+
   const filtered = parseAndFilterSoldComps(
     raw,
     query,
@@ -269,11 +274,32 @@ Deno.serve(async (req) => {
     setData.name ?? undefined,
     undefined,
     siblingSetNames,
+    parseOpts,
   );
+
+  let filterRejectSample: Array<{ title: string; reason: string }> | undefined;
+  if (raw.length > 0 && filtered.length === 0) {
+    const dbg: Array<{ title: string; reason: string }> = [];
+    parseAndFilterSoldComps(
+      raw,
+      query,
+      parallelName,
+      allParallelNames,
+      sc.card_number ?? undefined,
+      setData.name ?? undefined,
+      dbg,
+      siblingSetNames,
+      parseOpts,
+    );
+    filterRejectSample = dbg.slice(0, 20);
+  }
+
   console.log('[card-active-listings] counts:', {
     raw: raw.length,
     filtered: filtered.length,
     siblingSets: siblingSetNames.length,
+    activeMultiSetRelease: parseOpts.activeMultiSetRelease,
+    queryVariants: queryVariants.length,
   });
 
   const items = filtered.map((row: any) => ({
@@ -291,6 +317,15 @@ Deno.serve(async (req) => {
       items,
       query,
       counts: { raw: raw.length, filtered: filtered.length, returned: filtered.length },
+      meta: {
+        parallelName,
+        setName: setData.name ?? null,
+        activeMultiSetRelease: parseOpts.activeMultiSetRelease,
+        siblingSetCount: siblingSetNames.length,
+      },
+      ...(filterRejectSample != null && filterRejectSample.length > 0
+        ? { filterRejectSample }
+        : {}),
     }),
     { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
   );

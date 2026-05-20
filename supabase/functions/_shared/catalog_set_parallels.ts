@@ -4,6 +4,7 @@
  */
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { cardsightFetch } from './cardsight_fetch.ts';
 
 const CARDSIGHT_BASE = 'https://api.cardsight.ai';
 
@@ -86,12 +87,10 @@ export async function fetchCardsightSetParallels(
   apiKey: string,
   cardsightSetId: string,
 ): Promise<CardsightParallel[]> {
-  const setRes = await fetch(`${CARDSIGHT_BASE}/v1/catalog/sets/${cardsightSetId}`, {
-    headers: { 'X-API-Key': apiKey },
-  });
-  if (!setRes.ok) {
-    throw new Error(`Catalog set fetch failed: ${setRes.status}`);
-  }
+  const setRes = await cardsightFetch(
+    `${CARDSIGHT_BASE}/v1/catalog/sets/${cardsightSetId}`,
+    apiKey,
+  );
   const setDetail = await setRes.json() as {
     parallels?: CardsightParallel[];
   };
@@ -173,3 +172,26 @@ export async function ensureSetParallelsFromCardsight(
 
   return { rows, importedFromCardsight: true };
 }
+
+const HYDRATE_PARALLEL_DELAY_MS = 150;
+
+/**
+ * Always refresh `set_parallels` from CardSight set detail (idempotent upsert).
+ * Returns number of parallel definitions written (or 1 for synthetic Base).
+ */
+export async function hydrateSetParallelsFromCardsight(
+  supabase: SupabaseClient,
+  apiKey: string,
+  setId: string,
+  cardsightSetId: string,
+): Promise<number> {
+  const csParallels = await fetchCardsightSetParallels(apiKey, cardsightSetId);
+  if (csParallels.length > 0) {
+    await upsertParallelsFromCardsight(supabase, setId, csParallels);
+    return csParallels.length;
+  }
+  await ensureBaseParallelRow(supabase, setId);
+  return 1;
+}
+
+export { HYDRATE_PARALLEL_DELAY_MS };

@@ -54,17 +54,17 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'This search returns broad eBay sold results based on whatever you type — it doesn\'t know your specific card.',
+              'This screen used to run a broad marketplace sold search from whatever you typed. That path is turned off — values in the app now come from the CardHedge-backed catalog (player, year, set, parallel, grade).',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
             ),
             const SizedBox(height: 10),
             const Text(
-              'The value shown on cards in your collection is refreshed using that card\'s exact details — player, year, set, parallel, grade, and serial number — so those comps are much more targeted.',
+              'The value on cards in your collection is driven by the guide link on that catalog variant and recent guide sales stored with your card.',
               style: TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5),
             ),
             const SizedBox(height: 10),
             const Text(
-              'Use this search to explore the market. For the most accurate value on a card you own, use the refresh button on that card.',
+              'Use Collection or Scan to open a card, then use market analysis there for accurate comps.',
               style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.5),
             ),
           ],
@@ -264,7 +264,7 @@ class _CompsScreenState extends ConsumerState<CompsScreen> {
                   padding: EdgeInsets.only(top: 64),
                   child: Center(
                     child: Text(
-                      'Search for a card to see eBay sold values.',
+                      'Search is legacy; open a card from Collection or Scan for CardHedge-backed comps. Recent lookups appear below.',
                       style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
@@ -404,7 +404,7 @@ class _CompCard extends StatelessWidget {
                     children: [
                       Icon(Icons.open_in_new, size: 12, color: Color(0xFF800020)),
                       SizedBox(width: 4),
-                      Text('View on eBay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF800020))),
+                      Text('Open listing', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF800020))),
                     ],
                   ),
                 ),

@@ -364,8 +364,9 @@ export function buildCardHedgeSearchSetLabel(input: {
 }
 
 /**
- * CardHedge `search` string: **Player + Year + Release + Number + Set**
- * (e.g. `Jalen Hurts 2025 Donruss Football #GK-JHS Gridiron Kings`).
+ * CardHedge `search` string: **Player + Year + Release + Category + #Number + Set**
+ * (e.g. `Drake Maye 2025 Donruss Optic Football #14 Donruss Threads`).
+ * Category disambiguates cross-sport product lines (Donruss Optic baseball vs football).
  * Parallel is resolved post-fetch on `variant`, not in this string.
  */
 export function buildCardHedgeCardSearchString(input: {
@@ -374,6 +375,8 @@ export function buildCardHedgeCardSearchString(input: {
   releaseName?: string | null;
   cardNumber?: string | null;
   setName?: string | null;
+  /** Sport as CardHedge category word, e.g. `Football` — appended after release when not redundant. */
+  category?: string | null;
 }): string {
   const parts: string[] = [];
   const player = input.player.trim();
@@ -386,6 +389,14 @@ export function buildCardHedgeCardSearchString(input: {
     }
   }
   if (rel) parts.push(rel);
+  const cat = (input.category ?? '').trim();
+  if (cat) {
+    const relL = rel.toLowerCase();
+    const catL = cat.toLowerCase();
+    if (!relL.endsWith(catL) && !relL.includes(` ${catL}`)) {
+      parts.push(cat);
+    }
+  }
   const cn = (input.cardNumber ?? '').trim().replace(/^#/, '');
   if (cn) parts.push(`#${cn}`);
   const set = (input.setName ?? '').trim();
@@ -395,7 +406,8 @@ export function buildCardHedgeCardSearchString(input: {
 
 /**
  * POST `/v1/cards/card-search` body — `category`, `page`, `page_size`, and `search`
- * (plus optional `raw_images_only`, `rookie`). No separate `player` / `set` fields.
+ * (plus optional `raw_images_only`, `rookie`). [search] includes release + category + # + insert set;
+ * no separate `player` / `set` fields.
  */
 export function buildCardHedgeCardSearchBody(input: {
   category: string;
@@ -416,6 +428,7 @@ export function buildCardHedgeCardSearchBody(input: {
     releaseName: input.releaseName,
     cardNumber: input.cardNumber,
     setName: input.setName,
+    category: input.category,
   });
   const body: Record<string, unknown> = {
     category,
@@ -429,9 +442,19 @@ export function buildCardHedgeCardSearchBody(input: {
   return body;
 }
 
+/** Brand/product tokens shared across many inserts — ignored when scoring insert-name token hits. */
+const INSERT_SET_MATCH_GENERIC_WORDS = new Set([
+  'donruss', 'panini', 'topps', 'prizm', 'prism', 'optic', 'mosaic', 'select', 'chronicles',
+  'certified', 'absolute', 'contenders', 'playoff', 'bowman', 'fleer', 'score', 'ultra',
+  'national', 'upper', 'deck', 'heritage', 'update', 'series', 'leaf', 'futera', 'sage',
+  'onyx', 'wild', 'card', 'cards', 'hobby', 'retail', 'blaster',
+]);
+
 /**
- * Vault `setName` / checklist insert (e.g. Fireworks, Downtown). CardHedge carries
- * that line in **`description`**, not in the search `set` string.
+ * Vault `setName` / checklist insert (e.g. Fireworks, Downtown). CardHedge may carry the
+ * insert in **`description`**, the product line in **`set`**, and sometimes **`variant`** —
+ * we match against all of them. Generic brand words (Donruss, Prizm, …) are ignored when
+ * counting token hits so "Donruss Threads" still matches when only "Threads" appears in prose.
  */
 export function insertSetMatchesDescription(
   vaultSetName: string | null | undefined,
@@ -441,15 +464,48 @@ export function insertSetMatchesDescription(
   const exp = normLabel(String(vaultSetName ?? '').trim());
   if (!exp) return true;
   const desc = typeof row.description === 'string' ? normLabel(row.description) : '';
-  if (desc.includes(exp)) return true;
-  const tokens = exp.split(' ').filter((t) => t.length > 2);
-  if (tokens.length === 0) return desc.includes(exp);
+  const setField = typeof row.set === 'string' ? normLabel(row.set) : '';
+  const variant = typeof row.variant === 'string' ? normLabel(row.variant) : '';
+  const hay = [setField, variant, desc].filter((s) => s.length > 0).join(' ').trim();
+  if (!hay) return false;
+  if (hay.includes(exp)) return true;
+  const tokens = exp
+    .split(' ')
+    .filter((t) => t.length > 2 && !INSERT_SET_MATCH_GENERIC_WORDS.has(t));
+  if (tokens.length === 0) {
+    return hay.includes(exp);
+  }
   let hits = 0;
   for (const t of tokens) {
-    if (desc.includes(t)) hits++;
+    if (hay.includes(t)) hits++;
   }
   const need = Math.max(1, Math.ceil(tokens.length * 0.65));
   return hits >= need;
+}
+
+/**
+ * Loose insert check: any distinctive (non-brand) word from the vault insert appears in the
+ * CardHedge row haystack. Used when strict [insertSetMatchesDescription] yields nothing but
+ * CardHedge may still mention one insert keyword (e.g. "Threads") without full phrasing.
+ */
+export function insertSetMatchesDescriptionLoose(
+  vaultSetName: string | null | undefined,
+  row: Record<string, unknown>,
+): boolean {
+  if (isVaultCanonicalBaseSetName(vaultSetName)) return true;
+  const exp = normLabel(String(vaultSetName ?? '').trim());
+  if (!exp) return true;
+  const desc = typeof row.description === 'string' ? normLabel(row.description) : '';
+  const setField = typeof row.set === 'string' ? normLabel(row.set) : '';
+  const variant = typeof row.variant === 'string' ? normLabel(row.variant) : '';
+  const hay = [setField, variant, desc].filter((s) => s.length > 0).join(' ').trim();
+  if (!hay) return false;
+  if (hay.includes(exp)) return true;
+  const tokens = exp
+    .split(' ')
+    .filter((t) => t.length > 2 && !INSERT_SET_MATCH_GENERIC_WORDS.has(t));
+  if (tokens.length === 0) return hay.includes(exp);
+  return tokens.some((t) => hay.includes(t));
 }
 
 export function normalizeCardNumber(raw: string | undefined | null): string {
@@ -459,10 +515,43 @@ export function normalizeCardNumber(raw: string | undefined | null): string {
   return s;
 }
 
+/** Card-search row: primary `number` plus alternate keys some payloads use. */
+export function cardHedgeSearchRowNumber(row: Record<string, unknown>): unknown {
+  const pick = (v: unknown): unknown => {
+    if (v == null) return undefined;
+    const s = String(v).trim();
+    return s.length > 0 ? v : undefined;
+  };
+  return (
+    pick(row.number) ??
+    pick((row as Record<string, unknown>)['Number']) ??
+    pick(row.card_number) ??
+    pick(row.cardNumber)
+  );
+}
+
+/**
+ * True when catalog [expected] matches CardHedge `number` (or hyphen / prefix forms like `DRC-14`).
+ * Empty upstream number still passes — downstream insert + parallel filters apply.
+ */
 export function cardNumberMatches(expected: string | undefined | null, apiNumber: unknown): boolean {
   if (!expected?.trim()) return true;
   const e = normalizeCardNumber(expected);
-  const a = normalizeCardNumber(typeof apiNumber === 'string' ? apiNumber : String(apiNumber ?? ''));
-  if (!e || !a) return false;
-  return e === a;
+  if (!e) return true;
+  const raw = apiNumber == null ? '' : typeof apiNumber === 'string' ? apiNumber : String(apiNumber);
+  const trimmed = raw.replace(/^#/, '').trim();
+  if (!trimmed) return true;
+
+  const a = normalizeCardNumber(raw);
+  if (a && e === a) return true;
+
+  // Catalog is digits-only — CardHedge often uses prefixes, slashes, or `#14` forms.
+  if (/^\d{1,4}$/.test(e)) {
+    const esc = escapeRegExp(e);
+    const re = new RegExp(`(^|[^0-9#])0*${esc}(?:[^0-9]|$)`, 'i');
+    if (re.test(trimmed)) return true;
+    if (new RegExp(`#\\s*0*${esc}(?:[^0-9]|$)`, 'i').test(trimmed)) return true;
+  }
+
+  return false;
 }

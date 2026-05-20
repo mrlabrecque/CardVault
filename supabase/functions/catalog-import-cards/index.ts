@@ -1,10 +1,14 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { cardsightErrorResponse } from '../_shared/cardsight_fetch.ts';
+import {
+  fetchAllCardsightReleaseCards,
+  resolveBaseParallelId,
+  upsertVaultSetCards,
+} from '../_shared/catalog_import_cards.ts';
 import {
   ensureSetParallelsFromCardsight,
-  pickBaseParallelId,
 } from '../_shared/catalog_set_parallels.ts';
 
-const CARDSIGHT_BASE = 'https://api.cardsight.ai';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -31,58 +35,24 @@ Deno.serve(async (req) => {
   );
 
   try {
-    const { cardsightReleaseId, cardsightSetId, setId } = await req.json() as {
+    const { cardsightReleaseId, cardsightSetId, setId, skipImages } = await req.json() as {
       cardsightReleaseId: string;
       cardsightSetId: string;
       setId?: string;
+      /** When true (default), do not fetch CardSight images during import. */
+      skipImages?: boolean;
     };
 
     if (!cardsightReleaseId || !cardsightSetId) {
       return json({ error: 'cardsightReleaseId and cardsightSetId are required' }, 400);
     }
 
-    let allCards: Array<{
-      id: string;
-      number: string;
-      name: string;
-      attributes?: string[];
-    }> = [];
-    let page = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const url = new URL(`${CARDSIGHT_BASE}/v1/catalog/releases/${cardsightReleaseId}/cards`);
-      url.searchParams.set('setId', cardsightSetId);
-      url.searchParams.set('take', '100');
-      url.searchParams.set('skip', String(page * 100));
-
-      const csRes = await fetch(url.toString(), {
-        headers: { 'X-Api-Key': apiKey },
-      });
-      if (!csRes.ok) throw new Error(`CardSight cards fetch failed: ${csRes.status}`);
-
-      const csData = await csRes.json() as {
-        cards?: Array<{
-          id: string;
-          number: string;
-          name: string;
-          attributes?: string[];
-        }>;
-        total_count?: number;
-      };
-      const cards = csData.cards ?? [];
-      if (cards.length === 0) {
-        hasMore = false;
-      } else {
-        allCards = [...allCards, ...cards];
-        hasMore = cards.length === 100;
-        page++;
-      }
-      await new Promise(r => setTimeout(r, 250));
-    }
+    const allCards = await fetchAllCardsightReleaseCards(apiKey, cardsightReleaseId, {
+      cardsightSetId,
+    });
 
     if (allCards.length === 0) {
-      return json({ imported: 0, total: 0 });
+      return json({ imported: 0, total: 0, skipImages: skipImages !== false });
     }
 
     let dbSetId = setId;
@@ -102,134 +72,27 @@ Deno.serve(async (req) => {
     const { rows: parallelRows, importedFromCardsight: parallelsImported } =
       await ensureSetParallelsFromCardsight(supabase, apiKey, dbSetId, cardsightSetId);
 
-    const baseParallelId = pickBaseParallelId(parallelRows);
-    if (!baseParallelId) {
-      return json({ error: 'Could not resolve a base parallel for this set after catalog import.' }, 500);
-    }
+    const baseParallelId = resolveBaseParallelId(parallelRows);
 
-    const cardMap = new Map<string, {
-      player: string;
-      cardNumber: string;
-      isRookie: boolean;
-      isAuto: boolean;
-      isPatch: boolean;
-      isSSP: boolean;
-      imageUrl: string | null;
-      cardsightCardId: string;
-    }>();
+    // skipImages retained for API compatibility; images are never fetched here.
+    void skipImages;
 
-    for (const card of allCards) {
-      if (!card.name || card.name.trim() === '') continue;
-
-      const attrs = (card.attributes ?? []).map(a => a.toUpperCase());
-      const key = `${card.name}|${card.number}`;
-      const existing = cardMap.get(key);
-
-      if (existing) {
-        existing.isRookie = existing.isRookie || attrs.includes('RC');
-        existing.isAuto = existing.isAuto || attrs.includes('AU');
-        existing.isPatch = existing.isPatch || attrs.includes('GU');
-        existing.isSSP = existing.isSSP || attrs.includes('SSP');
-      } else {
-        cardMap.set(key, {
-          player: card.name.trim(),
-          cardNumber: card.number,
-          isRookie: attrs.includes('RC'),
-          isAuto: attrs.includes('AU'),
-          isPatch: attrs.includes('GU'),
-          isSSP: attrs.includes('SSP'),
-          imageUrl: null,
-          cardsightCardId: card.id,
-        });
-      }
-    }
-
-    for (const card of cardMap.values()) {
-      try {
-        const imgUrl = `${CARDSIGHT_BASE}/v1/images/cards/${card.cardsightCardId}`;
-
-        const imgRes = await fetch(imgUrl, {
-          headers: { 'X-Api-Key': apiKey },
-        });
-
-        if (imgRes.ok) {
-          const imageBuffer = await imgRes.arrayBuffer();
-          const fileName = `${card.cardsightCardId}.jpg`;
-
-          const { data, error: uploadError } = await supabase.storage
-            .from('cards')
-            .upload(fileName, imageBuffer, {
-              contentType: 'image/jpeg',
-              upsert: true,
-            });
-
-          if (!uploadError && data) {
-            const { data: urlData } = supabase.storage
-              .from('cards')
-              .getPublicUrl(fileName);
-            card.imageUrl = urlData.publicUrl;
-          }
-        }
-      } catch (_e) {
-        // Silently skip image fetch errors
-      }
-      await new Promise(r => setTimeout(r, 100));
-    }
-
-    const setRows = Array.from(cardMap.values()).map(card => ({
-      set_id: dbSetId,
-      player: card.player,
-      card_number: card.cardNumber || null,
-      is_rookie: card.isRookie,
-      image_url: card.imageUrl,
-      cardsight_card_id: card.cardsightCardId,
-    }));
-
-    const { data: upsertedSetCards, error: setErr } = await supabase
-      .from('set_cards')
-      .upsert(setRows, { onConflict: 'cardsight_card_id' })
-      .select('id, cardsight_card_id');
-
-    if (setErr) throw new Error(setErr.message);
-
-    const byCsId = new Map((upsertedSetCards ?? []).map((r: { id: string; cardsight_card_id: string }) =>
-      [r.cardsight_card_id, r.id] as const
-    ));
-
-    const variantRows = Array.from(cardMap.values()).map(card => {
-      const setCardId = byCsId.get(card.cardsightCardId);
-      if (!setCardId) return null;
-      return {
-        set_card_id: setCardId,
-        parallel_id: baseParallelId,
-        is_auto: card.isAuto,
-        is_patch: card.isPatch,
-        is_ssp: card.isSSP,
-        serial_max: null as number | null,
-      };
-    }).filter(Boolean) as {
-      set_card_id: string;
-      parallel_id: string;
-      is_auto: boolean;
-      is_patch: boolean;
-      is_ssp: boolean;
-      serial_max: number | null;
-    }[];
-
-    const { error: varErr } = await supabase
-      .from('master_card_definitions')
-      .upsert(variantRows, { onConflict: 'set_card_id,parallel_id' });
-
-    if (varErr) throw new Error(varErr.message);
+    const { imported, merged } = await upsertVaultSetCards(
+      supabase,
+      dbSetId,
+      baseParallelId,
+      allCards,
+    );
 
     return json({
-      imported: upsertedSetCards?.length ?? 0,
-      total: cardMap.size,
+      imported,
+      total: merged,
       parallelsImported,
+      skipImages: true,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[catalog-import-cards]', msg);
-    return json({ error: msg }, 500);
+    return cardsightErrorResponse(e, CORS);
   }
 });

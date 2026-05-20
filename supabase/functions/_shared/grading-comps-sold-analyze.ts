@@ -1,7 +1,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { fetchSoldListingsBrightData, soldRefreshRowsToSearchShape } from './sold_listings_brightdata.ts';
-const MAX_RETRIES = 2;
-const RETRY_BASE_MS = 2000;
+import { verifyUserJwt } from './supabase_user_jwt.ts';
+
+const COMPS_URL = 'https://api.cardhedger.com/v1/cards/comps';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,116 +15,69 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function b64urlToBytes(b64url: string): Uint8Array {
-  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
-function b64urlToJson(b64url: string): any {
-  return JSON.parse(new TextDecoder().decode(b64urlToBytes(b64url)));
+/** Mean of positive prices in `raw_prices` (same shape as `cardhedge-grade-comps`). */
+function avgFromRawPrices(payload: Record<string, unknown>): { avg: number; count: number } {
+  const rawPrices = payload.raw_prices;
+  const prices: number[] = [];
+  if (Array.isArray(rawPrices)) {
+    for (const rp of rawPrices) {
+      if (!rp || typeof rp !== 'object') continue;
+      const o = rp as Record<string, unknown>;
+      const price = typeof o.price === 'number' ? o.price : parseFloat(String(o.price ?? '0'));
+      if (Number.isFinite(price) && price > 0) prices.push(price);
+    }
+  }
+  if (prices.length === 0) {
+    const cp = toFiniteNumber(payload.comp_price);
+    if (cp != null && cp > 0) return { avg: cp, count: 0 };
+    return { avg: 0, count: 0 };
+  }
+  const sum = prices.reduce((a, b) => a + b, 0);
+  return { avg: sum / prices.length, count: prices.length };
 }
 
-let cachedJwks: any[] | null = null;
-
-async function getJwks(supabaseUrl: string): Promise<any[]> {
-  if (cachedJwks) return cachedJwks;
-  const res = await fetch(`${supabaseUrl}/auth/v1/.well-known/jwks.json`);
-  const data = await res.json();
-  cachedJwks = data.keys ?? [];
-  return cachedJwks!;
-}
-
-async function verifyJwt(token: string, supabaseUrl: string): Promise<string | null> {
+async function fetchGuideCompsPayload(
+  apiKey: string,
+  guideCardId: string,
+  grade: string,
+): Promise<Record<string, unknown> | null> {
+  const chGrade = grade.trim() === '' || grade === 'Raw' ? 'Raw' : grade;
+  const res = await fetch(COMPS_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey,
+    },
+    body: JSON.stringify({
+      card_id: guideCardId,
+      count: 40,
+      grade: chGrade,
+      include_raw_prices: true,
+      time_weighted: false,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[grading-comps-sold-analyze] CardHedge comps', res.status, text.slice(0, 800));
+    return null;
+  }
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const header = b64urlToJson(parts[0]);
-    const payload = b64urlToJson(parts[1]);
-    const jwks = await getJwks(supabaseUrl);
-    const jwk = jwks.find((k: any) => k.kid === header.kid) ?? jwks[0];
-    if (!jwk) return null;
-    const key = await crypto.subtle.importKey(
-      'jwk', jwk,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false, ['verify'],
-    );
-    const valid = await crypto.subtle.verify(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      key,
-      b64urlToBytes(parts[2]),
-      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
-    );
-    if (!valid) return null;
-    return payload?.sub ?? null;
-  } catch (e) {
-    console.error('verifyJwt error:', e);
+    return await res.json() as Record<string, unknown>;
+  } catch {
     return null;
   }
 }
 
-function buildCardEbayQuery(card: any): string {
-  const { year, release_name, set_name, player, card_number, parallel_type, is_auto, is_patch, is_rookie, serial_max } = card;
-
-  const parts: string[] = [String(year ?? ''), release_name ?? ''];
-
-  const setLabel = (set_name ?? '').trim();
-  if (
-    setLabel &&
-    setLabel.toLowerCase() !== 'base' &&
-    !(release_name ?? '').toLowerCase().includes(setLabel.toLowerCase())
-  ) {
-    parts.push(setLabel);
-  }
-
-  parts.push(player ?? '');
-  if (card_number) parts.push(`#${card_number}`);
-
-  const parallelLabel = (parallel_type ?? '').replace(/\s*\/\d+$/, '').trim();
-  const attrs: string[] = [];
-  if (parallelLabel && parallelLabel !== 'Base') attrs.push(parallelLabel);
-  if (is_auto) attrs.push('Auto');
-  if (is_patch) attrs.push('Patch');
-  if (serial_max) attrs.push(`/${serial_max}`);
-  if (is_rookie) attrs.push('RC');
-
-  return [...parts, ...attrs].filter(Boolean).join(' ');
-}
-
-async function fetchSoldListings(query: string): Promise<any[]> {
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const rows = await fetchSoldListingsBrightData(query);
-      return soldRefreshRowsToSearchShape(rows)
-        .map((p: any) => ({ ...p, url: p.url ?? null }))
-        .filter((p: any) => p.title && p.price > 0);
-    } catch (e: any) {
-      if (attempt === MAX_RETRIES) throw e;
-      await new Promise(r => setTimeout(r, RETRY_BASE_MS * attempt));
-    }
-  }
-  return [];
-}
-
-function filterGradedItems(items: any[], grader: string, grade: string): any[] {
-  return items.filter(item => {
-    const title = (item.title ?? '').toLowerCase();
-    if (item.price <= 0) return false;
-    if (/\blot\b/i.test(title)) return false;
-    if (!new RegExp(`\\b${grader}\\b`, 'i').test(title)) return false;
-    if (!new RegExp(`\\b${grade}\\b`).test(title)) return false;
-    if (grade === '9' && /\bpsa\s*10\b/i.test(title)) return false;
-    if (grade === '10' && /\bpsa\s*9\b/i.test(title)) return false;
-    return true;
-  });
-}
-
-function avgPrice(items: any[]): number {
-  const prices = items.map((i: any) => i.price).filter((p: number) => p > 0);
-  if (!prices.length) return 0;
-  return prices.reduce((s: number, p: number) => s + p, 0) / prices.length;
-}
-
-/** Sold comps PSA tier analysis — shared by `grading-analyze` (legacy) and `grading-comps-sold-analyze`. */
+/** PSA tier sold comps summary from CardHedge guide `/v1/cards/comps` (replaces eBay scrape). */
 export async function handleGradingCompsSoldAnalyze(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -135,9 +88,15 @@ export async function handleGradingCompsSoldAnalyze(req: Request): Promise<Respo
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    const userId = await verifyJwt(token, supabaseUrl);
+    const userId = await verifyUserJwt(authHeader, supabaseUrl);
     if (!userId) return json({ error: 'Unauthorized' }, 401);
+
+    const apiKey =
+      Deno.env.get('CARDHEDGE_API_KEY')?.trim() ||
+      Deno.env.get('CARDHEDGER_API_KEY')?.trim();
+    if (!apiKey) {
+      return json({ error: 'Price guide API is not configured' }, 503);
+    }
 
     const { userCardId } = await req.json();
     if (!userCardId) return json({ error: 'userCardId is required' }, 400);
@@ -148,14 +107,13 @@ export async function handleGradingCompsSoldAnalyze(req: Request): Promise<Respo
       .from('user_cards')
       .select(`
         id,
-        price_paid,
         master_card_definitions (
-          is_auto, is_patch, serial_max,
-          set_parallels!parallel_id ( name ),
+          cardhedge_id,
           set_cards (
-            player, card_number, is_rookie,
-            sets ( name, releases ( year, sport, name ) )
-          )
+            player, card_number,
+            sets ( name, releases ( year, name ) )
+          ),
+          set_parallels!parallel_id ( name )
         )
       `)
       .eq('id', userCardId)
@@ -164,56 +122,58 @@ export async function handleGradingCompsSoldAnalyze(req: Request): Promise<Respo
 
     if (cardErr || !card) return json({ error: 'Card not found' }, 404);
 
-    const mcd = (card as any).master_card_definitions ?? {};
-    const sp = mcd.set_parallels as { name?: string } | { name?: string }[] | undefined;
-    const spRow = Array.isArray(sp) ? sp[0] : sp;
-    const parallelFromCatalog =
-      typeof spRow?.name === 'string' && spRow.name.trim().length > 0 ? spRow.name.trim() : 'Base';
+    let mcd = (card as Record<string, unknown>).master_card_definitions as
+      | Record<string, unknown>
+      | Record<string, unknown>[]
+      | null;
+    if (Array.isArray(mcd)) mcd = mcd[0] ?? null;
+    mcd = mcd as Record<string, unknown> | null;
+    const guideId = typeof mcd?.cardhedge_id === 'string' ? mcd.cardhedge_id.trim() : '';
+    if (!guideId) {
+      return json({
+        error: 'no_cardhedge_link',
+        message: 'Link this card to the price guide before sold comps analysis.',
+        rawQuery: '',
+        psa9: { avg: 0, count: 0, query: '' },
+        psa10: { avg: 0, count: 0, query: '' },
+      }, 400);
+    }
 
-    const sc = mcd.set_cards ?? {};
-    const setData = sc.sets ?? {};
-    const release = setData.releases ?? {};
+    let sc = mcd?.set_cards as Record<string, unknown> | Record<string, unknown>[] | null;
+    if (Array.isArray(sc)) sc = sc[0] ?? null;
+    let sets = sc?.sets as Record<string, unknown> | Record<string, unknown>[] | null;
+    if (Array.isArray(sets)) sets = sets[0] ?? null;
+    let rel = sets?.releases as Record<string, unknown> | Record<string, unknown>[] | null;
+    if (Array.isArray(rel)) rel = rel[0] ?? null;
+    const sp = mcd?.set_parallels as Record<string, unknown> | Record<string, unknown>[] | undefined;
+    const spRow = Array.isArray(sp) ? sp[0] as Record<string, unknown> | undefined : sp as Record<string, unknown> | undefined;
+    const parallel = typeof spRow?.name === 'string' && spRow.name.trim().length > 0 ? spRow.name.trim() : 'Base';
 
-    const normalized = {
-      year: release.year ?? null,
-      release_name: release.name ?? '',
-      set_name: setData.name ?? '',
-      player: sc.player ?? '',
-      card_number: sc.card_number ?? null,
-      parallel_type: parallelFromCatalog,
-      is_auto: mcd.is_auto ?? false,
-      is_patch: mcd.is_patch ?? false,
-      is_rookie: sc.is_rookie ?? false,
-      serial_max: mcd.serial_max ?? null,
-    };
+    const parts = [
+      rel?.year != null ? String(rel.year) : '',
+      typeof rel?.name === 'string' ? rel.name : '',
+      typeof sets?.name === 'string' ? sets.name : '',
+      typeof sc?.player === 'string' ? sc.player : '',
+      sc?.card_number != null ? `#${sc.card_number}` : '',
+      parallel.toLowerCase() !== 'base' ? parallel : '',
+    ].filter((p) => p.length > 0);
+    const rawQuery = parts.join(' ');
 
-    const rawQuery = buildCardEbayQuery(normalized);
-    const psa9Query = `${rawQuery} PSA 9`;
-    const psa10Query = `${rawQuery} PSA 10`;
-    const gemMintQuery = `${rawQuery} Graded 10 Gem Mint`;
+    const psa9Payload = await fetchGuideCompsPayload(apiKey, guideId, 'PSA 9');
+    await new Promise((r) => setTimeout(r, 250));
+    const psa10Payload = await fetchGuideCompsPayload(apiKey, guideId, 'PSA 10');
 
-    console.log('grading-comps-sold-analyze queries:', { psa9Query, psa10Query });
-
-    const psa9Raw = await fetchSoldListings(psa9Query);
-    await new Promise(r => setTimeout(r, 500));
-    const psa10Raw = await fetchSoldListings(psa10Query);
-    await new Promise(r => setTimeout(r, 500));
-    const gemMintRaw = await fetchSoldListings(gemMintQuery);
-
-    const psa9Items = filterGradedItems(psa9Raw, 'psa', '9');
-
-    const psa10Filtered = filterGradedItems(psa10Raw, 'psa', '10');
-    const gemMintFiltered = filterGradedItems(gemMintRaw, 'psa', '10');
-    const seen = new Set(psa10Filtered.map((i: any) => i.itemId).filter(Boolean));
-    const merged = [...psa10Filtered, ...gemMintFiltered.filter((i: any) => !seen.has(i.itemId))];
+    const psa9Stats = psa9Payload ? avgFromRawPrices(psa9Payload) : { avg: 0, count: 0 };
+    const psa10Stats = psa10Payload ? avgFromRawPrices(psa10Payload) : { avg: 0, count: 0 };
 
     return json({
       rawQuery,
-      psa9: { avg: avgPrice(psa9Items), count: psa9Items.length, query: psa9Query },
-      psa10: { avg: avgPrice(merged), count: merged.length, query: psa10Query },
+      psa9: { avg: psa9Stats.avg, count: psa9Stats.count, query: `CardHedge comps PSA 9 (${guideId})` },
+      psa10: { avg: psa10Stats.avg, count: psa10Stats.count, query: `CardHedge comps PSA 10 (${guideId})` },
     });
-  } catch (e: any) {
-    console.error('[grading-comps-sold-analyze]', e?.message ?? e);
-    return json({ error: 'Internal server error', detail: e?.message }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[grading-comps-sold-analyze]', msg);
+    return json({ error: 'Internal server error', detail: msg }, 500);
   }
 }

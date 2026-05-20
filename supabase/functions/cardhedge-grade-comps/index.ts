@@ -188,19 +188,22 @@ Deno.serve(async (req) => {
 
   const cacheKey = `guide_comps:${guidePriceCardId}:${masterVariantId}:${grade}`;
   const now = new Date().toISOString();
-  await admin.from('comps_cache').upsert({
-    query: cacheKey,
-    items,
-    fetched_at: now,
-  }, { onConflict: 'query' });
 
-  await admin
-    .from('card_sold_comps')
-    .delete()
-    .eq('master_card_id', masterVariantId)
-    .eq('grade', grade);
-
+  // Never delete stored comps when upstream returns nothing usable — that produced
+  // empty Sold Comps after transient API / payload issues (especially on Base).
   if (items.length > 0) {
+    await admin.from('comps_cache').upsert({
+      query: cacheKey,
+      items,
+      fetched_at: now,
+    }, { onConflict: 'query' });
+
+    await admin
+      .from('card_sold_comps')
+      .delete()
+      .eq('master_card_id', masterVariantId)
+      .eq('grade', grade);
+
     const rows = items.map((it) => ({
       master_card_id: masterVariantId,
       parallel_name: catalogParallel,
@@ -220,6 +223,10 @@ Deno.serve(async (req) => {
       console.error('[guide-grade-comps] insert', insErr);
       return json({ error: 'Failed to save comps', details: insErr.message }, 500);
     }
+  } else {
+    console.warn(
+      `[guide-grade-comps] zero usable comps for master=${masterVariantId} grade=${grade}; keeping existing DB rows`,
+    );
   }
 
   return json({

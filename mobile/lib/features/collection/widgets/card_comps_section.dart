@@ -38,7 +38,7 @@ class CardCompsSection extends ConsumerStatefulWidget {
     this.refreshVersion = 0,
     this.externalLoading = false,
     /// When true (embedded guide sold-comps): no duplicate grade pills, no scraper loading
-    /// copy, no auto Bright Data refresh when the table is empty.
+    /// copy, no auto refresh when the table is empty (parent already loaded guide comps).
     this.embeddedGuideSoldComps = false,
     /// When set with [onSelectedDaysChanged], the date filter is rendered by the parent.
     this.selectedDays,
@@ -62,10 +62,9 @@ class CardCompsSection extends ConsumerStatefulWidget {
 
 class _CardCompsSectionState extends ConsumerState<CardCompsSection> {
   static const List<String> _loadingStatusSteps = [
-    'Refreshing sold comps...',
-    'Pulling recent sold listings...',
-    'Matching sales to this card...',
-    'Finalizing market averages...',
+    'Loading sold comps…',
+    'Reading guide-backed sales from your catalog…',
+    'Building the price chart…',
   ];
 
   late List<Comp> _allComps = [];

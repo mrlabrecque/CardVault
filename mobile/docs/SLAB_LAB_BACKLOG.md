@@ -22,7 +22,7 @@ Then questions like “what’s next to work on?” map directly to **Open items
 | **Why not lookups / comps-only views** | A one-off comps lookup does not imply market movement; we only trust **stored value changes** on **owned** cards. |
 | **Why not `master_card_definitions` alone** | Catalog rows are not the system of record for “last refresh”; movement lives on **`user_cards`** (and optionally future comp-history tables). |
 | **Backend** | Postgres RPC **`portfolio_movers_from_vault(p_sport)`** (`SECURITY DEFINER`). No batch eBay scrape from the app for this screen. |
-| **Legacy** | Edge function **`market-movers-refresh`** (ESPN + Bright Data) is **unused** by the Flutter app; cron can be disabled to avoid 300+ scrapes / 503s. |
+| **Legacy** | Edge function **`market-movers-refresh`** is a **no-op stub** (Bright Data removed); disable old cron if desired. |
 | **Routes** | Primary: `/portfolio-movers`, `/admin/portfolio-movers`. Aliases: `/market-movers`, `/admin/market-movers` → same screens. |
 
 ---

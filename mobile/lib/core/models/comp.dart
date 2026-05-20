@@ -73,7 +73,7 @@ class LookupHistory {
   }
 }
 
-/// Live eBay listing row from `card-active-listings` Edge Function.
+/// Live eBay active listing row from `card-active-listings` (Browse API via Edge).
 class ActiveListing {
   final String title;
   final double price;

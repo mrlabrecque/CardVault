@@ -23,7 +23,7 @@ The active codebase is the **Flutter mobile app** (`mobile/`) with **Supabase Ed
 | Backend Logic | Supabase Edge Functions (Deno/TypeScript, `supabase/functions/`) |
 | Database & Auth | Supabase (PostgreSQL + Supabase Auth) |
 | Navigation | go_router |
-| Integrations | Bright Data Web Unlocker (eBay sold comps), eBay Browse API (active listings), CardSight AI API |
+| Integrations | CardHedge (guide prices + sold comps), eBay Browse API (active listings + wishlist checks), CardSight AI API (catalog import / images) |
 
 All network calls from Flutter use `supabase.from()` or `supabase.functions.invoke()`. Never reference `localhost:3000` or the Express backend.
 
@@ -49,15 +49,15 @@ All network calls from Flutter use `supabase.from()` or `supabase.functions.invo
 - One-click "Post to eBay" integration
 
 ### D. Valuation & Lookup (Comps)
-- Text-based search and Image-to-Value (photo search)
-- Retrieve and display recent eBay "Sold" values
+- Text-based search (legacy empty stub), Image-to-Value (photo search)
+- Sold comps and guide prices from **CardHedge** (linked catalog variants, `cardhedge-grade-comps`, `cardhedge-persist-variant`)
 - Rolling log of the last 50 lookups (per user)
 - Add card directly to collection from search results, including "Price Paid" entry
 
 ### E. Wishlist & Alerts
 - Add cards from lookup results to a personal Wishlist
 - Set price thresholds on specific cards
-- Automated email alerts when eBay listings appear below the set threshold
+- **`wishlist-check-now`** uses eBay Browse API (`fetchActiveListingsBrowse`) to find active listings at or below the target price and update `wishlist` / `wishlist_matches`
 
 ### F. Admin — Release Management
 - Only accessible when `isAppAdmin` is `true`; guarded by `adminGuard` at the route level
@@ -100,12 +100,9 @@ Both the single Add Card dialog (`features/collection/add-card-dialog/`) and the
 - **`newSerialMax` must be reset** after each staged card in bulk add — it does not persist across entries like parallel does.
 
 ### G. External Integrations
-- **Bright Data Web Unlocker**: Primary provider for **eBay sold / completed comps** via Supabase Edge Functions (`refresh-comps`, `comps-search`, `auto-refresh-cards`, `market-movers-refresh`, etc.). Uses `POST https://api.brightdata.com/request` with Bearer `BRIGHTDATA_API_KEY`, zone `BRIGHTDATA_UNLOCKER_ZONE`, `format: raw`. Sold-search HTML is parsed (cap 80 rows); “Best offer accepted” listings may trigger a second unlock per item for the real sold price. See [`supabase/functions/brightdata.env.example`](supabase/functions/brightdata.env.example).
-  - Reference: https://docs.brightdata.com/scraping-automation/web-unlocker/introduction
-- **eBay Browse API (active listings)**: Use for current listing search in `card-active-listings` and `wishlist-check-now` (active-only scenarios should not rely on sold comps scraping).
-  - Endpoint: `GET /buy/browse/v1/item_summary/search`
-  - Auth: OAuth2 client credentials (`EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`)
-  - Optional marketplace header: `X-EBAY-C-MARKETPLACE-ID` (default `EBAY_US`)
+- **CardHedge** (`api.cardhedger.com`) — guide card search, card details, batch price estimate, sold comps (`POST /v1/cards/comps`), image search. Edge functions: `cardhedge-search-cards`, `cardhedge-persist-variant`, `cardhedge-grade-comps`, `cardhedge-image-search`, `auto-refresh-cards`, etc. Secrets: `CARDHEDGE_API_KEY` or `CARDHEDGER_API_KEY`.
+- **eBay Browse API (active listings only)** — `GET /buy/browse/v1/item_summary/search` via `_shared/ebay_browse_active.ts`. Used by **`card-active-listings`** (for-sale on catalog cards) and **`wishlist-check-now`**. OAuth2 client credentials: `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`; optional `EBAY_MARKETPLACE_ID` (default `EBAY_US`). See [`supabase/functions/ebay.env.example`](supabase/functions/ebay.env.example).
+- **Legacy stubs** (sold comps scrape removed; kept deployable): `refresh-comps` (410), `comps-search` (empty), `market-movers-refresh` (no-op).
 - **CardSight AI API** (`api.cardsight.ai`) — used server-side only (API key in backend `.env`). Raw `fetch` calls, not the SDK. Two flows:
   - **Admin release import**: Search CardSight releases → select → backend upserts `releases`, `sets` (with `cardsight_id`), `set_parallels` (with `cardsight_id`), and all `master_card_definitions` for every set. Cards are paginated at 100 per page with 250ms delays between pages to avoid rate-limiting.
   - **Lazy image fetch**: `POST /api/cardsight/cards/:masterCardId/image` — called fire-and-forget after a user adds a card. Fetches from CardSight, uploads to Supabase Storage (`card-images` bucket, public), writes URL to `master_card_definitions.image_url`. Safe to call multiple times — returns cached URL immediately if already populated.
@@ -214,19 +211,19 @@ card-vault/
 | Method | Path | Description |
 |---|---|---|
 | GET/POST/PATCH/DELETE | `/api/cards` | Card CRUD |
-| POST | `/api/comps/search` | eBay sold comps search (writes to lookup_history) |
+| POST | `/api/comps/search` | Legacy sold comps search (Express; not used by Flutter) |
 | GET | `/api/comps/history` | Last 50 lookups for user |
 | GET/POST/PATCH/DELETE | `/api/wishlist` | Wishlist CRUD |
-| POST | `/api/ebay/list/:cardId` | Post card to eBay |
+| POST | `/api/ebay/list/:cardId` | Post card to eBay (write path; optional) |
 
 ---
 
 ## Key Architectural Notes
 
 - **Multi-tenancy** is enforced at the data layer via `OwnerID` on all user-scoped records. Supabase Row Level Security (RLS) should be used to ensure users can only access their own data.
-- **eBay integration** is used in two directions: read (fetching sold comps for valuation) and write (creating listings from the collection).
+- **Market data (Flutter)** — sold comps and guide prices from **CardHedge**; **active** marketplace listings for “for sale” and wishlist checks use **eBay Browse API** in Edge (`ebay_browse_active.ts`). Legacy sold scrape (`refresh-comps` / Bright Data) is removed.
 - **Lookup history** is capped at 50 entries per user — implement a rolling window with deletion of the oldest entry on insert when the limit is reached.
-- **Price alerts** require a background job or webhook mechanism to poll eBay and trigger email notifications when thresholds are met.
+- **Wishlist price alerts** — `wishlist-check-now` polls eBay active listings against `target_price` when invoked (requires `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` on that function).
 
 ---
 

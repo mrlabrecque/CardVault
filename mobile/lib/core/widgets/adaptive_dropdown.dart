@@ -10,6 +10,8 @@ class AdaptiveDropdown<T> extends StatefulWidget {
   final String? labelText;
   final String? hint;
   final InputDecoration? decoration;
+  /// iOS only: when true, [onChanged] fires when the user taps Done, not while scrolling.
+  final bool commitOnDone;
 
   const AdaptiveDropdown({
     super.key,
@@ -19,6 +21,7 @@ class AdaptiveDropdown<T> extends StatefulWidget {
     this.labelText,
     this.hint,
     this.decoration,
+    this.commitOnDone = false,
   });
 
   @override
@@ -119,6 +122,7 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
       builder: (BuildContext context) {
         int selectedIndex = widget.items.indexWhere((item) => item.value == widget.value);
         if (selectedIndex < 0) selectedIndex = 0;
+        var pendingIndex = selectedIndex;
 
         return Container(
           height: 250,
@@ -149,7 +153,12 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
                     ),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () {
+                        if (widget.commitOnDone) {
+                          widget.onChanged(widget.items[pendingIndex].value);
+                        }
+                        Navigator.pop(context);
+                      },
                       child: const Text('Done'),
                     ),
                   ],
@@ -161,7 +170,10 @@ class _AdaptiveDropdownState<T> extends State<AdaptiveDropdown<T>> {
                   itemExtent: 40,
                   scrollController: FixedExtentScrollController(initialItem: selectedIndex),
                   onSelectedItemChanged: (index) {
-                    widget.onChanged(widget.items[index].value);
+                    pendingIndex = index;
+                    if (!widget.commitOnDone) {
+                      widget.onChanged(widget.items[index].value);
+                    }
                   },
                   children: widget.items.map((item) {
                     return Center(child: item.child);

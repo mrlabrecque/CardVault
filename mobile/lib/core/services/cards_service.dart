@@ -65,21 +65,8 @@ SetParallel? _chPickParallel(List<SetParallel> parallels, String? parallelHint) 
   // the `set_card_base_variants` view, and `catalog-import-cards` `pickBaseParallelId`.
   // There is not always a `set_parallels` row literally named "Base"; `master_card_definitions.parallel_id`
   // is NOT NULL and points at whichever parallel is default (often lowest `sort_order`).
-  if (eff.toLowerCase() == 'base') {
-    const baseSynonyms = <String>{
-      'base',
-      'base set',
-      'base parallel',
-      'base card',
-      'baseset',
-      'baseparallel',
-    };
-    for (final p in parallels) {
-      final raw = p.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-      if (baseSynonyms.contains(raw)) return p;
-    }
-    // Ordered by sort_order in [getParallels]; avoid guessing a named parallel.
-    return parallels.isNotEmpty ? parallels.first : null;
+  if (parallelLabelImpliesDefaultPaper(eff)) {
+    return pickDefaultPaperParallel(parallels);
   }
   final target = _chNormKey(eff);
   if (target.isNotEmpty) {
@@ -247,6 +234,52 @@ class SetParallel {
   );
 }
 
+/// UI labels like "Base" / empty — not always a literal `set_parallels.name`.
+bool parallelLabelImpliesDefaultPaper(String parallelName) {
+  final n = parallelName.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  return n.isEmpty ||
+      n == 'base' ||
+      n == 'base set' ||
+      n == 'base parallel' ||
+      n == 'base card' ||
+      n == 'baseset' ||
+      n == 'baseparallel';
+}
+
+/// Default paper parallel — matches `set_card_base_variants` / edge `pickBaseParallelId`.
+SetParallel? pickDefaultPaperParallel(List<SetParallel> parallels) {
+  if (parallels.isEmpty) return null;
+  for (final p in parallels) {
+    if (p.name.trim().toLowerCase() == 'base') return p;
+  }
+  return parallels.first;
+}
+
+/// When false, the DB already has a `set_parallels` row whose name is `Base` (case-insensitive);
+/// the catalog UI must not add a second synthetic "Base" tile (`parallel == null`).
+bool catalogNeedsSyntheticBaseParallelTile(List<SetParallel> parallels) =>
+    !parallels.any((p) => p.name.trim().toLowerCase() == 'base');
+
+/// A–Z by name for catalog browse/search parallel lists ([getParallels] uses admin [sort_order]).
+List<SetParallel> catalogParallelsSortedForDisplay(List<SetParallel> parallels) {
+  final out = List<SetParallel>.from(parallels);
+  out.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+  return out;
+}
+
+/// Resolves a catalog/browse parallel label to a `set_parallels` row.
+SetParallel? resolveSetParallelForCatalog(List<SetParallel> parallels, String parallelName) {
+  if (parallels.isEmpty) return null;
+  if (parallelLabelImpliesDefaultPaper(parallelName)) {
+    return pickDefaultPaperParallel(parallels);
+  }
+  final target = parallelName.trim().toLowerCase();
+  for (final p in parallels) {
+    if (p.name.trim().toLowerCase() == target) return p;
+  }
+  return null;
+}
+
 class ReleaseRecord {
   const ReleaseRecord({
     required this.id,
@@ -293,6 +326,7 @@ class SetRecord {
     required this.name,
     this.cardCount,
     this.catalogImportSetKey,
+    this.expectedParallelCount,
     this.importedCount = 0,
   });
   final String id;
@@ -300,6 +334,8 @@ class SetRecord {
   final int? cardCount;
   /// External id for the catalog import provider (matches the import column on `sets`).
   final String? catalogImportSetKey;
+  /// CardSight `releases[].sets[].parallelCount` (stored as `sets.cardsight_parallel_count`).
+  final int? expectedParallelCount;
   final int importedCount;
 
   factory SetRecord.fromJson(Map<String, dynamic> j) {
@@ -309,6 +345,7 @@ class SetRecord {
       name:          j['name'] as String,
       cardCount:     _tryParseInt(j['card_count']),
       catalogImportSetKey: j['cardsight_id'] as String?,
+      expectedParallelCount: _tryParseInt(j['cardsight_parallel_count']),
       importedCount: defsRaw != null && defsRaw.isNotEmpty ? (_tryParseInt(defsRaw[0]['count']) ?? 0) : 0,
     );
   }
@@ -390,6 +427,89 @@ class CatalogRelease {
   String get displayName => '$year $name';
 }
 
+/// Per-set import coverage from `catalog_set_coverage` (Phase 0 backfill visibility).
+class CatalogSetCoverage {
+  const CatalogSetCoverage({
+    required this.setId,
+    required this.vaultCardCount,
+    this.expectedCardCount,
+    required this.parallelCount,
+    this.expectedParallelCount,
+    required this.hasParallels,
+    required this.hasCards,
+    required this.cardsComplete,
+  });
+
+  final String setId;
+  final int vaultCardCount;
+  final int? expectedCardCount;
+  final int parallelCount;
+  /// CardSight catalog parallel count for this set (when known).
+  final int? expectedParallelCount;
+  final bool hasParallels;
+  final bool hasCards;
+  final bool cardsComplete;
+
+  bool get parallelsComplete {
+    final expected = expectedParallelCount;
+    if (expected != null && expected > 0) return parallelCount >= expected;
+    return hasParallels;
+  }
+
+  factory CatalogSetCoverage.fromJson(Map<String, dynamic> j) => CatalogSetCoverage(
+    setId: j['set_id'] as String,
+    vaultCardCount: _tryParseInt(j['vault_card_count']) ?? 0,
+    expectedCardCount: _tryParseInt(j['expected_card_count']),
+    parallelCount: _tryParseInt(j['parallel_count']) ?? 0,
+    expectedParallelCount: _tryParseInt(
+      j['expected_parallel_count'] ?? j['cardsight_parallel_count'],
+    ),
+    hasParallels: j['has_parallels'] as bool? ?? false,
+    hasCards: j['has_cards'] as bool? ?? false,
+    cardsComplete: j['cards_complete'] as bool? ?? false,
+  );
+}
+
+/// Per-release rollup from `catalog_release_coverage`.
+class CatalogReleaseCoverage {
+  const CatalogReleaseCoverage({
+    required this.releaseId,
+    required this.setCount,
+    required this.setsWithParallels,
+    required this.setsWithCards,
+    required this.setsCardsComplete,
+    required this.vaultCardTotal,
+    required this.expectedCardTotal,
+  });
+
+  final String releaseId;
+  final int setCount;
+  final int setsWithParallels;
+  final int setsWithCards;
+  final int setsCardsComplete;
+  final int vaultCardTotal;
+  final int expectedCardTotal;
+
+  factory CatalogReleaseCoverage.fromJson(Map<String, dynamic> j) => CatalogReleaseCoverage(
+    releaseId: j['release_id'] as String,
+    setCount: _tryParseInt(j['set_count']) ?? 0,
+    setsWithParallels: _tryParseInt(j['sets_with_parallels']) ?? 0,
+    setsWithCards: _tryParseInt(j['sets_with_cards']) ?? 0,
+    setsCardsComplete: _tryParseInt(j['sets_cards_complete']) ?? 0,
+    vaultCardTotal: _tryParseInt(j['vault_card_total']) ?? 0,
+    expectedCardTotal: _tryParseInt(j['expected_card_total']) ?? 0,
+  );
+}
+
+int _jsonIntOrZero(Map<String, dynamic> j, String key) {
+  final v = j[key];
+  if (v == null) return 0;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  if (v is String) return int.tryParse(v) ?? 0;
+  return 0;
+}
+
 /// CardSight release row for admin catalog — merged with vault import status.
 class AdminCatalogReleaseRow {
   const AdminCatalogReleaseRow({
@@ -398,17 +518,39 @@ class AdminCatalogReleaseRow {
     this.year,
     required this.inVault,
     this.vaultReleaseId,
-    this.setCount = 0,
-    this.importedSetCount = 0,
-  });
+    int setCount = 0,
+    int importedSetCount = 0,
+    int setsWithParallels = 0,
+    int setsCardsComplete = 0,
+    int vaultCardTotal = 0,
+    int expectedCardTotal = 0,
+  })  : _setCount = setCount,
+        _importedSetCount = importedSetCount,
+        _setsWithParallels = setsWithParallels,
+        _setsCardsComplete = setsCardsComplete,
+        _vaultCardTotal = vaultCardTotal,
+        _expectedCardTotal = expectedCardTotal;
 
   final String cardsightId;
   final String name;
   final int? year;
   final bool inVault;
   final String? vaultReleaseId;
-  final int setCount;
-  final int importedSetCount;
+
+  final int? _setCount;
+  final int? _importedSetCount;
+  final int? _setsWithParallels;
+  final int? _setsCardsComplete;
+  final int? _vaultCardTotal;
+  final int? _expectedCardTotal;
+
+  int get setCount => _setCount ?? 0;
+  /// Sets with at least one `set_cards` row.
+  int get importedSetCount => _importedSetCount ?? 0;
+  int get setsWithParallels => _setsWithParallels ?? 0;
+  int get setsCardsComplete => _setsCardsComplete ?? 0;
+  int get vaultCardTotal => _vaultCardTotal ?? 0;
+  int get expectedCardTotal => _expectedCardTotal ?? 0;
 
   factory AdminCatalogReleaseRow.fromJson(Map<String, dynamic> j) => AdminCatalogReleaseRow(
     cardsightId: j['cardsightId'] as String,
@@ -416,8 +558,12 @@ class AdminCatalogReleaseRow {
     year: _tryParseInt(j['year']),
     inVault: j['inVault'] as bool? ?? false,
     vaultReleaseId: j['vaultReleaseId'] as String?,
-    setCount: _tryParseInt(j['setCount']) ?? 0,
-    importedSetCount: _tryParseInt(j['importedSetCount']) ?? 0,
+    setCount: _jsonIntOrZero(j, 'setCount'),
+    importedSetCount: _jsonIntOrZero(j, 'importedSetCount'),
+    setsWithParallels: _jsonIntOrZero(j, 'setsWithParallels'),
+    setsCardsComplete: _jsonIntOrZero(j, 'setsCardsComplete'),
+    vaultCardTotal: _jsonIntOrZero(j, 'vaultCardTotal'),
+    expectedCardTotal: _jsonIntOrZero(j, 'expectedCardTotal'),
   );
 
   String get displayName => year != null ? '$year $name' : name;
@@ -779,16 +925,318 @@ class CardsService {
       'name':         r['name'],
       'card_count':   r['cardCount'],
       'cardsight_id': (r as Map<String, dynamic>)['cardsightId'],
+      'cardsight_parallel_count': r['parallelCount'],
     })).toList();
+  }
+
+  /// Admin: full release import — sets, parallels, and checklist cards (no images).
+  Future<({
+    String releaseId,
+    int setsUpserted,
+    int setsWithParallels,
+    int parallelDefinitionsUpserted,
+    int cardsImported,
+    int setCardsMerged,
+    List<String> parallelErrors,
+    List<String> cardErrors,
+  })> importReleaseCatalog({
+    required String cardsightReleaseId,
+    String? releaseName,
+    String? releaseYear,
+    String? releaseSegmentId,
+  }) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-import-release',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        if (releaseName case final v?) 'releaseName': v,
+        if (releaseYear case final v?) 'releaseYear': v,
+        if (releaseSegmentId case final v?) 'releaseSegmentId': v,
+      },
+    );
+    if (res.status != 200) {
+      throw Exception(_functionErrorMessage(res, 'Import release failed'));
+    }
+    final data = res.data as Map<String, dynamic>;
+    List<String> mapErrors(String key) {
+      final list = (data[key] as List?) ?? [];
+      return list
+          .map((e) {
+            final m = e as Map<String, dynamic>;
+            return '${m['setName']}: ${m['error']}';
+          })
+          .toList();
+    }
+    return (
+      releaseId: data['releaseId'] as String? ?? '',
+      setsUpserted: _tryParseInt(data['setsUpserted']) ?? 0,
+      setsWithParallels: _tryParseInt(data['setsWithParallels']) ?? 0,
+      parallelDefinitionsUpserted: _tryParseInt(data['parallelDefinitionsUpserted']) ?? 0,
+      cardsImported: _tryParseInt(data['cardsImported']) ?? 0,
+      setCardsMerged: _tryParseInt(data['setCardsMerged']) ?? 0,
+      parallelErrors: mapErrors('parallelErrors'),
+      cardErrors: mapErrors('cardErrors'),
+    );
+  }
+
+  /// Admin: upsert all sets for a release and import every set's parallels from CardSight.
+  Future<({
+    int setsUpserted,
+    int setsWithParallels,
+    int parallelDefinitionsUpserted,
+    List<String> parallelErrors,
+  })> hydrateReleaseCatalog({
+    required String cardsightReleaseId,
+    String? releaseName,
+    String? releaseYear,
+    String? releaseSegmentId,
+  }) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-hydrate-release',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        if (releaseName case final v?) 'releaseName': v,
+        if (releaseYear case final v?) 'releaseYear': v,
+        if (releaseSegmentId case final v?) 'releaseSegmentId': v,
+      },
+    );
+    if (res.status != 200) {
+      throw Exception(_functionErrorMessage(res, 'Hydrate release failed'));
+    }
+    final data = res.data as Map<String, dynamic>;
+    final errors = (data['parallelErrors'] as List?) ?? [];
+    return (
+      setsUpserted: _tryParseInt(data['setsUpserted']) ?? 0,
+      setsWithParallels: _tryParseInt(data['setsWithParallels']) ?? 0,
+      parallelDefinitionsUpserted: _tryParseInt(data['parallelDefinitionsUpserted']) ?? 0,
+      parallelErrors: errors
+          .map((e) {
+            final m = e as Map<String, dynamic>;
+            return '${m['setName']}: ${m['error']}';
+          })
+          .toList(),
+    );
   }
 
   Future<List<SetRecord>> getSetsForRelease(String releaseId) async {
     final data = await _supabase
         .from('sets')
-        .select('id, name, card_count, cardsight_id, set_cards(count)')
+        .select('id, name, card_count, cardsight_id, cardsight_parallel_count, set_cards(count)')
         .eq('release_id', releaseId)
         .order('name', ascending: true);
     return (data as List).map((r) => SetRecord.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// CardSight `releases/{id}.sets[]` — `metaOnly` (no vault writes).
+  Future<List<({String cardsightId, int parallelCount, int? cardCount})>> fetchCardsightReleaseSetMeta(
+    String cardsightReleaseId,
+  ) async {
+    final res = await _supabase.functions.invoke(
+      'catalog-import-sets',
+      body: {
+        'cardsightReleaseId': cardsightReleaseId,
+        'metaOnly': true,
+      },
+    );
+    if (res.status != 200) {
+      throw Exception(_functionErrorMessage(res, 'Release set meta failed'));
+    }
+    final list = ((res.data as Map<String, dynamic>)['sets'] as List?) ?? [];
+    return list.map((raw) {
+      final r = raw as Map<String, dynamic>;
+      return (
+        cardsightId: r['cardsightId'] as String,
+        parallelCount: _tryParseInt(r['parallelCount']) ?? 0,
+        cardCount: _tryParseInt(r['cardCount']),
+      );
+    }).toList();
+  }
+
+  /// Persists `sets[].parallelCount` from the CardSight release payload onto vault rows.
+  Future<void> syncCardsightParallelCountsForRelease({
+    required String vaultReleaseId,
+    required String cardsightReleaseId,
+  }) async {
+    final meta = await fetchCardsightReleaseSetMeta(cardsightReleaseId);
+    for (final row in meta) {
+      await _supabase
+          .from('sets')
+          .update({'cardsight_parallel_count': row.parallelCount})
+          .eq('release_id', vaultReleaseId)
+          .eq('cardsight_id', row.cardsightId);
+    }
+  }
+
+  /// Per-set coverage rows for admin backfill (view `catalog_set_coverage`).
+  Future<Map<String, CatalogSetCoverage>> getCatalogSetCoverageForRelease(String releaseId) async {
+    final data = await _supabase
+        .from('catalog_set_coverage')
+        .select(
+          'set_id, vault_card_count, expected_card_count, expected_parallel_count, '
+          'parallel_count, has_parallels, has_cards, cards_complete, parallels_complete',
+        )
+        .eq('release_id', releaseId);
+    final out = <String, CatalogSetCoverage>{};
+    for (final row in data as List) {
+      final cov = CatalogSetCoverage.fromJson(Map<String, dynamic>.from(row as Map));
+      out[cov.setId] = cov;
+    }
+    return out;
+  }
+
+  /// Release-level rollup (view `catalog_release_coverage`).
+  Future<CatalogReleaseCoverage?> getCatalogReleaseCoverage(String releaseId) async {
+    final data = await _supabase
+        .from('catalog_release_coverage')
+        .select(
+          'release_id, set_count, sets_with_parallels, sets_with_cards, '
+          'sets_cards_complete, expected_card_total, vault_card_total',
+        )
+        .eq('release_id', releaseId)
+        .maybeSingle();
+    if (data == null) return null;
+    return CatalogReleaseCoverage.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  /// Parallel row counts per set (live table read — use after imports).
+  Future<Map<String, int>> getParallelCountsBySetIds(List<String> setIds) async {
+    if (setIds.isEmpty) return {};
+    final counts = <String, int>{};
+    const chunk = 80;
+    for (var i = 0; i < setIds.length; i += chunk) {
+      final slice = setIds.sublist(i, i + chunk > setIds.length ? setIds.length : i + chunk);
+      final data = await _supabase.from('set_parallels').select('set_id').inFilter('set_id', slice);
+      for (final row in data as List) {
+        final sid = (row as Map<String, dynamic>)['set_id'] as String;
+        counts[sid] = (counts[sid] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  /// Merges coverage view rows with fresh `SetRecord` embed counts and parallel totals.
+  Map<String, CatalogSetCoverage> mergeCatalogSetCoverage({
+    required List<SetRecord> sets,
+    required Map<String, CatalogSetCoverage> fromView,
+    required Map<String, int> parallelCounts,
+  }) {
+    final out = <String, CatalogSetCoverage>{};
+    for (final s in sets) {
+      final v = fromView[s.id];
+      final vaultCards = _maxInt(v?.vaultCardCount ?? 0, s.importedCount);
+      final expected = v?.expectedCardCount ?? s.cardCount;
+      final parallels = _maxInt(v?.parallelCount ?? 0, parallelCounts[s.id] ?? 0);
+      final expectedParallels = s.expectedParallelCount ?? v?.expectedParallelCount;
+      final hasParallels = parallels > 0 || (v?.hasParallels ?? false);
+      final hasCards = vaultCards > 0 || (v?.hasCards ?? false);
+      final cardsComplete = expected != null && expected > 0
+          ? vaultCards >= expected
+          : (v?.cardsComplete ?? false) || (vaultCards > 0 && s.cardCount == null);
+      out[s.id] = CatalogSetCoverage(
+        setId: s.id,
+        vaultCardCount: vaultCards,
+        expectedCardCount: expected,
+        parallelCount: parallels,
+        expectedParallelCount: expectedParallels,
+        hasParallels: hasParallels,
+        hasCards: hasCards,
+        cardsComplete: cardsComplete,
+      );
+    }
+    return out;
+  }
+
+  /// Roll up set-level coverage when the release view is missing or stale.
+  CatalogReleaseCoverage buildReleaseCoverageFromSets({
+    required String releaseId,
+    required List<SetRecord> sets,
+    required Map<String, CatalogSetCoverage> setCoverage,
+  }) {
+    var setsWithParallels = 0;
+    var setsWithCards = 0;
+    var setsCardsComplete = 0;
+    var vaultCardTotal = 0;
+    var expectedCardTotal = 0;
+    for (final s in sets) {
+      final c = setCoverage[s.id];
+      if (c == null) continue;
+      if (c.parallelsComplete) setsWithParallels++;
+      if (c.hasCards) setsWithCards++;
+      if (c.cardsComplete) setsCardsComplete++;
+      vaultCardTotal += c.vaultCardCount;
+      if (c.expectedCardCount != null) expectedCardTotal += c.expectedCardCount!;
+    }
+    return CatalogReleaseCoverage(
+      releaseId: releaseId,
+      setCount: sets.length,
+      setsWithParallels: setsWithParallels,
+      setsWithCards: setsWithCards,
+      setsCardsComplete: setsCardsComplete,
+      vaultCardTotal: vaultCardTotal,
+      expectedCardTotal: expectedCardTotal,
+    );
+  }
+
+  int _maxInt(int a, int b) => a > b ? a : b;
+
+  /// Sets + merged coverage for admin release detail (always reflects latest imports).
+  Future<({
+    List<SetRecord> sets,
+    Map<String, CatalogSetCoverage> setCoverage,
+    CatalogReleaseCoverage releaseCoverage,
+  })> loadCatalogImportStateForRelease(String releaseId) async {
+    final sets = await getSetsForRelease(releaseId);
+    Map<String, CatalogSetCoverage> fromView = {};
+    try {
+      fromView = await getCatalogSetCoverageForRelease(releaseId);
+    } catch (_) {}
+    var workingSets = sets;
+    final needsParallelMeta = workingSets.any(
+      (s) => s.expectedParallelCount == null && (s.catalogImportSetKey?.isNotEmpty ?? false),
+    );
+    if (needsParallelMeta) {
+      final rel = await _supabase
+          .from('releases')
+          .select('cardsight_id')
+          .eq('id', releaseId)
+          .maybeSingle();
+      final csReleaseId = (rel?['cardsight_id'] as String?)?.trim();
+      if (csReleaseId != null && csReleaseId.isNotEmpty) {
+        try {
+          await syncCardsightParallelCountsForRelease(
+            vaultReleaseId: releaseId,
+            cardsightReleaseId: csReleaseId,
+          );
+          workingSets = await getSetsForRelease(releaseId);
+        } catch (_) {}
+      }
+    }
+
+    final parallelCounts = await getParallelCountsBySetIds(workingSets.map((s) => s.id).toList());
+    final setCoverage = mergeCatalogSetCoverage(
+      sets: workingSets,
+      fromView: fromView,
+      parallelCounts: parallelCounts,
+    );
+    CatalogReleaseCoverage? releaseCov;
+    try {
+      releaseCov = await getCatalogReleaseCoverage(releaseId);
+    } catch (_) {}
+    final mergedRelease = buildReleaseCoverageFromSets(
+      releaseId: releaseId,
+      sets: workingSets,
+      setCoverage: setCoverage,
+    );
+    final releaseCoverage = CatalogReleaseCoverage(
+      releaseId: releaseId,
+      setCount: _maxInt(releaseCov?.setCount ?? 0, mergedRelease.setCount),
+      setsWithParallels: _maxInt(releaseCov?.setsWithParallels ?? 0, mergedRelease.setsWithParallels),
+      setsWithCards: _maxInt(releaseCov?.setsWithCards ?? 0, mergedRelease.setsWithCards),
+      setsCardsComplete: _maxInt(releaseCov?.setsCardsComplete ?? 0, mergedRelease.setsCardsComplete),
+      vaultCardTotal: _maxInt(releaseCov?.vaultCardTotal ?? 0, mergedRelease.vaultCardTotal),
+      expectedCardTotal: _maxInt(releaseCov?.expectedCardTotal ?? 0, mergedRelease.expectedCardTotal),
+    );
+    return (sets: workingSets, setCoverage: setCoverage, releaseCoverage: releaseCoverage);
   }
 
   /// Looks up `releases.cardsight_id` for a CardSight set id already stored on `sets.cardsight_id`.
@@ -1518,7 +1966,9 @@ class CardsService {
 
     final flags = await _supabase
         .from('master_card_definitions')
-        .select('is_auto, is_patch, is_ssp, serial_max')
+        .select(
+          'is_auto, is_patch, is_ssp, serial_max, cardhedge_id, gain, sales_7d, sales_30d',
+        )
         .eq('id', catalogVariantId)
         .single();
 
@@ -1529,8 +1979,35 @@ class CardsService {
       'is_patch': flags['is_patch'] as bool? ?? false,
       'is_ssp': flags['is_ssp'] as bool? ?? false,
       'serial_max': flags['serial_max'],
+      if (flags['cardhedge_id'] != null) 'cardhedge_id': flags['cardhedge_id'],
+      if (flags['gain'] != null) 'gain': flags['gain'],
+      if (flags['sales_7d'] != null) 'sales_7d': flags['sales_7d'],
+      if (flags['sales_30d'] != null) 'sales_30d': flags['sales_30d'],
     }).select('id').single();
-    return inserted['id'] as String;
+    final newId = inserted['id'] as String;
+    await _copyCurrentPricesBetweenVariants(catalogVariantId, newId);
+    return newId;
+  }
+
+  /// Copies `current_prices` rows when [ensureCatalogVariant] creates a sibling variant row.
+  Future<void> _copyCurrentPricesBetweenVariants(String fromId, String toId) async {
+    if (fromId == toId) return;
+    final rows = await _supabase
+        .from('current_prices')
+        .select('grade, price, fetched_at')
+        .eq('master_card_id', fromId);
+    final list = rows as List;
+    if (list.isEmpty) return;
+    final inserts = list.map((raw) {
+      final m = Map<String, dynamic>.from(raw as Map);
+      return {
+        'master_card_id': toId,
+        'grade': m['grade'],
+        'price': m['price'],
+        'fetched_at': m['fetched_at'] ?? DateTime.now().toUtc().toIso8601String(),
+      };
+    }).toList();
+    await _supabase.from('current_prices').insert(inserts);
   }
 
   Future<({ReleaseRecord release, SetRecord set})> getReleaseAndSetForSetId(String setId) async {
@@ -1851,14 +2328,25 @@ class CardsService {
 
   // ── Admin methods ─────────────────────────────────────────────
 
-  /// Lists CardSight releases for [segment] and marks which exist in vault (`releases.cardsight_id`).
-  Future<({List<AdminCatalogReleaseRow> releases, int missing})> listAdminCatalogReleases({
+  /// Lists CardSight releases for [segment] (cached in `cardsight_release_index` when fresh).
+  /// Pass [refresh] true to force a CardSight re-sync.
+  Future<({
+    List<AdminCatalogReleaseRow> releases,
+    int missing,
+    bool vaultOnly,
+    bool fromCache,
+    String? notice,
+  })> listAdminCatalogReleases({
     required String segment,
+    bool refresh = false,
   }) async {
     final res = await _supabase.functions.invoke('catalog-releases-list', body: {
       'segment': segment,
+      if (refresh) 'refresh': true,
     });
-    if (res.status != 200) throw Exception('Catalog list failed: ${res.status}');
+    if (res.status != 200) {
+      throw Exception(_functionErrorMessage(res, 'Catalog list failed'));
+    }
     final data = res.data as Map<String, dynamic>;
     final list = (data['releases'] as List?) ?? [];
     final missing = _tryParseInt(data['missing']) ?? 0;
@@ -1867,6 +2355,9 @@ class CardsService {
           .map((r) => AdminCatalogReleaseRow.fromJson(r as Map<String, dynamic>))
           .toList(),
       missing: missing,
+      vaultOnly: data['vaultOnly'] == true,
+      fromCache: data['fromCache'] == true,
+      notice: data['notice'] as String?,
     );
   }
 
@@ -2026,12 +2517,9 @@ class CardsService {
       if (parallels.isEmpty) {
         throw Exception('Add at least one parallel to this set before adding a card');
       }
-      SetParallel baseParallel = parallels.first;
-      for (final p in parallels) {
-        if (p.name.trim().toLowerCase() == 'base') {
-          baseParallel = p;
-          break;
-        }
+      final baseParallel = pickDefaultPaperParallel(parallels);
+      if (baseParallel == null) {
+        throw Exception('Add at least one parallel to this set before adding a card');
       }
       final scRow = await _supabase
           .from('set_cards')

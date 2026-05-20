@@ -68,66 +68,9 @@ class MasterCardCurrentPricesSnapshot {
 class CompsService {
   CompsService(this._supabase);
   final SupabaseClient _supabase;
-  static const Duration _compsRefreshCooldown = Duration(hours: 24);
 
-  String _extractErrorMessage(dynamic raw) {
-    if (raw == null) return '';
-    if (raw is String) return raw;
-    if (raw is Map) {
-      final map = Map<String, dynamic>.from(raw);
-      final direct = map['error'] ?? map['message'] ?? map['details'];
-      if (direct != null && direct.toString().trim().isNotEmpty) {
-        return direct.toString();
-      }
-      return map.toString();
-    }
-    return raw.toString();
-  }
-
-  Exception _friendlyRefreshException({
-    int? status,
-    dynamic payload,
-    Object? source,
-  }) {
-    final payloadMessage = _extractErrorMessage(payload);
-    final lower = payloadMessage.toLowerCase();
-    if (status == 404) {
-      return Exception(
-        'Price refresh service is not deployed. Run: supabase functions deploy refresh-comps',
-      );
-    }
-    if (lower.contains('rapidapi') ||
-        lower.contains('scrapegraphai') ||
-        lower.contains('scrapingbee') ||
-        lower.contains('brightdata') ||
-        lower.contains('forbidden')) {
-      return Exception(
-        'Pricing provider rejected this request. Please verify your pricing API credentials in Supabase secrets, then try again.',
-      );
-    }
-    if (status == 502 || status == 503 || status == 504) {
-      return Exception(
-        'Could not refresh market data right now. Showing your most recent saved values. Please try again in a few minutes.',
-      );
-    }
-    if (lower.contains('marketplace temporarily blocked') ||
-        lower.contains('ebay_bot_protection_page') ||
-        lower.contains('task not found') ||
-        lower.contains('incorrect username or password')) {
-      return Exception(
-        'Could not refresh market data right now. Showing your most recent saved values. Please try again soon.',
-      );
-    }
-    if (source != null) {
-      return Exception(
-        'Could not refresh market data right now. Please try again shortly.',
-      );
-    }
-    return Exception(
-      'Could not refresh market data right now. Please try again shortly.',
-    );
-  }
-
+  /// Free-text sold search previously hit `comps-search` (Bright Data). That path is retired;
+  /// the edge function may return an empty `items` list. Prefer catalog + CardHedge flows.
   Future<List<Comp>> search(String query) async {
     final res = await _supabase.functions.invoke(
       'comps-search',
@@ -256,15 +199,19 @@ class CompsService {
     );
   }
 
-  /// Same hydration path as [CardDetailScreen] catalog guide sync:
-  /// when `cardhedge_id` is set and `current_prices` has fresh rows, no network call;
-  /// when stale (>24h), hydrates from CardHedge; otherwise invokes catalog search.
+  /// Keeps `current_prices` + `master_card_definitions` aligned for a catalog variant.
   ///
-  /// Call after adding to collection or when opening item detail so `current_prices`
-  /// and `master_card_definitions` match what the catalog detail screen would load.
+  /// **Intended model** (matches catalog card-detail):
+  /// 1. If `current_prices` has usable rows and newest `fetched_at` is under 24h → no network.
+  /// 2. Else if `cardhedge_id` is set → hydrate only via [persistCardHedgeHydratedFromCardId]
+  ///    (CardHedge card-details). **Never** run [searchGuidePriceCatalog] when linked.
+  /// 3. Else (no link) → [searchGuidePriceCatalog] to discover and persist a match.
   Future<void> syncMasterCatalogPricingForVariant(String masterVariantId) async {
     final trimId = masterVariantId.trim();
     if (trimId.isEmpty) return;
+
+    final existingSnap = await loadMasterCardCurrentPricesSnapshot(trimId);
+    if (existingSnap.hasAnyPrice && !existingSnap.isStale) return;
 
     final raw = await _supabase.from('master_card_definitions').select('''
       cardhedge_id,
@@ -278,13 +225,13 @@ class CompsService {
     if (linkedGuideCardId != null && linkedGuideCardId.isNotEmpty) {
       final snap = await loadMasterCardCurrentPricesSnapshot(trimId);
       if (snap.hasAnyPrice && !snap.isStale) return;
-      if (snap.hasAnyPrice && snap.isStale) {
-        await refreshStaleLinkedGuidePrices(
-          masterVariantId: trimId,
-          guidePriceCardId: linkedGuideCardId,
-        );
-        return;
-      }
+      // Already linked — hydrate from CardHedge, never re-run catalog search (can
+      // overwrite a good link with a weaker match right after add-to-collection).
+      await refreshStaleLinkedGuidePrices(
+        masterVariantId: trimId,
+        guidePriceCardId: linkedGuideCardId,
+      );
+      return;
     }
 
     Map<String, dynamic>? asMap(dynamic v) {
@@ -440,24 +387,33 @@ class CompsService {
     } on FunctionException catch (e) {
       if (e.status == 404) {
         throw Exception(
-          'Active listings are not deployed. Run: supabase functions deploy card-active-listings',
+          'Active listings edge function is not deployed. Run: supabase functions deploy card-active-listings',
         );
       }
       throw Exception('Active listings failed (${e.status}): $e');
     }
   }
 
+  /// Re-pulls sold comps for common grades via `cardhedge-grade-comps` when the variant is
+  /// linked to CardHedge (`cardhedge_id`). No-op if unlinked.
   Future<void> refreshMasterCardComps(String masterCardId) async {
-    try {
-      final res = await _supabase.functions.invoke(
-        'refresh-comps',
-        body: {'masterCardId': masterCardId},
+    final mid = masterCardId.trim();
+    if (mid.isEmpty) return;
+
+    final masterRow = await _supabase
+        .from('master_card_definitions')
+        .select('cardhedge_id')
+        .eq('id', mid)
+        .maybeSingle();
+    final guideId = (masterRow?['cardhedge_id'] as String?)?.trim();
+    if (guideId == null || guideId.isEmpty) return;
+
+    for (final grade in const ['Raw', 'PSA 9', 'PSA 10']) {
+      await fetchGuideGradeComps(
+        masterVariantId: mid,
+        guidePriceCardId: guideId,
+        grade: grade,
       );
-      if (res.status != 200) {
-        throw _friendlyRefreshException(status: res.status, payload: res.data);
-      }
-    } on FunctionException catch (e) {
-      throw _friendlyRefreshException(status: e.status, source: e, payload: e.details);
     }
   }
 
@@ -509,17 +465,6 @@ class CompsService {
         'value_refreshed_at': refreshedAt,
       }).eq('id', id);
     }
-  }
-
-  Future<bool> _hasFreshCachedComps(String masterCardId) async {
-    final cutoff = DateTime.now().subtract(_compsRefreshCooldown).toIso8601String();
-    final rows = await _supabase
-        .from('card_sold_comps')
-        .select('id')
-        .eq('master_card_id', masterCardId)
-        .gte('fetched_at', cutoff)
-        .limit(1);
-    return (rows as List).isNotEmpty;
   }
 
   String? _normalizeGradeValue(dynamic value) {
@@ -575,8 +520,16 @@ class CompsService {
       final linkedGuidePriceCardId = (masterRow?['cardhedge_id'] as String?)?.trim();
 
       if (linkedGuidePriceCardId != null && linkedGuidePriceCardId.isNotEmpty) {
-        final prices = await getMasterCardCurrentPrices(masterId);
-        final hasGuideCatalogPrices = prices.values.any((v) => v != null && v > 0);
+        var prices = await getMasterCardCurrentPrices(masterId);
+        var hasGuideCatalogPrices = prices.values.any((v) => v != null && v > 0);
+        if (!hasGuideCatalogPrices) {
+          await refreshStaleLinkedGuidePrices(
+            masterVariantId: masterId,
+            guidePriceCardId: linkedGuidePriceCardId,
+          );
+          prices = await getMasterCardCurrentPrices(masterId);
+          hasGuideCatalogPrices = prices.values.any((v) => v != null && v > 0);
+        }
         if (hasGuideCatalogPrices) {
           final rawAvg = prices['Raw'] ?? 0;
           final psa10Avg = prices['PSA 10'] ?? 0;
@@ -591,24 +544,8 @@ class CompsService {
         }
       }
 
-      final hasFreshCachedComps = await _hasFreshCachedComps(masterId);
-      if (!hasFreshCachedComps) {
-        late final FunctionResponse res;
-        try {
-          res = await _supabase.functions.invoke(
-            'refresh-comps',
-            body: {'masterCardId': masterId},
-          );
-        } on FunctionException catch (e) {
-          throw _friendlyRefreshException(status: e.status, source: e, payload: e.details);
-        }
-        if (res.status != 200) {
-          throw _friendlyRefreshException(status: res.status, payload: res.data);
-        }
-      }
-
       // Re-read the same DB rows the UI uses so `current_value` and
-      // displayed Sold Comps averages always stay in sync.
+      // displayed Sold Comps averages always stay in sync (CardHedge-backed rows only).
       final comps = await getMasterCardComps(masterId);
       if (comps.isEmpty) {
         for (final card in entry.value) {
@@ -824,7 +761,7 @@ class CompsService {
 
   /// Catalog card-search via Edge `cardhedge-search-cards`. CardHedge POST body:
   /// `category`, `page`, `page_size`, `search` where search =
-  /// Player + Year + Release + #Number + Set. [setName] / [parallelName] filter after fetch.
+  /// Player + Year + Release + Category + #Number + Set. [setName] / [parallelName] filter after fetch.
   /// Trailing print-run suffixes on [parallelName] (e.g. ` /149`) are stripped in
   /// the client before the request, aligned with [stripSerialSuffix] on the edge.
   /// Edge scans multiple pages, then card # + insert + parallel scoring.

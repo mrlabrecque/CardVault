@@ -891,7 +891,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
       setState(() {
         _selectedRelease = release;
         _selectedSet = set;
-        _parallels = parallels;
+        _parallels = catalogParallelsSortedForDisplay(parallels);
         _selectedParallel = null;
         _parallelName = 'Base';
         _selectedCard = null;
@@ -1750,11 +1750,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> with WidgetsBindi
         Expanded(
           child: ListView.separated(
             padding: EdgeInsets.only(top: contentTopInset),
-            itemCount: _parallels.length + 1,
+            itemCount: (catalogNeedsSyntheticBaseParallelTile(_parallels) ? 1 : 0) +
+                _parallels.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (_, i) {
-              final isBase = i == 0;
-              final p = isBase ? null : _parallels[i - 1];
+              final useSyntheticBase = catalogNeedsSyntheticBaseParallelTile(_parallels);
+              final isBase = useSyntheticBase && i == 0;
+              final p = isBase ? null : _parallels[i - (useSyntheticBase ? 1 : 0)];
               return _buildParallelListTile(
                 parallel: p,
                 onTap: () {
@@ -2234,11 +2236,13 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset, String shell
           Expanded(
             child: ListView.separated(
               padding: EdgeInsets.only(top: contentTopInset),
-              itemCount: _searchParallels.length + 1,
+              itemCount: (catalogNeedsSyntheticBaseParallelTile(_searchParallels) ? 1 : 0) +
+                  _searchParallels.length,
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (_, i) {
-                final isBase = i == 0;
-                final p = isBase ? null : _searchParallels[i - 1];
+                final useSyntheticBase = catalogNeedsSyntheticBaseParallelTile(_searchParallels);
+                final isBase = useSyntheticBase && i == 0;
+                final p = isBase ? null : _searchParallels[i - (useSyntheticBase ? 1 : 0)];
                 return _buildParallelListTile(
                   parallel: p,
                   onTap: () {
@@ -2408,7 +2412,7 @@ Widget _buildSearchMode(ColorScheme colors, double contentTopInset, String shell
               }
               if (!mounted) return;
               setState(() {
-                _searchParallels = parallels;
+                _searchParallels = catalogParallelsSortedForDisplay(parallels);
                 _searchParallelsLoading = false;
               });
               // No parallels for this set → skip the picker and open the

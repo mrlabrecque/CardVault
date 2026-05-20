@@ -1,8 +1,11 @@
+import { cardsightFetch } from './cardsight_fetch.ts';
+
 export const CARDSIGHT_CATALOG_BASE = 'https://api.cardsight.ai';
 
 /** CardSight `/v1/catalog/releases` max per page (OpenAPI maximum). */
 export const CARDSIGHT_RELEASES_PAGE_SIZE = 100;
-export const CARDSIGHT_RELEASES_PAGE_DELAY_MS = 250;
+/** Pause between paginated release list calls (avoid 429). */
+export const CARDSIGHT_RELEASES_PAGE_DELAY_MS = 500;
 /** Safety cap — 500 pages × 100 = 50k releases. */
 export const CARDSIGHT_RELEASES_MAX_PAGES = 500;
 
@@ -15,6 +18,41 @@ export const SEGMENT_TO_SPORT: Record<string, string> = {
 };
 
 export type CardSightReleaseSummary = { id: string; name: string; year: string };
+
+/** Embedded on `GET /v1/catalog/releases/{id}` → `sets[]`. */
+export type CardSightReleaseSetSummary = {
+  id: string;
+  name: string;
+  cardCount?: number;
+  parallelCount?: number;
+};
+
+export type CardSightReleaseDetail = {
+  id: string;
+  name: string;
+  year: string;
+  segmentId?: string;
+  sets?: CardSightReleaseSetSummary[];
+};
+
+export async function fetchCardsightReleaseDetail(
+  apiKey: string,
+  cardsightReleaseId: string,
+): Promise<CardSightReleaseDetail> {
+  const res = await cardsightFetch(
+    `${CARDSIGHT_CATALOG_BASE}/v1/catalog/releases/${cardsightReleaseId}`,
+    apiKey,
+  );
+  return await res.json() as CardSightReleaseDetail;
+}
+
+export async function fetchCardsightReleaseSetSummaries(
+  apiKey: string,
+  cardsightReleaseId: string,
+): Promise<CardSightReleaseSetSummary[]> {
+  const release = await fetchCardsightReleaseDetail(apiKey, cardsightReleaseId);
+  return release.sets ?? [];
+}
 
 export function segmentToSport(segment: string): string {
   return SEGMENT_TO_SPORT[String(segment).toLowerCase()] ?? 'Unknown';
@@ -38,10 +76,7 @@ export async function fetchAllCardSightReleases(
     url.searchParams.set('take', String(CARDSIGHT_RELEASES_PAGE_SIZE));
     url.searchParams.set('skip', String(skip));
 
-    const csRes = await fetch(url.toString(), {
-      headers: { 'X-API-Key': apiKey },
-    });
-    if (!csRes.ok) throw new Error(`CardSight API error: ${csRes.status}`);
+    const csRes = await cardsightFetch(url, apiKey);
 
     const csData = await csRes.json() as {
       releases?: CardSightReleaseSummary[];

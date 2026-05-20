@@ -3,7 +3,7 @@
  * POST https://api.cardhedger.com/v1/cards/card-search
  *
  * Upstream body: `category`, `page`, `page_size`, and `search` where
- * search = Player + Year + Release + #Number + Set. Parallel resolved from `variant` after fetch.
+ * search = Player + Year + Release + Category + #Number + Set. Parallel resolved from `variant` after fetch.
  * **Non-Base** parallels: [parallelExactCatalogVariant] on `variant` (`&` → `and`);
  * if no exact row, [parallelDescriptionWordMatch] on `description` (all parallel words,
  * rookie/rookies tolerant). **Base** uses [pickBestBaseVariantRow]; fuzzy [parallelScore]
@@ -14,10 +14,13 @@
 import {
   buildCardHedgeCardSearchBody,
   buildCardHedgeCardSearchString,
+  cardHedgeSearchRowNumber,
   cardNumberMatches,
   catalogParallelImpliesBase,
   categoryFromSport,
   insertSetMatchesDescription,
+  insertSetMatchesDescriptionLoose,
+  isVaultCanonicalBaseSetName,
   normLabel,
   parallelExactCatalogVariant,
   parallelDescriptionWordMatch,
@@ -264,6 +267,7 @@ Deno.serve(async (req) => {
       releaseName,
       cardNumber: cardNumber || null,
       setName: setName || null,
+      category,
     });
 
     if (searchQuery.length < 2) {
@@ -429,7 +433,7 @@ Deno.serve(async (req) => {
       }),
     );
 
-    const byNumber = allCards.filter((row) => cardNumberMatches(cardNumber || null, row.number));
+    const byNumber = allCards.filter((row) => cardNumberMatches(cardNumber || null, cardHedgeSearchRowNumber(row)));
 
     console.log(
       JSON.stringify({
@@ -441,15 +445,40 @@ Deno.serve(async (req) => {
       }),
     );
 
-    const byInsertSet = byNumber.filter((row) => insertSetMatchesDescription(setName || null, row));
+    const byInsertSetStrict = byNumber.filter((row) => insertSetMatchesDescription(setName || null, row));
+
+    /** CardHedge may not model every vault insert — fall back so Base (and loose non-Base) can still link. */
+    let insertPool = byInsertSetStrict;
+    let insertMatchMode: 'strict' | 'loose_token' | 'skipped_base_no_ch_insert' | 'failed_non_base' = 'strict';
+    if (
+      byInsertSetStrict.length === 0 &&
+      byNumber.length > 0 &&
+      !isVaultCanonicalBaseSetName(setName || '')
+    ) {
+      if (catalogParallelImpliesBase(parallelName)) {
+        insertPool = byNumber;
+        insertMatchMode = 'skipped_base_no_ch_insert';
+      } else {
+        const loose = byNumber.filter((row) => insertSetMatchesDescriptionLoose(setName || null, row));
+        if (loose.length > 0) {
+          insertPool = loose;
+          insertMatchMode = 'loose_token';
+        } else {
+          insertPool = [];
+          insertMatchMode = 'failed_non_base';
+        }
+      }
+    }
 
     console.log(
       JSON.stringify({
         tag: LOG_TAG,
         event: 'after_insert_set',
         set_name_filter: setName || null,
-        count: byInsertSet.length,
-        sample: sampleRows(byInsertSet, logSample),
+        after_insert_set_strict: byInsertSetStrict.length,
+        insert_match_mode: insertMatchMode,
+        count: insertPool.length,
+        sample: sampleRows(insertPool, logSample),
       }),
     );
 
@@ -477,12 +506,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (byInsertSet.length === 0) {
-      console.log(JSON.stringify({ tag: LOG_TAG, event: 'outcome', matched: false, reason: 'no_rows_after_insert_set_filter' }));
+    if (insertPool.length === 0) {
+      const failReason = insertMatchMode === 'failed_non_base'
+        ? 'no_ch_insert_match_non_base'
+        : 'no_rows_after_insert_set_filter';
+      console.log(
+        JSON.stringify({
+          tag: LOG_TAG,
+          event: 'outcome',
+          matched: false,
+          reason: failReason,
+          insert_match_mode: insertMatchMode,
+        }),
+      );
       return json({
         matched: false,
         minConfidence,
-        reason: 'search_no_row_after_filter',
+        reason: failReason,
         confidence: null,
         resolved_via: 'card_search',
         search_set: searchQuery,
@@ -493,7 +533,9 @@ Deno.serve(async (req) => {
           upstream_count: upstreamCount,
           cards_accumulated: allCards.length,
           after_number_filter: byNumber.length,
-          after_insert_set_filter: 0,
+          after_insert_set_strict: byInsertSetStrict.length,
+          insert_match_mode: insertMatchMode,
+          after_insert_set_filter: insertPool.length,
         },
         expected_parallel: parallelName ? stripSerialSuffix(parallelName) : null,
         card_number: cardNumber || null,
@@ -512,12 +554,12 @@ Deno.serve(async (req) => {
     let afterParallelExact = 0;
 
     if (!parallelName) {
-      const picked = pickBestBaseVariantRow(byInsertSet, setName || null);
+      const picked = pickBestBaseVariantRow(insertPool, setName || null);
       chosen = picked.chosen;
       alternateRows = picked.alternates;
       parallelMatchMode = 'base_auto_pick';
     } else {
-      const exactPool = byInsertSet.filter((row) => parallelExactCatalogVariant(parallelName, row));
+      const exactPool = insertPool.filter((row) => parallelExactCatalogVariant(parallelName, row));
       if (exactPool.length > 0) {
         afterParallelExact = exactPool.length;
         if (catalogParallelImpliesBase(parallelName)) {
@@ -532,7 +574,7 @@ Deno.serve(async (req) => {
           parallelMatchMode = 'exact_variant';
         }
       } else if (catalogParallelImpliesBase(parallelName)) {
-        const ranked = [...byInsertSet].sort(
+        const ranked = [...insertPool].sort(
           (a, b) => parallelScore(parallelName, b) - parallelScore(parallelName, a),
         );
         const top = ranked[0] as Record<string, unknown>;
@@ -551,7 +593,7 @@ Deno.serve(async (req) => {
           return json({
             matched: false,
             minConfidence,
-            reason: 'search_no_row_after_filter',
+            reason: 'no_exact_and_fuzzy_below_threshold',
             confidence: null,
             resolved_via: 'card_search',
             search_set: searchQuery,
@@ -562,7 +604,9 @@ Deno.serve(async (req) => {
               upstream_count: upstreamCount,
               cards_accumulated: allCards.length,
               after_number_filter: byNumber.length,
-              after_insert_set_filter: byInsertSet.length,
+              after_insert_set_strict: byInsertSetStrict.length,
+              insert_match_mode: insertMatchMode,
+              after_insert_set_filter: insertPool.length,
               after_parallel_exact_filter: 0,
               best_fuzzy_parallel_score: topScore,
             },
@@ -575,7 +619,7 @@ Deno.serve(async (req) => {
         alternateRows = [];
         parallelMatchMode = 'fuzzy_best_no_alternates';
       } else {
-        const descPool = byInsertSet.filter((row) =>
+        const descPool = insertPool.filter((row) =>
           parallelDescriptionWordMatch(parallelName, row)
         );
         if (descPool.length > 0) {
@@ -615,7 +659,9 @@ Deno.serve(async (req) => {
               upstream_count: upstreamCount,
               cards_accumulated: allCards.length,
               after_number_filter: byNumber.length,
-              after_insert_set_filter: byInsertSet.length,
+              after_insert_set_strict: byInsertSetStrict.length,
+              insert_match_mode: insertMatchMode,
+              after_insert_set_filter: insertPool.length,
               after_parallel_exact_filter: 0,
               after_parallel_description_filter: 0,
               parallel_match: 'exact_required_non_base',
@@ -681,7 +727,7 @@ Deno.serve(async (req) => {
       minConfidence,
       confidence,
       resolved_via: 'card_search',
-            search_set: searchQuery,
+      search_set: searchQuery,
       search_meta: {
         page_size: pageSize,
         max_pages_scanned: maxPages,
@@ -689,7 +735,9 @@ Deno.serve(async (req) => {
         upstream_count: upstreamCount,
         cards_accumulated: allCards.length,
         after_number_filter: byNumber.length,
-        after_insert_set_filter: byInsertSet.length,
+        after_insert_set_strict: byInsertSetStrict.length,
+        insert_match_mode: insertMatchMode,
+        after_insert_set_filter: insertPool.length,
         after_parallel_exact_filter: afterParallelExact,
         parallel_match: parallelMatchMode,
         alternate_count: alternate_matches.length,

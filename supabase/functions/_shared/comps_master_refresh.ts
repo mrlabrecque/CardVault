@@ -1,3 +1,8 @@
+import {
+  buildParallelInsertListingRules,
+  titleViolatesParallelInsertRules,
+} from './parallel_insert_listing_rules.ts';
+
 const LISTING_NOISE = new Set([
   'rookie', 'rated', 'serial', 'numbered', 'graded', 'limited', 'edition',
   'insert', 'parallel', 'short', 'print', 'chrome', 'refractor', 'invest',
@@ -19,6 +24,10 @@ const SET_NAME_NOISE = new Set([
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isCatalogBaseParallelName(name: string): boolean {
+  return name.trim().toLowerCase() === 'base';
 }
 
 /** Words from a set name that should appear in a matching listing title (e.g. "kings", "house"). */
@@ -43,6 +52,19 @@ export function titleReferencesSet(title: string, setName: string): boolean {
   const tokens = distinctiveSetTitleTokens(setName);
   if (tokens.length === 0) return false;
   return tokens.every((tok) => new RegExp(`\\b${escapeRegex(tok)}\\b`, 'i').test(title));
+}
+
+/** Active listings: require a set/insert signal when we can derive distinctive tokens from the catalog set name. */
+function ourCatalogSetAppearsInActiveListingTitle(title: string, setName: string | undefined): boolean {
+  if (!setName?.trim()) return true;
+  const label = setName.trim();
+  if (label.toLowerCase() === 'base') return true;
+  const t = title.toLowerCase();
+  const phrase = label.toLowerCase().replace(/\s+/g, ' ');
+  if (phrase.length >= 4 && t.includes(phrase)) return true;
+  const tokens = distinctiveSetTitleTokens(setName);
+  if (tokens.length === 0) return true;
+  return tokens.some((tok) => new RegExp(`\\b${escapeRegex(tok)}\\b`, 'i').test(t));
 }
 
 export function buildSiblingSetExclusionList(
@@ -88,6 +110,32 @@ export function cardNumberMatchesListingTitle(
   return { ok: false, reason: 'card_number_missing' };
 }
 
+/**
+ * Active listings: most sellers omit `#` or card number in the title. We still enforce
+ * `#…` consistency when hashes are present; otherwise we do **not** require a bare card #.
+ */
+export function cardNumberMatchesListingTitleActive(
+  title: string,
+  cardNumber: string | null | undefined,
+): { ok: boolean; reason?: string } {
+  if (!cardNumber) return { ok: true };
+  const ourNum = String(cardNumber).replace(/^#/, '').trim();
+  if (!ourNum || !/^\d{1,4}$/.test(ourNum)) return { ok: true };
+
+  const hashMatches = [...title.matchAll(/#(\d{1,4})\b/gi)].map((m) => m[1]);
+  if (hashMatches.length > 0) {
+    if (!hashMatches.some((n) => n === ourNum)) {
+      return { ok: false, reason: 'card_number_missing' };
+    }
+    if (hashMatches.some((n) => n !== ourNum)) {
+      return { ok: false, reason: 'card_number_conflict' };
+    }
+    return { ok: true };
+  }
+  if (new RegExp(`\\b${escapeRegex(ourNum)}\\b`).test(title)) return { ok: true };
+  return { ok: true };
+}
+
 export function buildCardEbayQuery(card: Record<string, unknown>): string {
   const {
     year, release_name, set_name, player, card_number,
@@ -119,17 +167,30 @@ export function buildCardEbayQuery(card: Record<string, unknown>): string {
 }
 
 function buildParallelExclusionList(selectedParallelName: string, allParallelNames: string[]): Set<string> {
-  if (selectedParallelName === 'Base') {
-    return new Set(allParallelNames.filter(p => p !== 'Base'));
+  const sel = selectedParallelName.trim().toLowerCase();
+  if (isCatalogBaseParallelName(selectedParallelName)) {
+    return new Set(allParallelNames.filter((p) => !isCatalogBaseParallelName(p)));
   }
-  return new Set(allParallelNames.filter(p => p !== 'Base' && p !== selectedParallelName));
+  return new Set(
+    allParallelNames.filter(
+      (p) => !isCatalogBaseParallelName(p) && p.trim().toLowerCase() !== sel,
+    ),
+  );
 }
 
 function titleHasExcludedParallel(title: string, exclusionList: Set<string>): boolean {
   if (exclusionList.size === 0) return false;
   const t = title.toLowerCase();
   for (const parallel of exclusionList) {
-    const re = new RegExp(`\\b${parallel.replace(/\s+/g, '\\s+').toLowerCase()}\\b`, 'i');
+    const escaped = parallel
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((seg) => seg.length > 0)
+      .map((seg) => escapeRegex(seg))
+      .join('\\s+');
+    if (!escaped) continue;
+    const re = new RegExp(`\\b${escaped}\\b`, 'i');
     if (re.test(t)) return true;
   }
   return false;
@@ -154,7 +215,11 @@ export function parseAndFilterSoldComps(
   setName?: string,
   debugRejects?: Array<{ title: string; reason: string }>,
   siblingSetNames: string[] = [],
+  options?: { forActiveListings?: boolean; activeMultiSetRelease?: boolean },
 ): any[] {
+  const forActive = options?.forActiveListings === true;
+  /** When the release has multiple catalog sets, tighten insert signals (optional). */
+  const activeMultiSet = forActive && options?.activeMultiSetRelease === true;
   const yearMatch = query.match(/\b(19|20)\d{2}\b/);
   const serialMatch = query.match(/\/(\d{1,4})\b/);
   const noisePattern = new RegExp(`\\b(${[...LISTING_NOISE].join('|')})\\b`, 'gi');
@@ -166,6 +231,8 @@ export function parseAndFilterSoldComps(
     .replace(/\b(rc|rookie|auto(graph)?|patch|relic|jersey)\b/gi, '')
     .replace(noisePattern, '')
     .replace(/\s{2,}/g, ' ')
+    .replace(/-/g, ' ')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 
   const year = yearMatch ? parseInt(yearMatch[0]) : null;
@@ -174,6 +241,10 @@ export function parseAndFilterSoldComps(
   const is_auto = /\bauto(graph)?\b/i.test(query);
   const is_patch = /\b(patch|relic|jersey)\b/i.test(query);
   const parallelExclusionList = buildParallelExclusionList(selectedParallelName, allParallelNames);
+  const parallelInsertRules = buildParallelInsertListingRules(
+    selectedParallelName,
+    allParallelNames,
+  );
   const siblingSetExclusionList = buildSiblingSetExclusionList(
     setName ?? '',
     siblingSetNames,
@@ -189,32 +260,79 @@ export function parseAndFilterSoldComps(
 
   return raw.filter((item) => {
     const title = (item.title ?? '').toLowerCase();
-    if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) { reject(item, 'player_word_mismatch'); return false; }
+    if (!forActive) {
+      if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) {
+        reject(item, 'player_word_mismatch');
+        return false;
+      }
+    } else {
+      const longPw = playerWords.filter((w: string) => w.length >= 4);
+      if (longPw.length > 0) {
+        if (longPw.some((w: string) => !title.includes(w))) {
+          reject(item, 'player_word_mismatch');
+          return false;
+        }
+      } else if (playerWords.length && playerWords.some((w: string) => !title.includes(w))) {
+        reject(item, 'player_word_mismatch');
+        return false;
+      }
+    }
     if (year && !title.includes(String(year))) { reject(item, 'year_mismatch'); return false; }
     if (/\blot\b/i.test(title)) { reject(item, 'lot_listing'); return false; }
-    const cardNumCheck = cardNumberMatchesListingTitle(item.title ?? '', cardNumber);
+    const cardNumCheck = forActive
+      ? cardNumberMatchesListingTitleActive(item.title ?? '', cardNumber)
+      : cardNumberMatchesListingTitle(item.title ?? '', cardNumber);
     if (!cardNumCheck.ok) { reject(item, cardNumCheck.reason ?? 'card_number_mismatch'); return false; }
-    if (requireSetInTitle && setName && !titleReferencesSet(item.title, setName)) {
+    // Sold comps: require full insert signal (all distinctive tokens or full phrase).
+    if (!forActive && requireSetInTitle && setName && !titleReferencesSet(item.title, setName)) {
       reject(item, 'set_name_missing');
       return false;
     }
+    // Active + multi-set release: require at least one distinctive token from **our** set so
+    // we do not show the wrong insert. Single-set releases skip this — titles often omit insert names.
+    if (activeMultiSet && requireSetInTitle && setName && !ourCatalogSetAppearsInActiveListingTitle(item.title, setName)) {
+      reject(item, 'set_name_missing');
+      return false;
+    }
+    // Sibling wrong-set: strict match only (loose "any token" fired on shared words like
+    // "donruss"/"optic" across inserts and zeroed results).
     if (titleHasExcludedSet(item.title, siblingSetExclusionList)) {
       reject(item, 'excluded_set_match');
       return false;
     }
+    if (titleViolatesParallelInsertRules(item.title ?? '', parallelInsertRules)) {
+      reject(item, 'parallel_insert_ambiguity');
+      return false;
+    }
     const hasSerial = /\/\d{1,4}\b/.test(title);
-    if (!serial_max && hasSerial) { reject(item, 'unexpected_serial'); return false; }
-    if (serial_max && !new RegExp(`\\/${serial_max}\\b`).test(title)) { reject(item, 'serial_mismatch'); return false; }
+    // Sold comps: drop titles that mention a print run when our query has none (avoids wrong parallel).
+    // Active listings: eBay sellers put /249 etc. in titles constantly — do not use this rule.
+    if (!forActive && !serial_max && hasSerial) { reject(item, 'unexpected_serial'); return false; }
+    if (serial_max) {
+      const hasSlashRun = /\/\d{1,4}\b/.test(title);
+      if (forActive) {
+        if (hasSlashRun && !new RegExp(`\\/${serial_max}\\b`).test(title)) {
+          reject(item, 'serial_mismatch');
+          return false;
+        }
+      } else if (!new RegExp(`\\/${serial_max}\\b`).test(title)) {
+        reject(item, 'serial_mismatch');
+        return false;
+      }
+    }
     const hasAuto = /\bauto(graph)?\b/.test(title);
     const hasPatch = /\b(patch|relic|mem(orabilia)?|jersey)\b/.test(title);
     if (is_auto && !hasAuto) { reject(item, 'missing_auto'); return false; }
-    if (!is_auto && hasAuto) { reject(item, 'unexpected_auto'); return false; }
+    if (!forActive && !is_auto && hasAuto) { reject(item, 'unexpected_auto'); return false; }
     if (is_patch && !hasPatch) { reject(item, 'missing_patch'); return false; }
-    if (!is_patch && hasPatch) { reject(item, 'unexpected_patch'); return false; }
-    if (/\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) { reject(item, 'unexpected_ssp'); return false; }
-    if (/\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) { reject(item, 'unexpected_variation'); return false; }
-    if (titleHasExcludedParallel(item.title, parallelExclusionList)) { reject(item, 'excluded_parallel_match'); return false; }
-    if (!noUnexpectedWords(item.title, query)) { reject(item, 'unexpected_words'); return false; }
+    if (!forActive && !is_patch && hasPatch) { reject(item, 'unexpected_patch'); return false; }
+    if (!forActive && /\bssp\b/i.test(title) && !/\bssp\b/i.test(query)) { reject(item, 'unexpected_ssp'); return false; }
+    if (!forActive && /\bvariation\b/i.test(title) && !/\bvariation\b/i.test(query)) { reject(item, 'unexpected_variation'); return false; }
+    if (titleHasExcludedParallel(item.title, parallelExclusionList)) {
+      reject(item, 'excluded_parallel_match');
+      return false;
+    }
+    if (!forActive && !noUnexpectedWords(item.title, query)) { reject(item, 'unexpected_words'); return false; }
     return true;
   });
 }

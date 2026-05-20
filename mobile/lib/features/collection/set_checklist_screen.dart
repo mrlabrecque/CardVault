@@ -108,7 +108,7 @@ class _SetChecklistScreenState extends ConsumerState<SetChecklistScreen> {
     return parts.isEmpty ? null : parts.join(' ');
   }
 
-  void _onSlotTap(BuildContext context, _ChecklistRow row) {
+  Future<void> _onSlotTap(BuildContext context, _ChecklistRow row) async {
     if (row.owned && row.userCard != null) {
       context.push('/collection/card', extra: row.userCard);
       return;
@@ -116,27 +116,64 @@ class _SetChecklistScreenState extends ConsumerState<SetChecklistScreen> {
 
     final c = row.slot.card;
     final catalogMasterId = row.slot.masterCardId ?? c.id;
+    final parallelName = widget.args.parallelName;
+    SetParallel? parallel;
+    try {
+      final parallels =
+          await ref.read(cardsServiceProvider).getParallels(widget.args.setId);
+      parallel = resolveSetParallelForCatalog(parallels, parallelName);
+    } catch (_) {
+      // Fall through with unresolved parallel id.
+    }
+
+    if (!context.mounted) return;
+    final resolvedId = await ref.read(cardsServiceProvider).ensureCatalogVariant(
+          catalogVariantId: catalogMasterId,
+          parallelId: parallel?.id,
+        );
+    if (!context.mounted) return;
+    final displayCard =
+        await ref.read(cardsServiceProvider).fetchMasterCardById(resolvedId);
+    if (!context.mounted) return;
+    final master = displayCard ??
+        MasterCard(
+          id: resolvedId,
+          player: c.player,
+          cardNumber: c.cardNumber,
+          isRookie: c.isRookie,
+          isAuto: c.isAuto || (parallel?.isAuto ?? false),
+          isPatch: c.isPatch,
+          isSSP: c.isSSP,
+          serialMax: parallel?.serialMax ?? c.serialMax,
+          imageUrl: c.imageUrl,
+          guidePriceCardId: c.guidePriceCardId,
+          gain: c.gain,
+        );
+
     context.push(
       '/catalog/master',
       extra: MasterCardDetailArgs(
         masterCard: MasterCard(
-          id: catalogMasterId,
-          player: c.player,
-          cardNumber: c.cardNumber,
-          isRookie: c.isRookie,
-          isAuto: c.isAuto,
-          isPatch: c.isPatch,
-          isSSP: c.isSSP,
-          serialMax: c.serialMax,
-          imageUrl: c.imageUrl,
-          guidePriceCardId: c.guidePriceCardId,
-          gain: c.gain,
+          id: master.id,
+          player: master.player,
+          cardNumber: master.cardNumber,
+          isRookie: master.isRookie,
+          isAuto: master.isAuto || (parallel?.isAuto ?? false),
+          isPatch: master.isPatch,
+          isSSP: master.isSSP,
+          serialMax: parallel?.serialMax ?? master.serialMax,
+          imageUrl: master.imageUrl,
+          guidePriceCardId: master.guidePriceCardId,
+          gain: master.gain,
         ),
-        parallelName: widget.args.parallelName,
+        parallelName: parallelName,
+        parallelSerialMax: parallel?.serialMax,
+        parallelIsAuto: parallel?.isAuto ?? false,
         releaseName: widget.args.releaseName,
         setName: widget.args.setName,
         year: widget.args.year,
         setId: widget.args.setId,
+        parallelId: parallel?.id,
       ),
     );
   }

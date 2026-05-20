@@ -1,17 +1,16 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  fetchCardsightReleaseDetail,
+  type CardSightReleaseSetSummary,
+} from '../_shared/cardsight_catalog_releases.ts';
+import {
+  ensureVaultReleaseForCardSight,
+  upsertVaultSetsFromCatalog,
+} from '../_shared/catalog_release_import.ts';
 
-const CARDSIGHT_BASE = 'https://api.cardsight.ai';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-const SEGMENT_TO_SPORT: Record<string, string> = {
-  baseball: 'Baseball', mlb: 'Baseball',
-  basketball: 'Basketball', nba: 'Basketball',
-  football: 'Football', nfl: 'Football',
-  soccer: 'Soccer', mls: 'Soccer',
-  hockey: 'Hockey', nhl: 'Hockey',
 };
 
 function json(data: unknown, status = 200) {
@@ -19,6 +18,15 @@ function json(data: unknown, status = 200) {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
+}
+
+function mapSetSummaries(sets: CardSightReleaseSetSummary[]) {
+  return sets.map((s) => ({
+    cardsightId: s.id,
+    name: s.name,
+    cardCount: s.cardCount ?? null,
+    parallelCount: s.parallelCount ?? 0,
+  }));
 }
 
 Deno.serve(async (req) => {
@@ -38,105 +46,42 @@ Deno.serve(async (req) => {
       releaseName,
       releaseYear,
       releaseSegmentId,
+      metaOnly,
     } = await req.json() as {
       cardsightReleaseId: string;
       releaseName?: string;
       releaseYear?: string;
       releaseSegmentId?: string;
+      metaOnly?: boolean;
     };
 
     if (!cardsightReleaseId) {
       return json({ error: 'cardsightReleaseId is required' }, 400);
     }
 
-    // Fetch release details from CardSight — returns embedded set summaries
-    const csRes = await fetch(`${CARDSIGHT_BASE}/v1/catalog/releases/${cardsightReleaseId}`, {
-      headers: { 'X-API-Key': apiKey },
-    });
-    if (!csRes.ok) throw new Error(`CardSight release fetch failed: ${csRes.status}`);
+    const releaseData = await fetchCardsightReleaseDetail(apiKey, cardsightReleaseId);
+    const catalogSets = releaseData.sets ?? [];
 
-    const releaseData = await csRes.json() as {
-      id: string;
-      name: string;
-      year: string;
-      segmentId?: string;
-      sets?: Array<{ id: string; name: string; cardCount?: number }>;
-    };
-
-    const sets = releaseData.sets ?? [];
-
-    // Find or upsert the release shell in DB
-    const { data: existingRelease } = await supabase
-      .from('releases')
-      .select('id')
-      .eq('cardsight_id', cardsightReleaseId)
-      .maybeSingle();
-
-    let releaseId: string;
-
-    if (existingRelease) {
-      releaseId = existingRelease.id as string;
-    } else {
-      // Fallback: create shell if caller provided metadata
-      const name = releaseName ?? releaseData.name;
-      const year = releaseYear ?? releaseData.year;
-      const segId = releaseSegmentId ?? releaseData.segmentId ?? '';
-      const sport = SEGMENT_TO_SPORT[String(segId).toLowerCase()] ?? 'Unknown';
-      const slug = [year, name, sport]
-        .map(v => String(v).toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))
-        .filter(Boolean)
-        .join('-');
-
-      const { data, error } = await supabase
-        .from('releases')
-        .insert({
-          name, year: parseInt(String(year), 10), sport,
-          release_type: 'Hobby', set_slug: slug, cardsight_id: cardsightReleaseId,
-        })
-        .select('id')
-        .single();
-
-      if (error && error.code === '23505') {
-        const { data: raceWinner } = await supabase
-          .from('releases').select('id').eq('cardsight_id', cardsightReleaseId).single();
-        releaseId = (raceWinner as { id: string }).id;
-      } else if (error) {
-        throw new Error(error.message);
-      } else {
-        releaseId = (data as { id: string }).id;
-      }
+    if (metaOnly) {
+      return json({ sets: mapSetSummaries(catalogSets) });
     }
 
-    if (sets.length === 0) return json({ sets: [] });
+    const releaseId = await ensureVaultReleaseForCardSight(
+      supabase,
+      cardsightReleaseId,
+      releaseData,
+      { releaseName, releaseYear, releaseSegmentId },
+    );
 
-    // Deduplicate sets by (release_id, name) to avoid upsert conflicts
-    const setMap = new Map<string, { release_id: string; name: string; card_count: number | null; cardsight_id: string }>();
-    for (const s of sets) {
-      const key = `${releaseId}|${s.name}`;
-      if (!setMap.has(key)) {
-        setMap.set(key, {
-          release_id: releaseId,
-          name: s.name,
-          card_count: s.cardCount ?? null,
-          cardsight_id: s.id,
-        });
-      }
-    }
-    const setRows = Array.from(setMap.values());
-
-    const { data: dbSets, error: setsError } = await supabase
-      .from('sets')
-      .upsert(setRows, { onConflict: 'release_id,name' })
-      .select('id, name, card_count, cardsight_id');
-
-    if (setsError) throw new Error(setsError.message);
+    const dbSets = await upsertVaultSetsFromCatalog(supabase, releaseId, catalogSets);
 
     return json({
-      sets: ((dbSets ?? []) as Array<{ id: string; name: string; card_count: number | null; cardsight_id: string }>).map(s => ({
-        id:          s.id,
-        name:        s.name,
-        cardCount:   s.card_count,
+      sets: dbSets.map((s) => ({
+        id: s.id,
+        name: s.name,
+        cardCount: s.card_count,
         cardsightId: s.cardsight_id,
+        parallelCount: s.cardsight_parallel_count ?? 0,
       })),
     });
   } catch (e: unknown) {

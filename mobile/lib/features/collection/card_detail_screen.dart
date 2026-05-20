@@ -160,12 +160,15 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   /// When true, run a full CardHedge catalog search (slow). Base parallel only
   /// forces search when the variant is not linked yet — not on every open.
+  MasterCard get _effectiveCatalogMaster =>
+      _refreshedMaster ?? _catalog.masterCard;
+
   bool get _resyncGuidePricesFromCatalog {
     final o = _catalog.resyncGuidePricesFromCatalog;
     if (o != null) return o;
     if (_catalog.openedFromScanResults ?? false) return true;
     if (_parallelLabelImpliesDefaultBase(_catalog.parallelName)) {
-      final id = _catalog.masterCard.guidePriceCardId?.trim() ?? '';
+      final id = _effectiveCatalogMaster.guidePriceCardId?.trim() ?? '';
       return id.isEmpty;
     }
     return false;
@@ -175,9 +178,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   /// already have a CardHedge id and can hydrate from DB in the background.
   bool get _catalogNeedsBlockingGuideOverlay {
     if (_resyncGuidePricesFromCatalog) return true;
-    final id = _catalog.masterCard.guidePriceCardId?.trim() ?? '';
+    final id = _effectiveCatalogMaster.guidePriceCardId?.trim() ?? '';
     return id.isEmpty;
   }
+
+  /// Resolved per-parallel `master_card_definitions` id (after [_resolveCatalogVariantMaster]).
+  String get _catalogVariantId => _effectiveCatalogMaster.id;
 
   Map<String, double?>? _resolvedGuideRecentPrices(Map<String, double?> raw) {
     final next = withCanonicalGuidePricePlaceholders(raw);
@@ -292,15 +298,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (setId == null || setId.isEmpty) return null;
     try {
       final parallels = await ref.read(cardsServiceProvider).getParallels(setId);
-      final target = _catalog.parallelName.trim().toLowerCase();
-      for (final p in parallels) {
-        if (p.name.trim().toLowerCase() == target) return p;
-      }
-      if (target.isEmpty || target == 'base') {
-        for (final p in parallels) {
-          if (p.name.trim().toLowerCase() == 'base') return p;
-        }
-      }
+      return resolveSetParallelForCatalog(parallels, _catalog.parallelName);
     } catch (e, st) {
       debugPrint('lookupCatalogParallel: $e\n$st');
     }
@@ -540,6 +538,20 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (hasLink) return null;
 
     final map = <String, dynamic>{};
+    if (payload != null) {
+      if (payload.reason != null && payload.reason!.isNotEmpty) {
+        map['match_reason'] = payload.reason;
+      }
+      if (payload.searchSet != null && payload.searchSet!.isNotEmpty) {
+        map['search_set'] = payload.searchSet;
+      }
+      if (payload.searchMeta != null && payload.searchMeta!.isNotEmpty) {
+        map['search_meta'] = payload.searchMeta;
+      }
+      if (payload.expectedParallel != null && payload.expectedParallel!.isNotEmpty) {
+        map['expected_parallel'] = payload.expectedParallel;
+      }
+    }
     if (payload?.vaultRequestToEdge != null) {
       map['vault_to_edge'] = payload!.vaultRequestToEdge;
     }
@@ -581,18 +593,21 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   Future<void> _syncGuidePricesForMaster() async {
-    final baseId = _catalog.masterCard.id;
+    final variantId = _catalogVariantId;
     final comps = ref.read(compsServiceProvider);
     final cards = ref.read(cardsServiceProvider);
 
-    final fetched = await cards.fetchMasterCardById(baseId);
+    final fetched = await cards.fetchMasterCardById(variantId);
     if (!mounted) return;
 
     var working = fetched ?? _refreshedMaster ?? _catalog.masterCard;
-    var linkedGuideId = working.guidePriceCardId?.trim() ?? '';
+    final linkedGuideId = working.guidePriceCardId?.trim() ?? '';
 
-    if (!_resyncGuidePricesFromCatalog && linkedGuideId.isNotEmpty) {
-      final snap = await comps.loadMasterCardCurrentPricesSnapshot(baseId);
+    // ── Linked (`cardhedge_id`): read `current_prices` if newest row < 24h; else hydrate
+    // via `cardhedge-persist-variant` / CardHedge card-details only. Never fall through to
+    // text `cardhedge-search-cards` — that can replace the link or persist empty prices.
+    if (linkedGuideId.isNotEmpty) {
+      var snap = await comps.loadMasterCardCurrentPricesSnapshot(variantId);
       if (!mounted) return;
 
       if (snap.hasAnyPrice && !snap.isStale) {
@@ -601,24 +616,23 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       }
 
       final hydrated = await comps.refreshStaleLinkedGuidePrices(
-        masterVariantId: baseId,
+        masterVariantId: variantId,
         guidePriceCardId: linkedGuideId,
       );
       if (!mounted) return;
-
       if (hydrated != null) {
         working = hydrated;
-        linkedGuideId = hydrated.guidePriceCardId?.trim() ?? linkedGuideId;
-        final dbPrices = await comps.getMasterCardCurrentPrices(hydrated.id);
-        if (!mounted) return;
-        _finishGuideSync(master: hydrated, linkedPrices: dbPrices);
-        return;
       }
+      snap = await comps.loadMasterCardCurrentPricesSnapshot(working.id);
+      if (!mounted) return;
 
-      if (snap.hasAnyPrice) {
-        _finishGuideSync(master: working, linkedPrices: snap.prices);
-        return;
-      }
+      final dbPrices = guideGradeMapHasAnyPrice(snap.prices) ? snap.prices : null;
+      _finishGuideSync(
+        master: working,
+        linkedPrices: dbPrices,
+        matchResult: null,
+      );
+      return;
     }
 
     if (!mounted) return;
@@ -637,7 +651,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       sport: _catalog.sport,
       cardNumber: _catalog.masterCard.cardNumber,
       parallelName: _catalog.parallelName,
-      persistMasterVariantId: baseId,
+      persistMasterVariantId: variantId,
     );
     if (!mounted) return;
 
@@ -663,7 +677,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       if (rowToPersist?.cardId?.trim().isNotEmpty == true) {
         final m = rowToPersist!;
         refreshed = await comps.persistGuidePriceCatalogMatch(
-          masterVariantId: baseId,
+          masterVariantId: variantId,
           guidePriceCardId: m.cardId,
           imageUrl: m.image,
           prices: m.prices,
@@ -678,14 +692,14 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       final fallbackId = _resolvedCardhedgeId(payload: payload);
       if (fallbackId.isNotEmpty) {
         refreshed = await comps.persistCardHedgeHydratedFromCardId(
-          masterVariantId: baseId,
+          masterVariantId: variantId,
           guidePriceCardId: fallbackId,
         );
       }
     }
 
     if (refreshed == null) {
-      final refetched = await cards.fetchMasterCardById(baseId);
+      final refetched = await cards.fetchMasterCardById(variantId);
       if (refetched?.guidePriceCardId?.trim().isNotEmpty == true) {
         refreshed = refetched;
       }
@@ -695,7 +709,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
     Map<String, double?>? dbPrices;
     if (_resolvedCardhedgeId(master: refreshed ?? working, payload: payload).isNotEmpty) {
-      final loaded = await comps.getMasterCardCurrentPrices(baseId);
+      final loaded = await comps.getMasterCardCurrentPrices(variantId);
       if (guideGradeMapHasAnyPrice(loaded)) {
         dbPrices = loaded;
       }
@@ -710,7 +724,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Future<void> _persistGuideCatalogRow(GuideCatalogMatchedRow m) async {
     final fresh = await ref.read(compsServiceProvider).persistGuidePriceCatalogMatch(
-          masterVariantId: _catalog.masterCard.id,
+          masterVariantId: _catalogVariantId,
           guidePriceCardId: m.cardId,
           imageUrl: m.image,
           prices: m.prices,

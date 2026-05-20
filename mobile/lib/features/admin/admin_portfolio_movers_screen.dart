@@ -68,8 +68,8 @@ class AdminPortfolioMoversScreen extends ConsumerWidget {
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: const Text(
-              'Legacy: `market-movers-refresh` (ESPN + Bright Data) is not used by the app. '
-              'Disable its cron in Supabase if you want zero scraping.',
+              'Legacy: `market-movers-refresh` is a no-op stub (Bright Data / eBay snapshots removed). '
+              'Portfolio movers use vault data; you can disable any old cron that still calls this function.',
               style: TextStyle(
                 fontSize: 13,
                 color: Color(0xFF374151),
